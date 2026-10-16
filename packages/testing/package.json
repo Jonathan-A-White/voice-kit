@@ -1,0 +1,27 @@
+{
+  "name": "@voice-kit/testing",
+  "version": "0.1.0",
+  "description": "voice-kit: honest fakes for an app's tests, in vitest and Playwright: speech synthesis and a microphone (getUserMedia, MediaRecorder, SpeechRecognition) that behave like Android Chrome in time.",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./speech": {
+      "types": "./dist/speech.d.ts",
+      "default": "./dist/speech.js"
+    },
+    "./mic": {
+      "types": "./dist/mic.d.ts",
+      "default": "./dist/mic.js"
+    }
+  },
+  "files": [
+    "dist/**",
+    "!**/*.tsbuildinfo"
+  ]
+}

@@ -1,0 +1,33 @@
+// @voice-kit/speech: Postern's read-aloud engine, framework-free. The React hook and SpeakingBar are in 'voice-kit/speech/react'.
+export {
+  speak,
+  pause,
+  resume,
+  restart,
+  stop,
+  getSpeech,
+  subscribe,
+  isSpeaking,
+  isPausedOn,
+  whenDone,
+  isSupported,
+  sentencesOf,
+  speechText,
+  VOICES_WAIT_MS,
+  type SpeakOptions,
+  type SpeechState,
+  type SpeechStatus,
+} from './engine.js';
+export {
+  languageOf,
+  latinLang,
+  readingLang,
+  scriptOf,
+  preferredVoice,
+  normaliseTag,
+  DEFAULT_LANG,
+  GREEK_LANG,
+  HEBREW_LANG,
+  type LanguageOptions,
+  type Script,
+} from './lang.js';

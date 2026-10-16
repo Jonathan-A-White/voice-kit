@@ -1,0 +1,35 @@
+{
+  "name": "@voice-kit/speech",
+  "version": "0.1.0",
+  "description": "voice-kit: a read-aloud engine and its bar: a text spoken a sentence at a time, Pause, Resume, Restart and Stop that keep the place, a page that hides or a screen that changes pauses it, a voice and language for each utterance; a React hook and a themeable SpeakingBar.",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./react": {
+      "types": "./dist/react.d.ts",
+      "default": "./dist/react.js"
+    },
+    "./styles.css": "./dist/styles.css"
+  },
+  "files": [
+    "dist/**",
+    "!**/*.tsbuildinfo"
+  ],
+  "sideEffects": [
+    "*.css"
+  ],
+  "peerDependencies": {
+    "react": ">=18"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    }
+  }
+}

@@ -1,0 +1,63 @@
+/* @voice-kit/speech: the speaking bar's default look. Every colour and size is a CSS custom property read with a
+   default (var(--bk-speech-accent, #2563eb)), so an app themes it by setting the properties on :root, on a
+   parent or on .bk-speech, or leaves this file out and styles the bk-speech__* classes itself.
+   Import once: import 'voice-kit/speech/styles.css'. The properties and their defaults:
+     --bk-speech-surface: Canvas
+     --bk-speech-fg: CanvasText
+     --bk-speech-line: color-mix(in srgb, CanvasText 15%, transparent)
+     --bk-speech-button-bg: color-mix(in srgb, CanvasText 6%, Canvas)
+     --bk-speech-accent: #2563eb
+     --bk-speech-accent-fg: #ffffff
+     --bk-speech-button-size: 2.75rem
+     --bk-speech-button-radius: 0.75rem
+     --bk-speech-gap: 0.5rem
+     --bk-speech-font-size: 1rem
+*/
+
+.bk-speech {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  gap: var(--bk-speech-gap, 0.5rem);
+  padding: 0.5rem 0.75rem;
+  border-top: 1px solid var(--bk-speech-line, color-mix(in srgb, CanvasText 15%, transparent));
+  background: var(--bk-speech-surface, Canvas);
+  color: var(--bk-speech-fg, CanvasText);
+  font-size: var(--bk-speech-font-size, 1rem);
+}
+
+.bk-speech__icon {
+  display: block;
+  flex-shrink: 0;
+}
+
+.bk-speech__button {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+  min-height: var(--bk-speech-button-size, 2.75rem);
+  padding: 0 1rem;
+  border: 1px solid var(--bk-speech-line, color-mix(in srgb, CanvasText 15%, transparent));
+  border-radius: var(--bk-speech-button-radius, 0.75rem);
+  background: var(--bk-speech-button-bg, color-mix(in srgb, CanvasText 6%, Canvas));
+  color: inherit;
+  font: inherit;
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.bk-speech__button[data-primary='true'] {
+  border-color: var(--bk-speech-accent, #2563eb);
+  background: var(--bk-speech-accent, #2563eb);
+  color: var(--bk-speech-accent-fg, #ffffff);
+}
+
+.bk-speech__button:focus-visible {
+  outline: 2px solid var(--bk-speech-accent, #2563eb);
+  outline-offset: 2px;
+}
