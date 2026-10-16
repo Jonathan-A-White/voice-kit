@@ -32,6 +32,15 @@
 // The hold does not wait for that stretch to end: an input that gives no result within INPUT_SILENT_MS of
 // the recogniser starting on it is given up on there and then, and a fresh recogniser goes on on the
 // default microphone while he still holds (mw-f7gmps.1).
+// The recogniser is started once in a hold and never again when it ends by itself (mw-q6n8m0.5): Android plays its start
+// tone on every start, a bell at each pause. A page that can record carries the rest of the hold on a recording instead (a
+// copy of the chosen input's track, or the default microphone, which the ended recogniser no longer holds) and on release
+// turns it into words (transcribeRest, or the recording replayed into a fresh recogniser: replay.ts), after the words heard
+// before the end. Words after the pause that cannot be made out are said so (missed), never dropped in silence. Only a page
+// that cannot record (no MediaRecorder, or the microphone refused) starts the recogniser again as before, bell and all.
+
+import { canRecord, VoiceRecorder, type Recording } from './recorder.js';
+import { replayRecording } from './replay.js';
 
 /** The language the recogniser is asked for when the page names none, and the one it falls back to. */
 export const DEFAULT_LANG = 'en-US';
@@ -78,7 +87,15 @@ export interface MicInput {
   close(): void;
 }
 
-export type ListenResult = { ok: true; text: string; mode: ListenMode } | { ok: false; text: string; error: ListenError };
+export type ListenResult =
+  | {
+      ok: true;
+      text: string;
+      mode: ListenMode;
+      /** Said when the words after a pause were recorded but could not be made out: `text` is the words heard before it. */
+      missed?: string;
+    }
+  | { ok: false; text: string; error: ListenError };
 
 export interface ListenSession {
   /** Where the recognition runs: 'cloud' means the browser sends the audio away. Changes if on-device failed and the hold went on in cloud mode. */
@@ -108,6 +125,11 @@ export interface ListenOptions {
   openInput?: () => Promise<MicInput | undefined>;
   /** Which input the hold ended up on: the chosen input's label, or nothing for the default microphone (also after a fallback). */
   onInput?: (label: string | undefined) => void;
+  /**
+   * The words of the rest of a hold, recorded after the recogniser ended by itself while he held: the app's own speech-to-text,
+   * say. Not given, the recording is played into a fresh recogniser on release (replay.ts). A throw is said as missed words.
+   */
+  transcribeRest?: (recording: Recording) => Promise<string>;
 }
 
 // TypeScript's DOM lib has no SpeechRecognition types; these are the parts used here.
@@ -313,6 +335,11 @@ function configure(Ctor: RecognizerConstructor, lang: string | undefined, onDevi
   return { recognizer, mode: 'cloud' };
 }
 
+/** The words heard before the recogniser ended, then `rest` (the recording's words) after them, a phrase said again said once. */
+function withRest(before: readonly string[], rest: string): string[] {
+  return phrases(before, [{ isFinal: true, length: 1, 0: { transcript: rest } }]);
+}
+
 /** Begins listening now (call it on press); the session's stop() is the release. */
 export function startListening(options: ListenOptions = {}): ListenStart {
   const Ctor = recognizerConstructor();
@@ -357,6 +384,11 @@ export function startListening(options: ListenOptions = {}): ListenStart {
   let inputWatch: ReturnType<typeof setTimeout> | undefined;
   // A restart put off by IDLE_RESTART_WAIT_MS; released while it waits, the hold settles at once.
   let waiting: ReturnType<typeof setTimeout> | undefined;
+  // The rest of the hold, recorded once the recogniser ended by itself while he held (mw-q6n8m0.5); `opened` is false when it could not record.
+  let rest: { recorder: VoiceRecorder; opened: Promise<boolean> } | undefined;
+  // Words after the pause that were recorded but could not be made out.
+  let missed: string | undefined;
+  const dropped = new AbortController();
   let settle: (result: ListenResult) => void = () => {};
   const settled = new Promise<ListenResult>((resolve) => {
     settle = resolve;
@@ -421,7 +453,7 @@ export function startListening(options: ListenOptions = {}): ListenStart {
     waiting = undefined;
     dropInput();
     const failure = error ?? (text ? null : transient);
-    outcome = failure ? { ok: false, text, error: failure } : { ok: true, text, mode };
+    outcome = failure ? { ok: false, text, error: failure } : { ok: true, text, mode, ...(missed ? { missed } : {}) };
     if (!failure) options.onFinal?.(text);
     settle(outcome);
   };
@@ -488,7 +520,7 @@ export function startListening(options: ListenOptions = {}): ListenStart {
     const live = () => recognizer === current;
     recognizer.onstart = recognizer.onaudiostart = () => live() && announce();
     recognizer.onresult = (event) => {
-      if (!live()) return;
+      if (!live() || rest) return;
       heard = phrases(carried, event.results);
       text = heard.join(' ');
       transient = null;
@@ -501,7 +533,7 @@ export function startListening(options: ListenOptions = {}): ListenStart {
       options.onInterim?.(text);
     };
     recognizer.onerror = (event) => {
-      if (!live() || outcome) return;
+      if (!live() || outcome || rest) return;
       if (!stopping && TRANSIENT_ERRORS.has(event.error)) {
         transient = listenError(event.error, app);
         return;
@@ -524,44 +556,109 @@ export function startListening(options: ListenOptions = {}): ListenStart {
       options.onError?.(error);
     };
     recognizer.onend = () => {
-      if (!live() || outcome) return;
+      if (!live() || outcome || rest) return;
       if (!stopping && !error) {
-        // He is still holding: the recogniser ended by itself, so start it again and keep what was heard.
+        // He is still holding: the recogniser ended by itself. What was heard is kept, and the hold goes on.
         // A stretch that listened for a while only met his silence: it is a pause, not a failure, so it does not count.
         if (Date.now() - stretchStart >= MIN_LIVE_STRETCH_MS) idleRestarts = 0;
         // The chosen input gave nothing in a whole stretch: go on the phone's default microphone, and not that input again.
         if (input && !inputHeard) giveUpInput();
         carried = heard;
-        if (idleRestarts < MAX_IDLE_RESTARTS) {
-          try {
-            begin(recognizer);
-            idleRestarts++;
-            return;
-          } catch {
-            // cannot restart: settle with what was heard
-          }
-        } else if (text) {
-          // He has said words and still holds: a recogniser that keeps ending at once never ends his turn.
-          // It is given a moment and started again, for as long as he holds.
-          waiting = setTimeout(() => {
-            waiting = undefined;
-            if (outcome || stopping || recognizer !== current) return;
-            try {
-              begin(recognizer);
-            } catch {
-              finish();
-            }
-          }, IDLE_RESTART_WAIT_MS);
-          return;
-        }
-        if (!text) {
-          error = transient ?? listenError('no-speech', app);
-          options.onError?.(error);
-        }
+        // Not started again (that start is the bell): the rest of the hold is recorded, its words come on release.
+        if (!recordRest(recognizer)) restartAfterEnd(recognizer);
+        return;
       }
       finish();
     };
   };
+
+  /** Starts the recogniser that ended by itself again, as a page that cannot record does: the hold goes on, the words heard so far kept. */
+  const restartAfterEnd = (recognizer: Recognizer) => {
+    if (idleRestarts < MAX_IDLE_RESTARTS) {
+      try {
+        begin(recognizer);
+        idleRestarts++;
+        return;
+      } catch {
+        // cannot restart: settle with what was heard
+      }
+    } else if (text) {
+      // He has said words and still holds: a recogniser that keeps ending at once never ends his turn.
+      // It is given a moment and started again, for as long as he holds.
+      waiting = setTimeout(() => {
+        waiting = undefined;
+        if (outcome || stopping || recognizer !== current) return;
+        try {
+          begin(recognizer);
+        } catch {
+          finish();
+        }
+      }, IDLE_RESTART_WAIT_MS);
+      return;
+    }
+    if (!text) {
+      error = transient ?? listenError('no-speech', app);
+      options.onError?.(error);
+    }
+    finish();
+  };
+
+  /**
+   * The recogniser ended by itself while he holds: records the rest of the hold (a copy of the chosen input's track, or the
+   * default microphone) instead of starting it again. False when this page cannot record; a microphone that will not open
+   * starts the recogniser again after all, so nothing he says is lost.
+   */
+  const recordRest = (recognizer: Recognizer): boolean => {
+    if (!canRecord()) return false;
+    const recorder = new VoiceRecorder();
+    const opened = recorder.start(input?.track).then(
+      () => true,
+      () => false,
+    );
+    const taken = { recorder, opened };
+    rest = taken;
+    void opened.then((ok) => {
+      if (ok || rest !== taken) return;
+      rest = undefined;
+      if (!outcome && !stopping) restartAfterEnd(recognizer);
+    });
+    return true;
+  };
+
+  /** He has let go while the rest of the hold was recorded: its words go after those heard before, then the hold settles. */
+  const settleRest = async ({ recorder, opened }: { recorder: VoiceRecorder; opened: Promise<boolean> }) => {
+    if (!(await opened)) return finish();
+    let recording: Recording;
+    try {
+      recording = await recorder.stop();
+    } catch {
+      return finish();
+    }
+    try {
+      const words = (await transcribe(recording)).trim();
+      if (outcome) return;
+      if (words) {
+        heard = withRest(carried, words);
+        text = heard.join(' ');
+        transient = null;
+        options.onInterim?.(text);
+      }
+    } catch (err) {
+      if (outcome) return;
+      const why = `The words after the pause could not be made out${err instanceof Error && err.message ? ` (${err.message})` : ''}.`;
+      if (text) missed = why;
+      else error = { kind: 'other', message: why };
+    }
+    finish();
+  };
+  const transcribe =
+    options.transcribeRest ??
+    ((recording: Recording) =>
+      replayRecording(recording, {
+        recognizer: () => configure(Ctor, lang, mode === 'on-device').recognizer,
+        words: (results) => phrases([], results).join(' '),
+        signal: dropped.signal,
+      }));
 
   attach(current);
   if (options.openInput) {
@@ -599,7 +696,11 @@ export function startListening(options: ListenOptions = {}): ListenStart {
       return mode;
     },
     stop() {
-      if (!outcome && !stopping && (pending || waiting !== undefined)) {
+      if (!outcome && !stopping && rest) {
+        // The recogniser has ended and the rest of the hold is on a recording: its words are made out now.
+        stopping = true;
+        void settleRest(rest);
+      } else if (!outcome && !stopping && (pending || waiting !== undefined)) {
         // Released before the input opened (nothing was heard), or while the recogniser waits to start again (nothing more is coming).
         stopping = true;
         finish();
@@ -623,6 +724,10 @@ export function startListening(options: ListenOptions = {}): ListenStart {
       return settled;
     },
     abort() {
+      const recorded = rest;
+      rest = undefined;
+      if (recorded) void recorded.opened.then(() => recorded.recorder.cancel());
+      dropped.abort();
       clearTimeout(timer);
       clearTimeout(inputWatch);
       clearTimeout(waiting);
