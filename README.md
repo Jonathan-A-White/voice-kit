@@ -29,18 +29,21 @@ From GitHub, by full commit SHA (there is no registry and no tag yet); `prepare`
 pins a commit, never a branch:
 
 ```bash
-npm install github:Jonathan-A-White/voice-kit#<full commit SHA>
+npm install github:Jonathan-A-White/voice-kit#d91eecfea2f724ca7bc569f365753941828ce589
 ```
+
+That commit is the first with all three libraries, voice-kit 0.1.0 (composer 0.3.0, speech 0.1.0, testing 0.1.0). A later
+commit is pinned the same way, by its full SHA.
 
 npm 11 warns that `voice-kit` has an install script (`prepare`, the build) not yet covered by `allowScripts`. Allow it
 with `npm install-scripts approve voice-kit`, which adds an entry to your `package.json` keyed by the install line, for
 example:
 
 ```json
-"allowScripts": { "github:Jonathan-A-White/voice-kit#<full commit SHA>": true }
+"allowScripts": { "github:Jonathan-A-White/voice-kit#d91eecfea2f724ca7bc569f365753941828ce589": true }
 ```
 
-Check that `package-lock.json` resolves it as `git+https://github.com/Jonathan-A-White/voice-kit.git#<sha>`, not
+Check that `package-lock.json` resolves it as `git+https://github.com/Jonathan-A-White/voice-kit.git#<the SHA>`, not
 `git+ssh`, so a machine with no GitHub key installs it too.
 
 ### Moving from bsv-kit
