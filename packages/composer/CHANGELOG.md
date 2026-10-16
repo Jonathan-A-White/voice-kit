@@ -2,6 +2,14 @@
 
 Newest first. Breaking changes come first in a release, each with its migration in one sentence.
 
+## Unreleased
+
+- Fixed: a pause in a hold no longer rings the phone's start tone (mw-q6n8m0.5, carried from bsv-kit by mw-q6n8m0.18). The recogniser is started once in a hold;
+  when it ends by itself while he holds, the rest of the hold is recorded instead of the recogniser being started again,
+  and on release its words follow those heard before (`startListening`'s new `transcribeRest`, by default the recording
+  played into a fresh recogniser). Words that cannot be made out come back as the result's `missed` and `useHold`'s
+  notice. A page that cannot record starts the recogniser again, as before.
+
 ## Moved to voice-kit (2026-10-16)
 
 - Changed (breaking): moved from bsv-kit at b8b2ba303b9397ddb83935f9bde74107903bb074, where this was @bsv-kit/composer 0.3.0. The package is now

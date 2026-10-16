@@ -67,7 +67,13 @@ What a hold does, from Postern, with its fixes:
 - A hold that ends without sending (a slide off, the phone taking the touch, the app hidden, the recogniser
   failing, a release it settles with no words) leaves the words heard so far in the box: 'Kept what you said:
   tap Send.' Nothing he said vanishes unsent (Postern mw-f7gmps.3).
-- A long dictation is one turn: the recogniser ending by itself while he holds is started again, and every word is kept.
+- A long dictation is one turn, and a pause rings no bell: the recogniser is started once in a hold. When it ends by
+  itself while he holds (Android Chrome on a pause), it is not started again, since every start plays the phone's start
+  tone; the rest of the hold is recorded (`MediaRecorder`, on the input the hold is on) and on release its words follow
+  the words heard before. `startListening`'s `transcribeRest` turns that recording into words; by default it is played,
+  silently and with its silences cut, into a fresh recogniser (Chrome's `start(track)`). Words that cannot be made out
+  are said in the hold's notice, never dropped in silence. Only a page that cannot record starts the recogniser again
+  (mw-q6n8m0.5).
 - A Bluetooth input (earbuds, a car) is listened on when there is one; one that gives no words within
   `INPUT_SILENT_MS` (2.5 s) is let go while he holds, the default microphone takes over, and that input is not
   chosen again (mw-f7gmps.1). On a phone's default microphone nothing else holds the microphone beside the
@@ -106,8 +112,8 @@ here, and apps already theme these names, so they did not change.
 
 The hooks and services the Composer is made of are exported too, for an app that draws its own:
 `HoldToTalkBar`, `useHold` (one hold: begin, finish, drop, the words so far), `browserSpeech`,
-`transcribeRecording` and the `Transcriber` port, `startListening` (the recogniser with its restarts and
-fallbacks), `openBluetoothInput` and `chooseInput` (which microphone), `VoiceRecorder`.
+`transcribeRecording` and the `Transcriber` port, `startListening` (the recogniser with its fallbacks and
+the recorded rest of a hold), `openBluetoothInput` and `chooseInput` (which microphone), `VoiceRecorder`.
 
 ## Where it came from
 
