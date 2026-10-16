@@ -1,0 +1,86 @@
+{
+  "name": "voice-kit",
+  "version": "0.1.0",
+  "description": "Speaking and listening in the browser, for React PWAs: @voice-kit/composer (a hold-to-talk message composer, a React component), @voice-kit/speech (a read-aloud engine with Pause, Resume, Restart and Stop that keep the place, and a themeable SpeakingBar) and @voice-kit/testing (honest speech and microphone fakes for an app's tests, vitest and Playwright).",
+  "license": "MIT",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Jonathan-A-White/voice-kit.git"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "workspaces": [
+    "packages/*",
+    "examples/*"
+  ],
+  "exports": {
+    "./composer": {
+      "types": "./packages/composer/dist/index.d.ts",
+      "default": "./packages/composer/dist/index.js"
+    },
+    "./composer/styles.css": "./packages/composer/dist/styles.css",
+    "./speech": {
+      "types": "./packages/speech/dist/index.d.ts",
+      "default": "./packages/speech/dist/index.js"
+    },
+    "./speech/react": {
+      "types": "./packages/speech/dist/react.d.ts",
+      "default": "./packages/speech/dist/react.js"
+    },
+    "./speech/styles.css": "./packages/speech/dist/styles.css",
+    "./testing/speech": {
+      "types": "./packages/testing/dist/speech.d.ts",
+      "default": "./packages/testing/dist/speech.js"
+    },
+    "./testing/mic": {
+      "types": "./packages/testing/dist/mic.d.ts",
+      "default": "./packages/testing/dist/mic.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "packages/*/dist/**",
+    "packages/*/package.json",
+    "!**/*.tsbuildinfo"
+  ],
+  "scripts": {
+    "build": "tsc -b packages/composer/tsconfig.build.json packages/speech/tsconfig.build.json packages/testing/tsconfig.build.json && node -e \"for (const p of ['composer', 'speech']) require('node:fs').copyFileSync('packages/' + p + '/src/styles.css', 'packages/' + p + '/dist/styles.css')\"",
+    "prepare": "npm run build",
+    "lint": "eslint .",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p packages/composer/tsconfig.json --noEmit && tsc -p packages/speech/tsconfig.json --noEmit && tsc -p examples/composer-demo/tsconfig.json --noEmit",
+    "test": "npm run check:personal && vitest run",
+    "check:personal": "node scripts/check-personal.mjs",
+    "smoke": "node scripts/consumer-smoke.mjs",
+    "demo": "npm run dev --workspace composer-demo"
+  },
+  "peerDependencies": {
+    "react": ">=18",
+    "react-dom": ">=18"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    },
+    "react-dom": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.1",
+    "@testing-library/dom": "^10.4.2",
+    "@testing-library/react": "^16.3.3",
+    "@types/node": "^20.19.0",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "eslint": "^9.39.1",
+    "jsdom": "^28.1.0",
+    "playwright-core": "^1.63.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "typescript": "~5.9.3",
+    "typescript-eslint": "^8.48.0",
+    "vitest": "^4.0.18"
+  }
+}

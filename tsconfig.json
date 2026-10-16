@@ -1,0 +1,15 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "resolveJsonModule": true,
+    "types": ["node"],
+    "baseUrl": ".",
+    "paths": {
+      "voice-kit/testing/speech": ["packages/testing/src/speech.ts"],
+      "voice-kit/testing/mic": ["packages/testing/src/mic.ts"]
+    }
+  },
+  "include": ["packages/*/src", "packages/*/tests", "vitest.config.ts", "eslint.config.js"],
+  "exclude": ["packages/composer", "packages/speech", "**/dist"]
+}
