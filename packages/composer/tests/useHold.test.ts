@@ -9,6 +9,7 @@ import { act, cleanup, renderHook } from '@testing-library/react';
 import { useHold } from '../src/useHold.js';
 import { INPUT_SILENT_MS } from '../src/listen.js';
 import { forgetSilentInputs } from '../src/micInput.js';
+import type { Transcriber } from '../src/transcriber.js';
 
 interface FakeTrack {
   label: string;
@@ -254,5 +255,35 @@ describe('the voice recorder in a hold with a chosen input (mw-f7gmps.1)', () =>
     expect(released).toMatchObject({ status: 'heard', text: 'what landed', recording: { mime: 'audio/webm' } });
     expect(devicesOpened()).toEqual(['car']);
     expect(recorders[0].stream.getTracks()[0]).toMatchObject({ device: 'car', copy: true });
+  });
+});
+
+describe('words after a pause that could not be made out (mw-q6n8m0.5)', () => {
+  it('hands back the words heard before the pause, and the notice says the rest was missed', async () => {
+    const missed = 'The words after the pause could not be made out (the speech service failed: network).';
+    const transcriber: Transcriber = {
+      supported: () => true,
+      start: (options) => ({
+        ok: true,
+        session: {
+          mode: 'cloud',
+          stop: () => {
+            options.onInterim?.('before the pause');
+            return Promise.resolve({ ok: true, text: 'before the pause', mode: 'cloud', missed });
+          },
+          abort: () => {},
+        },
+      }),
+    };
+    const { result } = renderHook(() => useHold({ transcriber }));
+    act(() => {
+      result.current.begin();
+    });
+    let released: Awaited<ReturnType<typeof result.current.finish>> | undefined;
+    await act(async () => {
+      released = await result.current.finish();
+    });
+    expect(released).toEqual({ status: 'heard', text: 'before the pause', recording: undefined });
+    expect(result.current.notice).toBe(missed);
   });
 });

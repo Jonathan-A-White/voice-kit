@@ -188,7 +188,11 @@ export function useHold({ transcriber = browserSpeech, lang, appName, record = f
     recording.current = null;
     const voice = held ? stopRecording(held) : Promise.resolve(undefined);
     const result = await session.stop();
-    if (result.text.trim()) return { status: 'heard', text: result.text, recording: await voice };
+    if (result.text.trim()) {
+      // words after a pause that could not be made out: the words heard before it go, and the notice says what was missed (mw-q6n8m0.5)
+      if (result.ok && result.missed) setNotice(result.missed);
+      return { status: 'heard', text: result.text, recording: await voice };
+    }
     // the recogniser settled with no words (a blank final), but the words it showed are his
     if (said.current.trim()) return { status: 'kept', text: said.current.trim(), recording: await voice };
     setNotice(result.ok ? 'No speech was heard.' : result.error.message);
