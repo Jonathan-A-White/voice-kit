@@ -40,7 +40,7 @@ createRoot(document.getElementById('root')!).render(<App />);
 
 ## Settings
 
-One object, `settings` (`Partial<ComposerSettings>`), says how the composer works. It drives both `Composer` and `HoldToTalkBar`;
+One object, `settings` (`Partial<ComposerSettings>`), says how the composer works. It drives `Composer`, `TalkBar` and `HoldToTalkBar`;
 what it does not give is the default (`DEFAULT_COMPOSER_SETTINGS`).
 
 | Setting     | Values (default first)            | What it does |
@@ -62,9 +62,22 @@ Three shapes, one example each:
 // A tutor box: tap to talk, the words wait in the box to be fixed, then Send.
 <Composer settings={{ talk: 'tap', send: 'button' }} labels={{ hold: 'Hold to answer' }} onSend={send} />
 
-// A bar alone: just the hold-to-talk bar, for an app that draws the rest (see The parts).
-<HoldToTalkBar settings={{ talk: 'tap' }} label={label} listening={listening} disabled={false}
-  onPress={begin} onRelease={finish} onAbort={drop} />
+// A bar alone: just the hold-to-talk bar, the words go to your own handler (see The parts).
+<TalkBar settings={{ talk: 'tap' }} onWords={(text) => ask(text)}
+  onHoldStart={pauseReading} onHoldEnd={({ cancelled }) => resumeReading()} />
+```
+
+`TalkBar` is the bar and the hold behind it, for an app whose words do something of its own (a Talk sheet that pauses the read-aloud, a
+drill, a reader's push-to-talk): `onWords` gets the words once a hold is let go; `onHoldStart` comes when listening starts and
+`onHoldEnd({ cancelled })` always follows, so what you paused is given back (`cancelled: true` for a slide off, a failure, a hidden page).
+Space or Enter held on the focused bar is a hold; `holdDelayMs={500}` makes a press wait before listening starts (let go sooner, it is no
+hold); `labels` changes its words; `talk: 'off'` renders nothing. To draw the words so far or the notice beside the bar, run the hold
+yourself and pass it in:
+
+```tsx
+const talk = useTalk({ talk: 'tap' }, { onWords: ask, transcriber });
+<p>{talk.transcript || talk.notice}</p>
+<TalkBar talk={talk} />
 ```
 
 The props that came before the object (`mode`, `attach`, `camera`, `recordVoice`, `lang`) still work, as the fallbacks: a value in
@@ -145,7 +158,7 @@ here, and apps already theme these names, so they did not change.
 ## The parts
 
 The hooks and services the Composer is made of are exported too, for an app that draws its own:
-`HoldToTalkBar` (with `settings.talk`: hold, tap or off), `resolveSettings`, `useHold` (one hold: begin, finish, drop, the words so far), `browserSpeech`,
+`TalkBar` and `useTalk` (the bar and its hold alone, words to your `onWords`), `HoldToTalkBar` (the bar when you run the hold: `settings.talk` hold, tap or off; drawn on `useBarPress`, the press logic `useTalk` uses too), `resolveSettings`, `useHold` (one hold: begin, finish, drop, the words so far), `browserSpeech`,
 `transcribeRecording` and the `Transcriber` port, `startListening` (the recogniser with its fallbacks and
 the recorded rest of a hold), `openBluetoothInput` and `chooseInput` (which microphone), `VoiceRecorder`.
 

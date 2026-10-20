@@ -10,6 +10,8 @@ export {
   type ResolvedSettings,
   type SettingsInput,
 } from './settings.js';
+export { TalkBar, DEFAULT_TALK_LABELS, type TalkBarProps, type TalkLabels } from './TalkBar.js';
+export { useTalk, useBarPress, type BarHandlers, type BarPress, type BarPressOptions, type BarState, type HoldEnd, type Talk, type TalkOptions } from './useTalk.js';
 export { useHold, micName, type HoldOptions, type Released } from './useHold.js';
 export { browserSpeech, transcribeRecording, type Transcriber } from './transcriber.js';
 export {

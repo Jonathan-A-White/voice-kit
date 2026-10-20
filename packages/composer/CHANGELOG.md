@@ -2,6 +2,22 @@
 
 Newest first. Breaking changes come first in a release, each with its migration in one sentence.
 
+## Unreleased (0.5.1)
+
+- New (mw-06ggew.3): `TalkBar` and `useTalk`, the hold-to-talk bar and its hook alone, for an app with its own handler for the words (a Talk
+  sheet that pauses the read-aloud, a drill, a reader's push-to-talk) rather than a message box.
+  - `useTalk(settings, { onWords, onHoldStart?, onHoldEnd?, transcriber?, lang?, appName?, holdDelayMs?, dropOnSlideOff? })` runs the hold
+    (`useHold`) behind the bar and returns its state (`listening`, `state`, `transcript`, `notice`, `mic`, `supported`, ...) and `bar`, the
+    handlers to spread on a button. `TalkBar` is the bar drawn on it: the Composer's look (`bk-composer__bar`, `data-state`), labels
+    configurable (`labels`, `DEFAULT_TALK_LABELS`); `<TalkBar talk={useTalk(...)} />` draws a hook you run yourself.
+  - `settings.talk` 'hold', 'tap' (a quick tap latches, the next tap stops; `LATCH_MS`) or 'off' (renders nothing, no hold starts), as in `Composer`.
+  - Space or Enter held on the focused bar is a hold. `holdDelayMs` makes a press wait that long before listening starts (talk 'hold'): let go
+    or slid off sooner, it is no hold and nothing is called. `onHoldStart` comes with the start, before the microphone opens; `onHoldEnd`
+    always follows it: `{ cancelled: false }` after the last words are in (just before `onWords`), `{ cancelled: true }` for a slide off, the
+    phone taking the touch, a recogniser that failed, a hidden page, or a hold that could not start.
+  - `HoldToTalkBar` is now drawn on the same press logic, `useBarPress`, which is exported: one copy of the press logic in the kit.
+  - Migration: none.
+
 ## Unreleased (0.5.0)
 
 - New (mw-06ggew.2): ONE settings object, `ComposerSettings`, drives `Composer` and `HoldToTalkBar` (`settings?: Partial<ComposerSettings>`):

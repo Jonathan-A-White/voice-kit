@@ -3,7 +3,7 @@ import * as pkg from '../src/index.js';
 
 describe('@voice-kit/composer', () => {
   it('exports the Composer, its bar and the hooks and services it is made of', () => {
-    for (const name of ['Composer', 'HoldToTalkBar', 'useHold', 'browserSpeech', 'transcribeRecording', 'startListening', 'VoiceRecorder', 'DEFAULT_LABELS', 'DEFAULT_COMPOSER_SETTINGS', 'resolveSettings']) {
+    for (const name of ['Composer', 'HoldToTalkBar', 'TalkBar', 'useTalk', 'useHold', 'browserSpeech', 'transcribeRecording', 'startListening', 'VoiceRecorder', 'DEFAULT_LABELS', 'DEFAULT_COMPOSER_SETTINGS', 'resolveSettings']) {
       expect(pkg).toHaveProperty(name);
     }
     expect(pkg.Composer).toBeTypeOf('function');
