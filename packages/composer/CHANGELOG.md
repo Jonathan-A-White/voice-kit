@@ -2,6 +2,21 @@
 
 Newest first. Breaking changes come first in a release, each with its migration in one sentence.
 
+## Unreleased (0.5.0)
+
+- New (mw-06ggew.2): ONE settings object, `ComposerSettings`, drives `Composer` and `HoldToTalkBar` (`settings?: Partial<ComposerSettings>`):
+  `talk` ('hold', 'tap' or 'off'), `send` ('release' or 'button'), `type`, `attach`, `camera`, `voiceNote`, `lang`. `DEFAULT_COMPOSER_SETTINGS`
+  (hold, release, type on, attach, camera and voiceNote off) and `resolveSettings(props)` are exported; `resolveSettings` is the one place the
+  components read these choices.
+  - `talk: 'tap'` works as whisper-hid's talkPress does: a press shorter than `LATCH_MS` (350 ms) latches the mic on (the bar says 'Tap to stop',
+    `data-state='latched'`) and the next tap stops it; a longer press is a hold as before. `talk: 'off'` shows no mic (the bar renders nothing).
+  - `send: 'button'`: letting go (or stopping a latched listen) puts the words in the text box, the caret after them and nothing selected, and Send
+    sends them, so a word can be fixed first. A slide off still cancels, keeping the words unsent.
+  - `type: false` takes away the 'Type a message' button.
+  - New labels for the new states (`stop`, `releaseToBox`, `hintTap`, `hintBox`, `hintTapBox`); `HoldToTalkBar` takes `latchedLabel`.
+  - Migration: none. The props `mode`, `attach`, `camera`, `recordVoice` and `lang` still work as the fallbacks for the settings that say the same
+    (a value in `settings` wins); an app can move when it likes.
+
 ## Unreleased (0.4.0)
 
 - Fixed: a pause in a hold no longer cuts him off on Android (mw-06ggew.1, Postern's `listensThroughPauses` lifted in). `startListening`

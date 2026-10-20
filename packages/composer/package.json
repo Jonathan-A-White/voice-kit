@@ -1,7 +1,7 @@
 {
   "name": "@voice-kit/composer",
-  "version": "0.4.0",
-  "description": "voice-kit: a message composer as a React component: hold to talk with the words shown as they are heard, slide off to keep them unsent, quiet attach and camera, Type a message; speak-first or type-first; themed by CSS custom properties.",
+  "version": "0.5.0",
+  "description": "voice-kit: a message composer as a React component: hold or tap to talk with the words shown as they are heard, send on release or by a button, slide off to keep them unsent, quiet attach and camera, Type a message; speak-first or type-first; themed by CSS custom properties.",
   "license": "MIT",
   "type": "module",
   "main": "./dist/index.js",

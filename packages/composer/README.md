@@ -1,7 +1,7 @@
 # @voice-kit/composer
 
-Postern's message composer as a React component. Hold the big bar and talk: the words show as they are heard,
-letting go sends them, and sliding off the bar first keeps them in the box, unsent. Attach and camera sit quietly
+Postern's message composer as a React component. Hold the big bar and talk (or, by a setting, tap it to keep the mic
+on): the words show as they are heard, letting go sends them (or, by a setting, leaves them in the box for a Send), and sliding off the bar first keeps them in the box, unsent. Attach and camera sit quietly
 below the bar, with 'Type a message' to type instead. An app can open it speak-first (the bar) or type-first
 (the text box and Send, with a small mic). It needs React 18 or later (`react` and `react-dom`, peer
 dependencies) and imports nothing from the other voice-kit libraries.
@@ -25,9 +25,7 @@ import 'voice-kit/composer/styles.css';
 function App() {
   return (
     <Composer
-      mode="speak" // or "type": the text box and Send first
-      attach
-      camera
+      settings={{ attach: true, camera: true }}
       labels={{ hold: 'Hold to ask', typeInstead: 'Type a question', placeholder: 'Type a question' }}
       onSend={async ({ text, files }) => {
         const response = await fetch('/api/ask', { method: 'POST', body: JSON.stringify({ text, names: files.map((f) => f.name) }) });
@@ -40,19 +38,53 @@ function App() {
 createRoot(document.getElementById('root')!).render(<App />);
 ```
 
+## Settings
+
+One object, `settings` (`Partial<ComposerSettings>`), says how the composer works. It drives both `Composer` and `HoldToTalkBar`;
+what it does not give is the default (`DEFAULT_COMPOSER_SETTINGS`).
+
+| Setting     | Values (default first)            | What it does |
+| ----------- | --------------------------------- | ------------ |
+| `talk`      | `'hold'`, `'tap'`, `'off'`        | `'hold'`: hold the bar. `'tap'`: hold it as before, or tap it (a press shorter than `LATCH_MS`, 350 ms) to keep the mic on, and tap again to stop; the bar says 'Tap to stop'. `'off'`: no mic at all, the text box and Send only. |
+| `send`      | `'release'`, `'button'`           | `'release'`: letting go sends. `'button'`: letting go (or stopping a latched listen) puts the words in the text box, nothing selected, and Send sends them, so a word can be fixed first. A slide off cancels in both. |
+| `type`      | `true`, `false`                   | The 'Type a message' button under the bar. Off, the text box still shows for words a hold leaves in it. Always on when `talk` is `'off'`. |
+| `attach`    | `false`, `true`                   | The attach button (paste and drop too). |
+| `camera`    | `false`, `true`                   | The camera button. |
+| `voiceNote` | `false`, `true`                   | Send each hold's voice as a voice note beside the words. |
+| `lang`      | the page's `<html lang>`          | The language to listen for. |
+
+Three shapes, one example each:
+
+```tsx
+// A message box: hold to talk, letting go sends, attach and camera below.
+<Composer settings={{ attach: true, camera: true }} onSend={send} />
+
+// A tutor box: tap to talk, the words wait in the box to be fixed, then Send.
+<Composer settings={{ talk: 'tap', send: 'button' }} labels={{ hold: 'Hold to answer' }} onSend={send} />
+
+// A bar alone: just the hold-to-talk bar, for an app that draws the rest (see The parts).
+<HoldToTalkBar settings={{ talk: 'tap' }} label={label} listening={listening} disabled={false}
+  onPress={begin} onRelease={finish} onAbort={drop} />
+```
+
+The props that came before the object (`mode`, `attach`, `camera`, `recordVoice`, `lang`) still work, as the fallbacks: a value in
+`settings` wins, else the old prop, else the default (`recordVoice` is the fallback for `voiceNote`). `mode` has no setting: it stays a
+prop, the layout the composer opens in, and `resolveSettings(props)` is where it and the settings are read together.
+
 ## What the app passes
 
 | Prop           | What it does                                                                                     |
 | -------------- | ------------------------------------------------------------------------------------------------ |
 | `onSend`       | Gets `{ text, files }` (each file `{ name, type, bytes, durationMs? }`). Return or resolve `false`, or throw, when it did not go: the words wait in the box. A thrown `Error`'s message is shown. |
+| `settings`     | The settings above. |
 | `mode`         | `'speak'` (default): the hold bar first. `'type'`: the text box and Send first, with a small mic that brings the bar out. |
 | `transcriber`  | How audio becomes text. Default `browserSpeech` (the browser's SpeechRecognition, as Postern does: words as he speaks). `transcribeRecording(fn)` records the hold and calls `fn(recording)` on release for the words (your own speech-to-text service). |
-| `attach`, `camera` | Show the attach (any file; paste and drop too) and camera buttons. Both hidden when not given. |
-| `recordVoice`  | Send each hold's voice as a voice note beside the words (with `browserSpeech`; `transcribeRecording` already has the recording). |
-| `labels`       | Any of the words on the screen (`DEFAULT_LABELS`): `hold` 'Hold to talk', `tryAgain` 'Try again' (the bar after a hold that ended with a notice), `typeInstead` and `placeholder` 'Type a message', `release`, `drop`, `kept`, `send`, `speak`, `attach`, `camera`, ... |
+| `attach`, `camera` | Fallbacks for `settings.attach` and `settings.camera`: show the attach (any file; paste and drop too) and camera buttons. Both hidden when not given. |
+| `recordVoice`  | Fallback for `settings.voiceNote`: send each hold's voice as a voice note beside the words (with `browserSpeech`; `transcribeRecording` already has the recording). |
+| `labels`       | Any of the words on the screen (`DEFAULT_LABELS`): `hold` 'Hold to talk', `tryAgain` 'Try again' (the bar after a hold that ended with a notice), `typeInstead` and `placeholder` 'Type a message', `release`, `releaseToBox` (send `'button'`), `stop` (a latched listen), `hint` and its variants `hintTap`, `hintBox`, `hintTapBox`, `drop`, `kept`, `send`, `speak`, `attach`, `camera`, ... |
 | `refuseFile`   | `(file) => reason or undefined`: a refused file is not added and the reason is shown.            |
 | `onNotice`     | Takes what the composer would say about a refused file or a failed send (to show it as a toast). |
-| `lang`, `appName` | The language to listen for (default the page's `<html lang>`), and the app's name in "the microphone is not allowed for ..." |
+| `lang`, `appName` | `lang` is the fallback for `settings.lang` (default the page's `<html lang>`); `appName` is the app's name in "the microphone is not allowed for ..." |
 | `initialText`, `autoFocus`, `disabled`, `top`, `className` | Words already in the box; focus on open; nothing can be held or sent; a node at the top (a quote); a class on the root. |
 
 Send with nothing said: attach a picture (or any file) and leave the box empty, and a Send arrow stands beside Hold to talk.
@@ -102,7 +134,7 @@ setting the properties on `:root`, a parent or `.bk-composer`:
 ```
 
 The full list is at the top of `styles.css`. Or leave the file out and style the classes: `bk-composer`
-(`data-mode` 'speak' or 'type', `data-layout` 'bar' or 'field'), `__bar` (`data-state` 'idle', 'listening' or
+(`data-mode` 'speak' or 'type', `data-layout` 'bar' or 'field'), `__bar` (`data-state` 'idle', 'listening', 'latched' or
 'slid'), `__status`, `__live`, `__mic-name`, `__hint`, `__quiet-row`, `__quiet` (attach and camera),
 `__type-instead`, `__bar-row`, `__bar-send` (the arrow beside the bar), `__field-row`, `__field`, `__mic`, `__send`, `__files`, `__file`, `__thumb`, `__remove`,
 `__kept`, `__notice`, `__error`.
@@ -113,7 +145,7 @@ here, and apps already theme these names, so they did not change.
 ## The parts
 
 The hooks and services the Composer is made of are exported too, for an app that draws its own:
-`HoldToTalkBar`, `useHold` (one hold: begin, finish, drop, the words so far), `browserSpeech`,
+`HoldToTalkBar` (with `settings.talk`: hold, tap or off), `resolveSettings`, `useHold` (one hold: begin, finish, drop, the words so far), `browserSpeech`,
 `transcribeRecording` and the `Transcriber` port, `startListening` (the recogniser with its fallbacks and
 the recorded rest of a hold), `openBluetoothInput` and `chooseInput` (which microphone), `VoiceRecorder`.
 
