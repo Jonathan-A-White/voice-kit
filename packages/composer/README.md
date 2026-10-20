@@ -98,6 +98,8 @@ prop, the layout the composer opens in, and `resolveSettings(props)` is where it
 | `refuseFile`   | `(file) => reason or undefined`: a refused file is not added and the reason is shown.            |
 | `onNotice`     | Takes what the composer would say about a refused file or a failed send (to show it as a toast). |
 | `lang`, `appName` | `lang` is the fallback for `settings.lang` (default the page's `<html lang>`); `appName` is the app's name in "the microphone is not allowed for ..." |
+| `open`         | `'bar'` or `'box'`: which shows first, and again after a send. Default: the bar in `mode` `'speak'`, the box in `'type'`. See below. |
+| `text`, `onTextChange`, `onKeyDown`, `fieldOverlay`, `sendBlocked`, `renderSend`, `canSendEmpty`, `incomingFiles`, `onFileTap`, `maxLength`, `minRows` | The ways in for an app's own features; see _Plugging in an app's own features_ below. |
 | `initialText`, `autoFocus`, `disabled`, `top`, `className` | Words already in the box; focus on open; nothing can be held or sent; a node at the top (a quote); a class on the root. |
 
 Send with nothing said: attach a picture (or any file) and leave the box empty, and a Send arrow stands beside Hold to talk.
@@ -106,6 +108,93 @@ stays the big button, with the same height and place (it gives up only the arrow
 changes, and once words are typed the text box's own Send is the one. The arrow waits while the bar is held. The example page,
 `examples/composer-demo` (`npm run dev --workspace composer-demo`), shows it; its shot at 390 x 844 is
 `examples/composer-demo/shots/attachment-390x844.png`.
+
+## Plugging in an app's own features
+
+Drafts, saved prompts, quotes, shared-in files and a file viewer stay the app's: the composer does not have them. These props are the ways
+in (0.6.0, mw-06ggew.12). Each is additive: with none of them the composer behaves as it did.
+
+**`text` and `onTextChange`: the app owns the words in the box.** A draft that loads after mount fills the box; a hold's words are kept
+through `onTextChange` too. With only `onTextChange` the box stays the composer's own and the app hears every change.
+
+```tsx
+const [text, setText] = useState('');
+useEffect(() => { loadDraft(channel).then((draft) => setText((now) => now || draft)); }, [channel]);
+<Composer text={text} onTextChange={(next) => { setText(next); saveDraft(channel, next); }} onSend={send} />
+```
+
+**`onKeyDown`: before Enter.** Called first with the box's key event; `event.preventDefault()` keeps Enter from sending.
+
+```tsx
+<Composer text={text} onTextChange={setText}
+  onKeyDown={(event) => { if (event.key === 'Tab' && suggestion) { event.preventDefault(); setText(`/${suggestion} `); } }} onSend={send} />
+```
+
+**`fieldOverlay`: a node laid over the box.** Drawn in `.bk-composer__field-wrap` (`position: relative`) after the text box, only while the
+box shows. Position it with your own CSS.
+
+```tsx
+<Composer fieldOverlay={suggestion && <button type="button" className="grey-suggestion" onClick={take}>/{suggestion}</button>} ... />
+```
+
+**`sendBlocked`: not ready.** Send is greyed, Enter does not send, and a spoken release keeps its words in the box rather than sending them.
+
+```tsx
+<Composer sendBlocked={checkingPrompts || callFailed} ... />
+```
+
+**`renderSend`: your own Send button.** Drawn in place of the composer's, beside the box (`placement: 'field'`) and as the arrow beside the
+bar (`'bar'`). It is given `{ send, canSend, blocked, busy, disabled, label, placement }`; its `send()` goes past `sendBlocked` (your button
+decides that), but not an empty message, a message over `maxLength` or a send under way.
+
+```tsx
+<Composer sendBlocked={failed}
+  renderSend={({ send, canSend, blocked, busy }) => (
+    <HoldButton disabled={!canSend || busy} onHold={blocked ? send : undefined} onClick={blocked ? undefined : send}>
+      {blocked ? 'Send (hold to send anyway)' : 'Send'}
+    </HoldButton>
+  )} ... />
+```
+
+**`canSendEmpty`: a message with nothing in it may go** (a quote alone). Send shows and is not greyed; `onSend` gets `{ text: '', files: [] }`.
+In the bar layout the arrow beside the bar shows too.
+
+```tsx
+<Composer top={quote && <Quote {...quote} />} canSendEmpty={!!quote} onSend={({ text, files }) => send(withQuote(text, quote), files)} />
+```
+
+**`incomingFiles`: files that arrive after mount** (a share target). Each new array is added once to the waiting row, through `refuseFile`
+like a picked file. Pass a new array for each batch.
+
+```tsx
+const [shared, setShared] = useState<File[]>([]);
+useEffect(() => { takePendingShare().then((files) => files.length && setShared(files)); }, []);
+<Composer incomingFiles={shared} open={shared.length ? 'bar' : 'box'} ... />
+```
+
+**`onFileTap`: a tap on a waiting file.** The thumbnail or name becomes a button (`labels.view(name)`, 'View photo.png' by default) that
+calls `onFileTap({ name, type, preview, durationMs? })`; `preview` is the object URL of a picture or a voice note. Without it a waiting file is
+not a button.
+
+```tsx
+<Composer onFileTap={(file) => (file.type.startsWith('image/') ? showViewer(file.preview) : download(file))} labels={{ view: (name) => `Open ${name}` }} ... />
+```
+
+**`open`: which comes first.** `'box'` opens on the text box with attach and camera on its left and the mic standing in for Send until there
+is something to send; the mic brings the bar out. `'bar'` opens on the bar. The composer goes back to it after a send, and takes a change
+made after mount (so a share with no words can open the bar). With `talk: 'off'` the box is all there is.
+
+```tsx
+<Composer open="box" settings={{ attach: true, camera: true }} ... />
+```
+
+**`maxLength` and `minRows`.** `maxLength={1000}` shows a live '12 of 1000' (`labels.count(length, max)`, `data-testid="composer-count"`,
+class `bk-composer__count`, `data-over` when over) under the box and greys Send, and stops Enter, when the text is over it. The box does not
+cut what is typed or pasted. `minRows={8}` is the box's rows when it is empty (one by default); it grows with the words up to its CSS max-height.
+
+```tsx
+<Composer maxLength={1000} minRows={8} labels={{ count: (n, max) => `${n} of ${max}` }} ... />
+```
 
 What a hold does, from Postern, with its fixes:
 
@@ -149,7 +238,7 @@ setting the properties on `:root`, a parent or `.bk-composer`:
 The full list is at the top of `styles.css`. Or leave the file out and style the classes: `bk-composer`
 (`data-mode` 'speak' or 'type', `data-layout` 'bar' or 'field'), `__bar` (`data-state` 'idle', 'listening', 'latched' or
 'slid'), `__status`, `__live`, `__mic-name`, `__hint`, `__quiet-row`, `__quiet` (attach and camera),
-`__type-instead`, `__bar-row`, `__bar-send` (the arrow beside the bar), `__field-row`, `__field`, `__mic`, `__send`, `__files`, `__file`, `__thumb`, `__remove`,
+`__type-instead`, `__bar-row`, `__bar-send` (the arrow beside the bar), `__field-row`, `__field-wrap`, `__field`, `__count`, `__mic`, `__send`, `__files`, `__file`, `__file-open` (the button on a file, with `onFileTap`), `__thumb`, `__remove`,
 `__kept`, `__notice`, `__error`.
 
 The class names and properties begin `bk-` for historical reasons: the composer was `@bsv-kit/composer` before it moved

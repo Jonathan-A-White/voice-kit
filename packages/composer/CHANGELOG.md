@@ -2,6 +2,22 @@
 
 Newest first. Breaking changes come first in a release, each with its migration in one sentence.
 
+## Unreleased (0.6.0)
+
+- New (mw-06ggew.12): extension points on `Composer` for an app's own features (drafts, saved prompts, quotes, shared-in files, a file viewer,
+  a character limit), all additive: with none of them the composer behaves as in 0.5.1. README section 'Plugging in an app's own features'.
+  - `text` + `onTextChange`: the app owns the box's words (a draft that loads after mount fills the box); `onTextChange` alone just hears them.
+  - `onKeyDown`: called before the composer's Enter handling; `preventDefault()` keeps Enter from sending.
+  - `fieldOverlay`: a node drawn in the new `.bk-composer__field-wrap` after the text box (the text box now sits in this wrapper).
+  - `sendBlocked`: Send greyed, Enter and a spoken release do not send (the words wait in the box). `renderSend(slot)`: your own Send button, beside
+    the box and as the arrow beside the bar; `slot.send()` goes past `sendBlocked`. `canSendEmpty`: a message with no words and no files may go.
+  - `incomingFiles`: files that arrive after mount are added to the waiting row (each new array once, through `refuseFile`).
+  - `onFileTap`: a waiting file becomes a button (`labels.view`) that gives the app the file and its preview URL.
+  - `open` ('bar' or 'box'): which shows first in either layout, and after a send; `resolveSettings` reads it with `mode`. `ComposerOpen` is exported.
+  - `maxLength`: a live 'N of M' count (`labels.count`) under the box; Send greyed over it. `minRows`: the box's rows when empty.
+  - New exports: types `SendSlot`, `WaitingFile`, `ComposerOpen`. New labels: `view`, `count`.
+  - Migration: none. (A stylesheet that targeted the text box as a direct child of `.bk-composer__field-row` should target `.bk-composer__field-wrap`.)
+
 ## Unreleased (0.5.1)
 
 - New (mw-06ggew.3): `TalkBar` and `useTalk`, the hold-to-talk bar and its hook alone, for an app with its own handler for the words (a Talk
