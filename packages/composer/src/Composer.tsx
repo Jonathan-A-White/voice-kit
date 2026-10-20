@@ -10,6 +10,10 @@
 // 'Kept what you said: tap Send.' (mw-f7gmps.3). A hold that ends with a notice and no words (the recogniser failed by
 // every route, nothing was heard) shows the notice above the bar, and the bar says 'Try again': a hold on it is a fresh
 // one, every route untried (mw-hgtlf5.1).
+// ONE settings object drives it (mw-06ggew.2, settings.ts): talk 'hold' | 'tap' | 'off' (tap: a quick tap keeps the mic on and
+// the next tap stops it), send 'release' | 'button' (button: letting go puts the words in the box for him to fix, and
+// Send sends them), type, attach, camera, voiceNote and lang. The props that came before it (mode, attach, camera,
+// recordVoice, lang) are its fallbacks; resolveSettings is the one place either is read.
 // mode 'speak' is Postern's layout: the big bar first, attach, camera and 'Type a message' quiet below it, and the
 // text box once he chooses to type or a hold leaves words in it. mode 'type' puts the text box and Send first with a
 // small mic that brings the bar out. The app passes what is its own: how audio becomes text (a Transcriber), what
@@ -21,7 +25,10 @@ import { HoldToTalkBar } from './HoldToTalkBar.js';
 import { Icon } from './icons.js';
 import { formatDuration, type Recording } from './recorder.js';
 import type { Transcriber } from './transcriber.js';
+import { resolveSettings, type ComposerMode, type ComposerSettings } from './settings.js';
 import { micName, useHold } from './useHold.js';
+
+export type { ComposerMode };
 
 /** A file as the app gets it in a message. A voice note recorded by a hold carries its length. */
 export interface OutgoingFile {
@@ -37,8 +44,6 @@ export interface ComposerMessage {
   files: OutgoingFile[];
 }
 
-export type ComposerMode = 'speak' | 'type';
-
 /** Every word the composer puts on the screen; the app replaces any of them ('Hold to ask', 'Type a question'). */
 export interface ComposerLabels {
   /** The bar, before a hold. */
@@ -53,8 +58,18 @@ export interface ComposerLabels {
   drop: string;
   /** The live words, before any are heard. */
   listening: string;
+  /** The bar, while the mic is kept on after a quick tap (talk 'tap') and the mic is open: how to stop. */
+  stop: string;
+  /** The bar, while he holds and the mic is open, when the words will wait in the box (send 'button'). */
+  releaseToBox: string;
   /** Under the bar, before a hold. */
   hint: string;
+  /** Under the bar with talk 'tap'. */
+  hintTap: string;
+  /** Under the bar with send 'button'. */
+  hintBox: string;
+  /** Under the bar with talk 'tap' and send 'button'. */
+  hintTapBox: string;
   /** The quiet button below the bar that brings the text box out. */
   typeInstead: string;
   /** The text box's placeholder. */
@@ -87,7 +102,12 @@ export const DEFAULT_LABELS: ComposerLabels = {
   starting: 'Starting the mic…',
   drop: 'Let go to keep it unsent',
   listening: 'Listening…',
+  stop: 'Tap to stop',
+  releaseToBox: 'Release to keep it in the box',
   hint: 'Hold the bar and speak. Slide off it to keep the words unsent.',
+  hintTap: 'Hold the bar and speak, or tap it to keep the mic on and tap again to stop. Slide off it to keep the words unsent.',
+  hintBox: 'Hold the bar and speak. Letting go leaves the words in the box for you to fix, then Send. Slide off it to keep the words unsent.',
+  hintTapBox: 'Hold the bar and speak, or tap it to keep the mic on and tap again to stop. The words wait in the box for you to fix, then Send.',
   typeInstead: 'Type a message',
   placeholder: 'Type a message',
   message: 'Message',
@@ -109,19 +129,24 @@ export interface ComposerProps {
    * he said is lost. A thrown Error's message is shown.
    */
   onSend: (message: ComposerMessage) => Promise<boolean | void> | boolean | void;
-  /** 'speak' (the default): the hold bar first. 'type': the text box and Send first, with a small mic. */
+  /**
+   * The composer's choices in one object (talk, send, type, attach, camera, voiceNote, lang); what is not given is the default
+   * (DEFAULT_COMPOSER_SETTINGS) or, for attach, camera, voiceNote and lang, the older prop of that kind below.
+   */
+  settings?: Partial<ComposerSettings>;
+  /** Fallback layout (settings has none): 'speak' (the default) is the hold bar first, 'type' the text box and Send first, with a small mic. */
   mode?: ComposerMode;
   /** How audio becomes text: the browser's speech recogniser (browserSpeech) unless given, or transcribeRecording(fn). */
   transcriber?: Transcriber;
-  /** The language to listen for; the page's `<html lang>` when not given. */
+  /** Fallback for `settings.lang`: the language to listen for; the page's `<html lang>` when not given. */
   lang?: string;
   /** The app's name, in the messages that say how to allow the microphone ('this app' when not given). */
   appName?: string;
-  /** Show the attach button (any file from the picker); paste and drop add files too. Hidden when not given. */
+  /** Fallback for `settings.attach`: show the attach button (any file from the picker); paste and drop add files too. Hidden when not given. */
   attach?: boolean;
-  /** Show the camera button (a photo, on a phone). Hidden when not given. */
+  /** Fallback for `settings.camera`: show the camera button (a photo, on a phone). Hidden when not given. */
   camera?: boolean;
-  /** Record the voice of each hold and send it with the words as a voice note. */
+  /** Fallback for `settings.voiceNote`: record the voice of each hold and send it with the words as a voice note. */
   recordVoice?: boolean;
   /** Words to put on the screen in place of the defaults (DEFAULT_LABELS). */
   labels?: Partial<ComposerLabels>;
@@ -173,13 +198,14 @@ function focusQuietly(area: HTMLTextAreaElement | null): void {
 
 export function Composer({
   onSend,
-  mode = 'speak',
+  settings: choices,
+  mode: modeProp,
   transcriber,
-  lang,
+  lang: langProp,
   appName,
-  attach = false,
-  camera = false,
-  recordVoice = false,
+  attach: attachProp,
+  camera: cameraProp,
+  recordVoice,
   labels: given,
   refuseFile,
   onNotice,
@@ -190,10 +216,14 @@ export function Composer({
   className,
 }: ComposerProps) {
   const labels: ComposerLabels = { ...DEFAULT_LABELS, ...given };
+  const settings = resolveSettings({ settings: choices, mode: modeProp, attach: attachProp, camera: cameraProp, recordVoice, lang: langProp });
+  const { mode, talk, send: sendBy, attach, camera, lang } = settings;
+  // The bar, not the text box, is what he sees first (speak-first, and there is a mic at all).
+  const barFirst = mode === 'speak' && talk !== 'off';
   const [text, setText] = useState(initialText);
   const [files, setFiles] = useState<Pending[]>([]);
   // The hold-to-talk bar is out in place of the text box: 'speak' opens with it, the mic brings it out.
-  const [voice, setVoice] = useState(mode === 'speak');
+  const [voice, setVoice] = useState(barFirst);
   const [holding, setHolding] = useState(false);
   // A hold ended without sending and its words wait in the box (until they are sent).
   const [kept, setKept] = useState(false);
@@ -207,7 +237,7 @@ export function Composer({
     transcriber,
     lang,
     appName,
-    record: recordVoice,
+    record: settings.voiceNote,
     onFailed: (said) => {
       setHolding(false);
       keep(said);
@@ -224,12 +254,12 @@ export function Composer({
   }, []);
 
   // The app switched between speak-first and type-first: the composer takes the new layout.
-  const shownMode = useRef(mode);
+  const shownMode = useRef(barFirst);
   useEffect(() => {
-    if (shownMode.current === mode) return;
-    shownMode.current = mode;
-    setVoice(mode === 'speak');
-  }, [mode]);
+    if (shownMode.current === barFirst) return;
+    shownMode.current = barFirst;
+    setVoice(barFirst);
+  }, [barFirst]);
 
   useEffect(() => {
     const area = textarea.current;
@@ -287,7 +317,7 @@ export function Composer({
     setText('');
     setKept(false);
     setNotice(undefined);
-    setVoice(mode === 'speak');
+    setVoice(barFirst);
   }
 
   function press() {
@@ -316,6 +346,12 @@ export function Composer({
     if (released.missed && onNotice) onNotice(released.missed);
     const words = released.text.trim();
     const voiceNote = released.recording ? await voiceFile(released.recording) : undefined;
+    if (sendBy === 'button') {
+      // send 'button': the words wait in the box, nothing selected, for him to fix a word; Send sends them
+      flushSync(() => keep(words, voiceNote));
+      focusQuietly(textarea.current);
+      return;
+    }
     const going = voiceNote ? [...files, voiceNote] : files;
     if (await deliver(words, going)) sent(going);
     else {
@@ -374,11 +410,14 @@ export function Composer({
 
   const canSend = text.trim().length > 0 || files.length > 0;
   // The bar takes the text box's place while there are no words in it.
-  const barOut = voice && text.trim().length === 0 && hold.supported;
+  const barOut = voice && talk !== 'off' && text.trim().length === 0 && hold.supported;
   // Pictures or files alone leave the mic beside Send; a voice note recorded (one per message), or words, take it away.
-  const showMic = text.trim().length === 0 && !files.some((file) => file.durationMs !== undefined);
+  const showMic = talk !== 'off' && text.trim().length === 0 && !files.some((file) => file.durationMs !== undefined);
   // 'type' always shows Send; 'speak' shows it once there is something to send, the mic standing in for it before.
-  const showSend = mode === 'type' || canSend;
+  const showSend = mode === 'type' || talk === 'off' || canSend;
+
+  const hint =
+    talk === 'tap' ? (sendBy === 'button' ? labels.hintTapBox : labels.hintTap) : sendBy === 'button' ? labels.hintBox : labels.hint;
 
   const quiet = (
     <>
@@ -444,12 +483,14 @@ export function Composer({
                 )}
               </>
             ) : (
-              <p className={hold.notice ? 'bk-composer__hint bk-composer__error' : 'bk-composer__hint'}>{hold.notice ?? labels.hint}</p>
+              <p className={hold.notice ? 'bk-composer__hint bk-composer__error' : 'bk-composer__hint'}>{hold.notice ?? hint}</p>
             )}
           </div>
           <div className="bk-composer__bar-row">
             <HoldToTalkBar
-              label={holding ? (hold.mic === 'ready' ? labels.release : labels.starting) : hold.notice ? labels.tryAgain : labels.hold}
+              settings={settings}
+              label={holding ? (hold.mic === 'ready' ? (sendBy === 'button' ? labels.releaseToBox : labels.release) : labels.starting) : hold.notice ? labels.tryAgain : labels.hold}
+              latchedLabel={hold.mic === 'ready' ? labels.stop : labels.starting}
               dropLabel={labels.drop}
               listening={holding}
               disabled={busy || disabled}
@@ -466,9 +507,11 @@ export function Composer({
           </div>
           <div className="bk-composer__quiet-row">
             {quiet}
-            <button type="button" className="bk-composer__type-instead" disabled={holding} onClick={typeInstead}>
-              {labels.typeInstead}
-            </button>
+            {settings.type && (
+              <button type="button" className="bk-composer__type-instead" disabled={holding} onClick={typeInstead}>
+                {labels.typeInstead}
+              </button>
+            )}
           </div>
         </div>
       ) : (

@@ -1,6 +1,15 @@
 // @voice-kit/composer: Postern's message composer as a React component, and the hooks and services it is made of.
 export { Composer, DEFAULT_LABELS, type ComposerLabels, type ComposerMessage, type ComposerMode, type ComposerProps, type OutgoingFile } from './Composer.js';
-export { HoldToTalkBar, DROP_LABEL, SLIDE_OFF_MARGIN_PX, type HoldToTalkBarProps } from './HoldToTalkBar.js';
+export { HoldToTalkBar, DROP_LABEL, LATCH_MS, SLIDE_OFF_MARGIN_PX, STOP_LABEL, type HoldToTalkBarProps } from './HoldToTalkBar.js';
+export {
+  DEFAULT_COMPOSER_SETTINGS,
+  resolveSettings,
+  type ComposerSend,
+  type ComposerSettings,
+  type ComposerTalk,
+  type ResolvedSettings,
+  type SettingsInput,
+} from './settings.js';
 export { useHold, micName, type HoldOptions, type Released } from './useHold.js';
 export { browserSpeech, transcribeRecording, type Transcriber } from './transcriber.js';
 export {

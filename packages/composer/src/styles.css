@@ -155,7 +155,8 @@
   transition: background-color 150ms;
   cursor: pointer;
 }
-.bk-composer__bar[data-state='listening'] {
+.bk-composer__bar[data-state='listening'],
+.bk-composer__bar[data-state='latched'] {
   background: var(--bk-composer-listening, #d97706);
   color: var(--bk-composer-on-strong, #ffffff);
 }
