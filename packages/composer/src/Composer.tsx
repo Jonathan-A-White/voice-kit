@@ -16,19 +16,24 @@
 // recordVoice, lang) are its fallbacks; resolveSettings is the one place either is read.
 // mode 'speak' is Postern's layout: the big bar first, attach, camera and 'Type a message' quiet below it, and the
 // text box once he chooses to type or a hold leaves words in it. mode 'type' puts the text box and Send first with a
-// small mic that brings the bar out. The app passes what is its own: how audio becomes text (a Transcriber), what
-// Send does, whether attach and camera show, and the words on the screen. The look is the app's too: class names
-// (bk-composer__*) and CSS custom properties (--bk-composer-*), with defaults in styles.css.
+// small mic that brings the bar out. `open` ('bar' | 'box') says which of the two shows first in either layout (Postern opens
+// 'speak' on the box, the mic standing in for Send).
+// The app plugs its own features in through extension points, all additive (mw-06ggew.12): text + onTextChange (the app owns the box's
+// words: drafts, saved prompts), onKeyDown (before Enter), fieldOverlay (a node laid over the box), sendBlocked, renderSend and
+// canSendEmpty (Send), incomingFiles (files that arrive after mount), onFileTap (a waiting file tapped), maxLength with a live count
+// and minRows. Drafts, prompts, quotes and a file viewer stay the app's; these are only the ways in.
+// The app passes what is its own: how audio becomes text (a Transcriber), what Send does, whether attach and camera show, and the
+// words on the screen. The look is the app's too: class names (bk-composer__*) and CSS custom properties (--bk-composer-*), with defaults in styles.css.
 import { useEffect, useRef, useState, type ClipboardEvent, type DragEvent, type KeyboardEvent, type ReactNode } from 'react';
 import { flushSync } from 'react-dom';
 import { HoldToTalkBar } from './HoldToTalkBar.js';
 import { Icon } from './icons.js';
 import { formatDuration, type Recording } from './recorder.js';
 import type { Transcriber } from './transcriber.js';
-import { resolveSettings, type ComposerMode, type ComposerSettings } from './settings.js';
+import { resolveSettings, type ComposerMode, type ComposerOpen, type ComposerSettings } from './settings.js';
 import { micName, useHold } from './useHold.js';
 
-export type { ComposerMode };
+export type { ComposerMode, ComposerOpen };
 
 /** A file as the app gets it in a message. A voice note recorded by a hold carries its length. */
 export interface OutgoingFile {
@@ -93,6 +98,10 @@ export interface ComposerLabels {
   micName: (input: string | undefined) => string;
   /** Said when a voice note was refused and the words went without it. */
   voiceNoteRefused: (refusal: string) => string;
+  /** The button on a waiting file, when the app takes taps on it (onFileTap): 'View photo.png'. */
+  view: (name: string) => string;
+  /** The count under the text box, when the app sets a maxLength: '12 of 1000'. */
+  count: (length: number, max: number) => string;
 }
 
 export const DEFAULT_LABELS: ComposerLabels = {
@@ -121,7 +130,36 @@ export const DEFAULT_LABELS: ComposerLabels = {
   remove: (name) => `Remove ${name}`,
   micName,
   voiceNoteRefused: (refusal) => `${refusal} The words went without the voice note.`,
+  view: (name) => `View ${name}`,
+  count: (length, max) => `${length} of ${max}`,
 };
+
+/** A file waiting to go, as the app is told of a tap on it (onFileTap). */
+export interface WaitingFile {
+  name: string;
+  type: string;
+  /** An object URL for the file, for a picture or a voice note; the app may show it. Not given for other files. */
+  preview?: string;
+  durationMs?: number;
+}
+
+/** What renderSend is given to draw the Send button with. */
+export interface SendSlot {
+  /** Sends what is in the box now. It ignores `sendBlocked` (the app's own button decides that) but not an empty message, a message over maxLength, or a send already under way. */
+  send: () => void;
+  /** There is something to send (words, a file, or canSendEmpty) and it is not over maxLength. */
+  canSend: boolean;
+  /** The app said sendBlocked. */
+  blocked: boolean;
+  /** A send is under way. */
+  busy: boolean;
+  /** The composer is disabled. */
+  disabled: boolean;
+  /** The Send label (labels.send). */
+  label: string;
+  /** Where it is drawn: beside the text box, or as the arrow beside the bar (files attached, nothing typed). */
+  placement: 'field' | 'bar';
+}
 
 export interface ComposerProps {
   /**
@@ -136,6 +174,12 @@ export interface ComposerProps {
   settings?: Partial<ComposerSettings>;
   /** Fallback layout (settings has none): 'speak' (the default) is the hold bar first, 'type' the text box and Send first, with a small mic. */
   mode?: ComposerMode;
+  /**
+   * Which shows first, and again after a send: 'bar' (the hold bar) or 'box' (the text box; in 'speak' layout with attach and camera on its
+   * left and the mic standing in for Send until there is something to send; the mic brings the bar out). Default: the bar in 'speak',
+   * the box in 'type'. Changed after mount, the composer shows the new one (a share with no words opens the bar).
+   */
+  open?: ComposerOpen;
   /** How audio becomes text: the browser's speech recogniser (browserSpeech) unless given, or transcribeRecording(fn). */
   transcriber?: Transcriber;
   /** Fallback for `settings.lang`: the language to listen for; the page's `<html lang>` when not given. */
@@ -156,6 +200,34 @@ export interface ComposerProps {
   onNotice?: (message: string) => void;
   /** Words already in the box when it opens; the caret waits after them. */
   initialText?: string;
+  /**
+   * The words in the box, when the app owns them (drafts, saved prompts): the box shows exactly this, and each change (typed, a hold's
+   * words kept, emptied by a send) goes to onTextChange. Without it the box is the composer's own (initialText).
+   */
+  text?: string;
+  /** Gets the box's words after each change, with `text` or without it (to save a draft as he types). */
+  onTextChange?: (text: string) => void;
+  /** The text box's key presses, called before the composer's own Enter handling; `event.preventDefault()` keeps Enter from sending (Tab takes a suggestion). */
+  onKeyDown?: (event: KeyboardEvent<HTMLTextAreaElement>) => void;
+  /** Drawn in the text box's wrapper (class bk-composer__field-wrap, position: relative), after the box: lay a suggestion over it. Not drawn while the bar is out. */
+  fieldOverlay?: ReactNode;
+  /** Send is greyed, and Enter and a spoken release do not send (the words wait in the box): the app is not ready for this message. */
+  sendBlocked?: boolean;
+  /** Draws the Send button in place of the composer's own (beside the text box, and the arrow beside the bar). */
+  renderSend?: (slot: SendSlot) => ReactNode;
+  /** A message with no words and no files may go (a quote alone); Send shows and is not greyed. */
+  canSendEmpty?: boolean;
+  /**
+   * Files to add to the waiting row, for files that arrive after mount (a share target). Each new list (a new array) is added once,
+   * through refuseFile like a picked file.
+   */
+  incomingFiles?: readonly File[];
+  /** A tap on a waiting file (its thumbnail or name): the file and its preview URL. The file is a button only when this is given. */
+  onFileTap?: (file: WaitingFile) => void;
+  /** The most characters a message may have: a live 'N of M' count shows under the box and Send is greyed over it. The box does not cut. */
+  maxLength?: number;
+  /** The text box's rows when it is empty (one by default); it grows with the words up to its CSS max-height. */
+  minRows?: number;
   autoFocus?: boolean;
   /** Nothing can be held or sent (the app is not ready). */
   disabled?: boolean;
@@ -200,6 +272,7 @@ export function Composer({
   onSend,
   settings: choices,
   mode: modeProp,
+  open: openProp,
   transcriber,
   lang: langProp,
   appName,
@@ -210,17 +283,39 @@ export function Composer({
   refuseFile,
   onNotice,
   initialText = '',
+  text: textProp,
+  onTextChange,
+  onKeyDown: onKeyDownProp,
+  fieldOverlay,
+  sendBlocked = false,
+  renderSend,
+  canSendEmpty = false,
+  incomingFiles,
+  onFileTap,
+  maxLength,
+  minRows = 1,
   autoFocus = false,
   disabled = false,
   top,
   className,
 }: ComposerProps) {
   const labels: ComposerLabels = { ...DEFAULT_LABELS, ...given };
-  const settings = resolveSettings({ settings: choices, mode: modeProp, attach: attachProp, camera: cameraProp, recordVoice, lang: langProp });
+  const settings = resolveSettings({ settings: choices, mode: modeProp, open: openProp, attach: attachProp, camera: cameraProp, recordVoice, lang: langProp });
   const { mode, talk, send: sendBy, attach, camera, lang } = settings;
-  // The bar, not the text box, is what he sees first (speak-first, and there is a mic at all).
-  const barFirst = mode === 'speak' && talk !== 'off';
-  const [text, setText] = useState(initialText);
+  // The bar, not the text box, is what he sees first (the app opens it so, and there is a mic at all).
+  const barFirst = settings.open === 'bar' && talk !== 'off';
+  const [ownText, setOwnText] = useState(initialText);
+  // The app owns the box's words when it gives `text`; else they are the composer's own. Either way onTextChange hears each change.
+  const text = textProp ?? ownText;
+  const latest = useRef(text);
+  latest.current = text;
+  function setText(next: string | ((current: string) => string)) {
+    const value = typeof next === 'function' ? next(latest.current) : next;
+    if (value === latest.current) return;
+    latest.current = value;
+    if (textProp === undefined) setOwnText(value);
+    onTextChange?.(value);
+  }
   const [files, setFiles] = useState<Pending[]>([]);
   // The hold-to-talk bar is out in place of the text box: 'speak' opens with it, the mic brings it out.
   const [voice, setVoice] = useState(barFirst);
@@ -267,14 +362,22 @@ export function Composer({
     // grows with the words; the stylesheet's max-height caps it
     area.style.height = 'auto';
     area.style.height = `${area.scrollHeight}px`;
-  }, [text]);
+  }, [text, minRows]);
+
+  // Files that arrive after mount (a share target): each new list is added once, as a picked file is.
+  const taken = useRef<readonly File[] | undefined>(undefined);
+  useEffect(() => {
+    if (!incomingFiles || incomingFiles === taken.current) return;
+    taken.current = incomingFiles;
+    if (incomingFiles.length) void addFiles(incomingFiles);
+  }, [incomingFiles]);
 
   function say(message: string) {
     if (onNotice) onNotice(message);
     else setNotice(message);
   }
 
-  async function addFiles(list: FileList | File[]) {
+  async function addFiles(list: FileList | readonly File[]) {
     const accepted: Pending[] = [];
     for (const file of Array.from(list)) {
       const refusal = refuseFile?.(file);
@@ -346,8 +449,9 @@ export function Composer({
     if (released.missed && onNotice) onNotice(released.missed);
     const words = released.text.trim();
     const voiceNote = released.recording ? await voiceFile(released.recording) : undefined;
-    if (sendBy === 'button') {
+    if (sendBy === 'button' || sendBlocked) {
       // send 'button': the words wait in the box, nothing selected, for him to fix a word; Send sends them
+      // (and so with sendBlocked, the app not being ready for a message: nothing he said is lost)
       flushSync(() => keep(words, voiceNote));
       focusQuietly(textarea.current);
       return;
@@ -373,14 +477,17 @@ export function Composer({
     keep(hold.drop() ?? '');
   }
 
-  async function send() {
-    if (busy || disabled) return;
+  /** Sends what is in the box. `force` goes past the app's sendBlocked (its own Send button, from renderSend, decides that). */
+  async function send(force = false) {
+    if (busy || disabled || overLimit || (sendBlocked && !force)) return;
     const words = text.trim();
-    if (!words && files.length === 0) return;
+    if (!words && files.length === 0 && !canSendEmpty) return;
     if (await deliver(words, files)) sent(files);
   }
 
   function onKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+    onKeyDownProp?.(event);
+    if (event.defaultPrevented) return;
     // Enter sends where there is a keyboard (a fine pointer), or with Ctrl or Cmd; Shift+Enter is a new line
     if (event.key === 'Enter' && !event.shiftKey && (event.metaKey || event.ctrlKey || window.matchMedia?.('(pointer: fine)').matches)) {
       event.preventDefault();
@@ -408,16 +515,42 @@ export function Composer({
     setFiles((current) => current.filter((f) => f.id !== file.id));
   }
 
-  const canSend = text.trim().length > 0 || files.length > 0;
+  const overLimit = maxLength !== undefined && text.length > maxLength;
+  const hasMessage = text.trim().length > 0 || files.length > 0 || canSendEmpty;
+  const canSend = hasMessage && !overLimit;
+  const slot = (placement: SendSlot['placement']): SendSlot => ({
+    send: () => void send(true),
+    canSend,
+    blocked: sendBlocked,
+    busy,
+    disabled,
+    label: labels.send,
+    placement,
+  });
   // The bar takes the text box's place while there are no words in it.
   const barOut = voice && talk !== 'off' && text.trim().length === 0 && hold.supported;
   // Pictures or files alone leave the mic beside Send; a voice note recorded (one per message), or words, take it away.
   const showMic = talk !== 'off' && text.trim().length === 0 && !files.some((file) => file.durationMs !== undefined);
   // 'type' always shows Send; 'speak' shows it once there is something to send, the mic standing in for it before.
-  const showSend = mode === 'type' || talk === 'off' || canSend;
+  const showSend = mode === 'type' || talk === 'off' || hasMessage;
 
   const hint =
     talk === 'tap' ? (sendBy === 'button' ? labels.hintTapBox : labels.hintTap) : sendBy === 'button' ? labels.hintBox : labels.hint;
+
+  const fileLook = (file: Pending) =>
+    file.type.startsWith('image/') && file.preview ? (
+      <img src={file.preview} alt={file.name} className="bk-composer__thumb" />
+    ) : file.type.startsWith('audio/') ? (
+      <span className="bk-composer__file-label bk-composer__file-label--voice">
+        <Icon name="mic" size={16} />
+        {labels.voiceNote} {file.durationMs !== undefined ? formatDuration(file.durationMs) : ''}
+      </span>
+    ) : (
+      <span className="bk-composer__file-label">
+        <Icon name="file" size={16} />
+        <span className="bk-composer__file-name">{file.name}</span>
+      </span>
+    );
 
   const quiet = (
     <>
@@ -448,18 +581,17 @@ export function Composer({
         <div className="bk-composer__files" role="group" aria-label={labels.toSend}>
           {files.map((file) => (
             <div key={file.id} className="bk-composer__file">
-              {file.type.startsWith('image/') && file.preview ? (
-                <img src={file.preview} alt={file.name} className="bk-composer__thumb" />
-              ) : file.type.startsWith('audio/') ? (
-                <span className="bk-composer__file-label bk-composer__file-label--voice">
-                  <Icon name="mic" size={16} />
-                  {labels.voiceNote} {file.durationMs !== undefined ? formatDuration(file.durationMs) : ''}
-                </span>
+              {onFileTap ? (
+                <button
+                  type="button"
+                  aria-label={labels.view(file.name)}
+                  className="bk-composer__file-open"
+                  onClick={() => onFileTap({ name: file.name, type: file.type, preview: file.preview, ...(file.durationMs !== undefined && { durationMs: file.durationMs }) })}
+                >
+                  {fileLook(file)}
+                </button>
               ) : (
-                <span className="bk-composer__file-label">
-                  <Icon name="file" size={16} />
-                  <span className="bk-composer__file-name">{file.name}</span>
-                </span>
+                fileLook(file)
               )}
               <button type="button" aria-label={labels.remove(file.name)} className="bk-composer__remove" onClick={() => remove(file)}>
                 <Icon name="x" size={11} strokeWidth={2.4} />
@@ -499,11 +631,14 @@ export function Composer({
               onAbort={drop}
               dropOnSlideOff
             />
-            {files.length > 0 && (
-              <button type="button" aria-label={labels.send} className="bk-composer__button bk-composer__bar-send" disabled={busy || disabled || holding} onClick={() => void send()}>
-                <Icon name="send" />
-              </button>
-            )}
+            {hasMessage &&
+              (renderSend ? (
+                renderSend(slot('bar'))
+              ) : (
+                <button type="button" aria-label={labels.send} className="bk-composer__button bk-composer__bar-send" disabled={busy || disabled || holding || sendBlocked || overLimit} onClick={() => void send()}>
+                  <Icon name="send" />
+                </button>
+              ))}
           </div>
           <div className="bk-composer__quiet-row">
             {quiet}
@@ -517,28 +652,39 @@ export function Composer({
       ) : (
         <div className="bk-composer__field-row">
           {mode === 'speak' && quiet}
-          <textarea
-            ref={textarea}
-            value={text}
-            onChange={(event) => setText(event.target.value)}
-            onKeyDown={onKeyDown}
-            onPaste={onPaste}
-            rows={1}
-            aria-label={labels.message}
-            placeholder={labels.placeholder}
-            className="bk-composer__field"
-          />
+          <div className="bk-composer__field-wrap">
+            <textarea
+              ref={textarea}
+              value={text}
+              onChange={(event) => setText(event.target.value)}
+              onKeyDown={onKeyDown}
+              onPaste={onPaste}
+              rows={minRows}
+              aria-label={labels.message}
+              placeholder={labels.placeholder}
+              className="bk-composer__field"
+            />
+            {fieldOverlay}
+          </div>
           {showMic && (
             <button type="button" aria-label={labels.speak} className="bk-composer__button bk-composer__mic" disabled={!hold.supported || disabled} onClick={() => setVoice(true)}>
               <Icon name="mic" />
             </button>
           )}
-          {showSend && (
-            <button type="button" aria-label={labels.send} className="bk-composer__button bk-composer__send" disabled={busy || disabled || !canSend} onClick={() => void send()}>
-              <Icon name="send" />
-            </button>
-          )}
+          {showSend &&
+            (renderSend ? (
+              renderSend(slot('field'))
+            ) : (
+              <button type="button" aria-label={labels.send} className="bk-composer__button bk-composer__send" disabled={busy || disabled || sendBlocked || !canSend} onClick={() => void send()}>
+                <Icon name="send" />
+              </button>
+            ))}
         </div>
+      )}
+      {!barOut && maxLength !== undefined && (
+        <p data-testid="composer-count" className="bk-composer__count" data-over={overLimit ? 'true' : undefined}>
+          {labels.count(text.length, maxLength)}
+        </p>
       )}
       {!barOut && mode === 'type' && (attach || camera) && <div className="bk-composer__quiet-row">{quiet}</div>}
       {kept && text.trim().length > 0 && (

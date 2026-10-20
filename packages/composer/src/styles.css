@@ -200,6 +200,12 @@
   gap: 0.25rem;
   padding: 0.5rem;
 }
+.bk-composer__field-wrap {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-width: 0;
+}
 .bk-composer__field {
   flex: 1;
   min-width: 0;
@@ -214,6 +220,28 @@
   font: inherit;
   line-height: 1.375;
   resize: none;
+}
+
+.bk-composer__count {
+  margin: 0;
+  padding: 0 0.75rem 0.25rem;
+  color: var(--bk-composer-muted, color-mix(in srgb, CanvasText 65%, transparent));
+  font-size: 0.75rem;
+  text-align: right;
+}
+.bk-composer__count[data-over] {
+  color: var(--bk-composer-danger, #b91c1c);
+}
+/* A waiting file the app takes taps on: the button is only a hit area around its thumbnail or name. */
+.bk-composer__file-open {
+  display: flex;
+  align-items: center;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
 }
 
 /* Icon buttons: Send is the strong one; the mic and attach and camera are quiet. */

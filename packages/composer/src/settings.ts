@@ -13,6 +13,9 @@ export type ComposerSend = 'release' | 'button';
 /** Speak-first (the big bar) or type-first (the text box and Send, with a small mic). */
 export type ComposerMode = 'speak' | 'type';
 
+/** What shows when the composer opens, and again after a send: the hold bar, or the text box (the mic beside it brings the bar out). */
+export type ComposerOpen = 'bar' | 'box';
+
 export interface ComposerSettings {
   talk: ComposerTalk;
   send: ComposerSend;
@@ -40,6 +43,7 @@ export const DEFAULT_COMPOSER_SETTINGS: ComposerSettings = {
 /** What the components read: the settings, all decided, and the layout the composer opens in. */
 export interface ResolvedSettings extends ComposerSettings {
   mode: ComposerMode;
+  open: ComposerOpen;
 }
 
 /** What resolveSettings reads: the settings object, and the props that came before it. */
@@ -47,6 +51,8 @@ export interface SettingsInput {
   settings?: Partial<ComposerSettings>;
   /** Fallback layout. */
   mode?: ComposerMode;
+  /** What shows first (mw-06ggew.12); by default the bar in 'speak' layout, the box in 'type'. */
+  open?: ComposerOpen;
   /** Fallback for `settings.attach`. */
   attach?: boolean;
   /** Fallback for `settings.camera`. */
@@ -61,8 +67,9 @@ export interface SettingsInput {
  * The one place the composer's choices are decided. A value in `settings` wins; where it is absent the old prop
  * is used, and where that is absent too, DEFAULT_COMPOSER_SETTINGS. Two things are kept true so the reader is never stranded:
  * with the mic off, typing is on; and type-first needs typing, so with typing off it opens speak-first.
+ * `open` (the bar or the box first) is read here with the mode: with no mic the box is all there is, and with typing off the bar is.
  */
-export function resolveSettings({ settings, mode, attach, camera, recordVoice, lang }: SettingsInput = {}): ResolvedSettings {
+export function resolveSettings({ settings, mode, open, attach, camera, recordVoice, lang }: SettingsInput = {}): ResolvedSettings {
   const talk = settings?.talk ?? DEFAULT_COMPOSER_SETTINGS.talk;
   const type = talk === 'off' ? true : (settings?.type ?? DEFAULT_COMPOSER_SETTINGS.type);
   const resolved: ResolvedSettings = {
@@ -73,6 +80,7 @@ export function resolveSettings({ settings, mode, attach, camera, recordVoice, l
     camera: settings?.camera ?? camera ?? DEFAULT_COMPOSER_SETTINGS.camera,
     voiceNote: settings?.voiceNote ?? recordVoice ?? DEFAULT_COMPOSER_SETTINGS.voiceNote,
     mode: type ? (mode ?? 'speak') : 'speak',
+    open: talk === 'off' ? 'box' : !type ? 'bar' : (open ?? (mode === 'type' ? 'box' : 'bar')),
   };
   const language = settings?.lang ?? lang;
   if (language !== undefined) resolved.lang = language;
