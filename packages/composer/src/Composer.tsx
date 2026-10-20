@@ -312,6 +312,8 @@ export function Composer({
       return;
     }
     if (released.status !== 'heard') return;
+    // words that could not be made out are the app's to show too, when it takes the composer's notices
+    if (released.missed && onNotice) onNotice(released.missed);
     const words = released.text.trim();
     const voiceNote = released.recording ? await voiceFile(released.recording) : undefined;
     const going = voiceNote ? [...files, voiceNote] : files;

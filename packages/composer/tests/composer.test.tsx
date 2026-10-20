@@ -86,6 +86,42 @@ describe('holding the bar, with a transcriber the app passes in', () => {
     expect(sent).toEqual([{ text: 'check the build', files: [] }]);
   });
 
+  it('sends the words that were made out and says what could not be (mw-06ggew.1): to the app when it takes notices', async () => {
+    const transcriber = fakeTranscriber();
+    transcriber.missedNote = 'The words after the pause could not be made out (the speech service failed: network).';
+    const onNotice = vi.fn();
+    open({ transcriber, onNotice });
+    await press();
+    act(() => transcriber.open());
+    act(() => transcriber.yields('before the pause'));
+    await letGo();
+    expect(sent).toEqual([{ text: 'before the pause', files: [] }]);
+    expect(onNotice).toHaveBeenCalledWith(transcriber.missedNote);
+  });
+
+  it('shows the missed-words notice above the bar when the app takes none', async () => {
+    const transcriber = fakeTranscriber();
+    transcriber.missedNote = 'The words after the pause could not be made out (the speech service failed: network).';
+    open({ transcriber });
+    await press();
+    act(() => transcriber.open());
+    act(() => transcriber.yields('before the pause'));
+    await letGo();
+    expect(sent).toEqual([{ text: 'before the pause', files: [] }]);
+    expect(screen.getByText(transcriber.missedNote)).toBeTruthy();
+  });
+
+  it('says nothing of missed words when the hold was clean', async () => {
+    const transcriber = fakeTranscriber();
+    const onNotice = vi.fn();
+    open({ transcriber, onNotice });
+    await press();
+    act(() => transcriber.open());
+    act(() => transcriber.yields('all of it'));
+    await letGo();
+    expect(onNotice).not.toHaveBeenCalled();
+  });
+
   it('keeps the words unsent in the box when the finger slides off the bar before letting go', async () => {
     const transcriber = fakeTranscriber();
     open({ transcriber });

@@ -269,7 +269,7 @@ describe('words after a pause that could not be made out (mw-q6n8m0.5)', () => {
           mode: 'cloud',
           stop: () => {
             options.onInterim?.('before the pause');
-            return Promise.resolve({ ok: true, text: 'before the pause', mode: 'cloud', missed });
+            return Promise.resolve({ ok: true, text: 'before the pause', mode: 'cloud', missed: true, missedNote: missed });
           },
           abort: () => {},
         },
@@ -283,7 +283,7 @@ describe('words after a pause that could not be made out (mw-q6n8m0.5)', () => {
     await act(async () => {
       released = await result.current.finish();
     });
-    expect(released).toEqual({ status: 'heard', text: 'before the pause', recording: undefined });
+    expect(released).toEqual({ status: 'heard', text: 'before the pause', recording: undefined, missed });
     expect(result.current.notice).toBe(missed);
   });
 });

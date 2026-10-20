@@ -24,6 +24,9 @@ function buzz(ms: number): void {
   if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') navigator.vibrate(ms);
 }
 
+/** What the notice says of a stretch that could not be made out, when the listener gave no reason. */
+const MISSED_NOTICE = 'Some of the words could not be made out.';
+
 /** Which microphone the hold is on, for the screen: the Bluetooth input chosen (his car's, say), or the phone's default. */
 export function micName(input: string | undefined): string {
   return input ? `Listening on the Bluetooth microphone: ${input}.` : "Listening on the phone's own microphone.";
@@ -37,7 +40,7 @@ export function micName(input: string | undefined): string {
 export type Released =
   | { status: 'idle' }
   | { status: 'empty' }
-  | { status: 'heard'; text: string; recording?: Recording }
+  | { status: 'heard'; text: string; recording?: Recording; missed?: string }
   | { status: 'kept'; text: string; recording?: Recording };
 
 interface HeldRecording {
@@ -189,9 +192,10 @@ export function useHold({ transcriber = browserSpeech, lang, appName, record = f
     const voice = held ? stopRecording(held) : Promise.resolve(undefined);
     const result = await session.stop();
     if (result.text.trim()) {
-      // words after a pause that could not be made out: the words heard before it go, and the notice says what was missed (mw-q6n8m0.5)
-      if (result.ok && result.missed) setNotice(result.missed);
-      return { status: 'heard', text: result.text, recording: await voice };
+      // a stretch that could not be made out: the words that were go, and the notice says what was missed (mw-q6n8m0.5, mw-06ggew.1)
+      const missed = result.ok && result.missed ? (result.missedNote ?? MISSED_NOTICE) : undefined;
+      if (missed) setNotice(missed);
+      return { status: 'heard', text: result.text, recording: await voice, ...(missed ? { missed } : {}) };
     }
     // the recogniser settled with no words (a blank final), but the words it showed are his
     if (said.current.trim()) return { status: 'kept', text: said.current.trim(), recording: await voice };

@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 // Lifted from Postern's tests/unit/listen.test.ts.
 // Most holds here run on a page with no MediaRecorder (jsdom has none): a recogniser that ends by itself mid-hold is started
-// again there, as before; the last describe gives the page a recorder, and the rest of the hold is recorded instead (mw-q6n8m0.5).
+// again there, as before; the last describe gives the page a recorder: with throughPauses: false the rest of the hold is
+// recorded instead (mw-q6n8m0.5), and by default (throughPauses: true, mw-06ggew.1) the recogniser is started again all the same.
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { DEFAULT_LANG, isListenSupported, recognizerLang, startListening, IDLE_RESTART_WAIT_MS, INPUT_SILENT_MS, MAX_IDLE_RESTARTS, STOP_TIMEOUT_MS, type ListenOptions } from '../src/listen.js';
 import type { Recording } from '../src/recorder.js';
@@ -597,7 +598,8 @@ describe('listen', () => {
         throw new Error('busy');
       });
       recognizer.onend?.();
-      expect(await begin.session.stop()).toEqual({ ok: true, text: 'some words', mode: 'on-device' });
+      // the words after the pause are lost, and the result says so (mw-06ggew.1)
+      expect(await begin.session.stop()).toEqual({ ok: true, text: 'some words', mode: 'on-device', missed: true, missedNote: expect.stringMatching(/could not be made out/) });
     });
   });
 
@@ -1242,7 +1244,7 @@ describe('a language-not-supported on Android Chrome (mw-hgtlf5.1)', () => {
   });
 });
 
-describe("a pause while he holds, on a phone that can record: no restart, so Android's start tone never rings mid-hold (mw-q6n8m0.5)", () => {
+describe("a pause while he holds, on a phone that can record, throughPauses: false: no restart, so Android's start tone never rings mid-hold (mw-q6n8m0.5)", () => {
   /** MediaRecorder and the default microphone, as on Android Chrome: what each recorder was handed, and whether it is still recording. */
   class Recorder {
     static made: Recorder[] = [];
@@ -1291,7 +1293,7 @@ describe("a pause while he holds, on a phone that can record: no restart, so And
     const onInterim = vi.fn();
     const onFinal = vi.fn();
     const onError = vi.fn();
-    const begun = startListening({ onInterim, onFinal, onError, transcribeRest });
+    const begun = startListening({ throughPauses: false, onInterim, onFinal, onError, transcribeRest });
     if (!begun.ok) throw new Error('expected listening to start');
     const recognizer = FakeRecognizer.instances[0];
     recognizer.say([result('I was saying', true)]);
@@ -1326,7 +1328,7 @@ describe("a pause while he holds, on a phone that can record: no restart, so And
   it('records the rest from the start of the hold when the recogniser ends before any words, and gives the words on release', async () => {
     install();
     installRecording();
-    const begun = startListening({ transcribeRest: () => Promise.resolve('hello there') });
+    const begun = startListening({ throughPauses: false, transcribeRest: () => Promise.resolve('hello there') });
     if (!begun.ok) throw new Error('expected listening to start');
     const recognizer = FakeRecognizer.instances[0];
     recognizer.onend?.();
@@ -1339,7 +1341,7 @@ describe("a pause while he holds, on a phone that can record: no restart, so And
     install();
     installRecording();
     const transcribeRest = vi.fn(() => Promise.resolve(''));
-    const first = startListening({ transcribeRest });
+    const first = startListening({ throughPauses: false, transcribeRest });
     if (!first.ok) throw new Error('expected listening to start');
     const one = FakeRecognizer.instances[0];
     one.say([result('first hold', true)]);
@@ -1349,7 +1351,7 @@ describe("a pause while he holds, on a phone that can record: no restart, so And
     expect(Recorder.made).toHaveLength(0);
     expect(transcribeRest).not.toHaveBeenCalled();
 
-    const second = startListening({ transcribeRest });
+    const second = startListening({ throughPauses: false, transcribeRest });
     if (!second.ok) throw new Error('expected listening to start');
     const two = FakeRecognizer.instances[1];
     expect(two.startFn).toHaveBeenCalledTimes(1);
@@ -1367,7 +1369,7 @@ describe("a pause while he holds, on a phone that can record: no restart, so And
     installRecording();
     const copy = { label: 'Bluetooth headset copy', stop: vi.fn() };
     const input = { label: 'Bluetooth headset', track: { kind: 'audio', clone: () => copy } as unknown as MediaStreamTrack, close: vi.fn(), silent: vi.fn() };
-    const begun = startListening({ openInput: () => Promise.resolve(input), transcribeRest: () => Promise.resolve('on the car') });
+    const begun = startListening({ throughPauses: false, openInput: () => Promise.resolve(input), transcribeRest: () => Promise.resolve('on the car') });
     if (!begun.ok) throw new Error('expected listening to start');
     const recognizer = FakeRecognizer.instances[0];
     await vi.waitFor(() => expect(recognizer.startFn).toHaveBeenCalledWith(input.track));
@@ -1387,7 +1389,7 @@ describe("a pause while he holds, on a phone that can record: no restart, so And
     installRecording();
     let grant: (stream: Stream) => void = () => {};
     getUserMedia.mockImplementationOnce(() => new Promise((resolve) => (grant = resolve)));
-    const begun = startListening({ transcribeRest: () => Promise.resolve('the rest') });
+    const begun = startListening({ throughPauses: false, transcribeRest: () => Promise.resolve('the rest') });
     if (!begun.ok) throw new Error('expected listening to start');
     FakeRecognizer.instances[0].say([result('start', true)]);
     FakeRecognizer.instances[0].onend?.();
@@ -1401,7 +1403,7 @@ describe("a pause while he holds, on a phone that can record: no restart, so And
     install();
     installRecording();
     getUserMedia.mockImplementationOnce(() => Promise.reject(new Error('NotAllowedError')));
-    const begun = startListening({ transcribeRest: () => Promise.resolve('never') });
+    const begun = startListening({ throughPauses: false, transcribeRest: () => Promise.resolve('never') });
     if (!begun.ok) throw new Error('expected listening to start');
     const recognizer = FakeRecognizer.instances[0];
     recognizer.say([result('before', true)]);
@@ -1415,13 +1417,13 @@ describe("a pause while he holds, on a phone that can record: no restart, so And
     install();
     installRecording();
     const onFinal = vi.fn();
-    const begun = startListening({ onFinal, transcribeRest: () => Promise.reject(new Error('the service is down')) });
+    const begun = startListening({ throughPauses: false, onFinal, transcribeRest: () => Promise.reject(new Error('the service is down')) });
     if (!begun.ok) throw new Error('expected listening to start');
     FakeRecognizer.instances[0].say([result('kept words', true)]);
     FakeRecognizer.instances[0].onend?.();
     await vi.waitFor(() => expect(Recorder.made).toHaveLength(1));
     const outcome = await begun.session.stop();
-    expect(outcome).toEqual({ ok: true, text: 'kept words', mode: 'on-device', missed: expect.stringMatching(/after the pause could not be made out.*the service is down/) });
+    expect(outcome).toEqual({ ok: true, text: 'kept words', mode: 'on-device', missed: true, missedNote: expect.stringMatching(/after the pause could not be made out.*the service is down/) });
     expect(onFinal).toHaveBeenCalledWith('kept words');
   });
 
@@ -1429,7 +1431,7 @@ describe("a pause while he holds, on a phone that can record: no restart, so And
     install();
     installRecording();
     const transcribeRest = vi.fn(() => Promise.resolve('no'));
-    const begun = startListening({ transcribeRest });
+    const begun = startListening({ throughPauses: false, transcribeRest });
     if (!begun.ok) throw new Error('expected listening to start');
     FakeRecognizer.instances[0].onend?.();
     await vi.waitFor(() => expect(Recorder.made[0]?.state).toBe('recording'));
@@ -1437,5 +1439,164 @@ describe("a pause while he holds, on a phone that can record: no restart, so And
     await vi.waitFor(() => expect(Recorder.made[0].state).toBe('inactive'));
     expect(transcribeRest).not.toHaveBeenCalled();
     expect(FakeRecognizer.instances[0].startFn).toHaveBeenCalledTimes(1);
+  });
+
+  describe('listening through pauses, the default (mw-06ggew.1): the recogniser is started again and no recording is made', () => {
+    it("a hold with a 3 s pause: the recogniser ends, is started again at once, and both halves are in the turn in order", async () => {
+      vi.useFakeTimers();
+      install();
+      installRecording();
+      const transcribeRest = vi.fn(() => Promise.resolve('never asked'));
+      const onFinal = vi.fn();
+      const begun = startListening({ onFinal, transcribeRest });
+      if (!begun.ok) throw new Error('expected listening to start');
+      const recognizer = FakeRecognizer.instances[0];
+      recognizer.say([result('before the pause', true)]);
+      await vi.advanceTimersByTimeAsync(3000);
+      recognizer.onerror?.({ error: 'no-speech' });
+      recognizer.onend?.();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(recognizer.startFn).toHaveBeenCalledTimes(2);
+      expect(Recorder.made).toHaveLength(0);
+      expect(getUserMedia).not.toHaveBeenCalled();
+      expect(onFinal).not.toHaveBeenCalled();
+      recognizer.say([result('after the pause', false)]);
+      const outcome = await begun.session.stop();
+      expect(outcome).toEqual({ ok: true, text: 'before the pause after the pause', mode: 'on-device' });
+      expect(outcome).not.toHaveProperty('missed');
+      expect(transcribeRest).not.toHaveBeenCalled();
+      expect(onFinal).toHaveBeenCalledWith('before the pause after the pause');
+    });
+
+    it('keeps listening through several pauses in one hold, each restart at once, up to MAX_IDLE_RESTARTS quick ends in a row', async () => {
+      vi.useFakeTimers();
+      install();
+      installRecording();
+      const begun = startListening({});
+      if (!begun.ok) throw new Error('expected listening to start');
+      const recognizer = FakeRecognizer.instances[0];
+      recognizer.say([result('one', true)]);
+      for (let pause = 0; pause < 3; pause++) {
+        await vi.advanceTimersByTimeAsync(3000);
+        recognizer.onend?.();
+        recognizer.say([result(['two', 'three', 'four'][pause], false)]);
+      }
+      expect(recognizer.startFn).toHaveBeenCalledTimes(4);
+      expect(Recorder.made).toHaveLength(0);
+      expect(await begun.session.stop()).toEqual({ ok: true, text: 'one two three four', mode: 'on-device' });
+    });
+
+    it(`gives up after ${MAX_IDLE_RESTARTS} quick ends with nothing heard, as a page that cannot record does`, () => {
+      install();
+      installRecording();
+      const onError = vi.fn();
+      const begun = startListening({ onError });
+      if (!begun.ok) throw new Error('expected listening to start');
+      const recognizer = FakeRecognizer.instances[0];
+      for (let i = 0; i <= MAX_IDLE_RESTARTS; i++) recognizer.onend?.();
+      expect(recognizer.startFn).toHaveBeenCalledTimes(1 + MAX_IDLE_RESTARTS);
+      expect(onError).toHaveBeenCalledTimes(1);
+      expect(Recorder.made).toHaveLength(0);
+    });
+
+    it('says a phrase once when the restarted recogniser hears the end of the last stretch again (mw-j0f2d.37)', async () => {
+      install();
+      installRecording();
+      const onInterim = vi.fn();
+      const begun = startListening({ onInterim });
+      if (!begun.ok) throw new Error('expected listening to start');
+      const recognizer = FakeRecognizer.instances[0];
+      recognizer.say([result("I'd love to see Kieran", false)]);
+      recognizer.onend?.();
+      expect(recognizer.startFn).toHaveBeenCalledTimes(2);
+      recognizer.say([result("I'd love to see Kieran", true), result('where you can take pictures', false)]);
+      expect(onInterim).toHaveBeenLastCalledWith("I'd love to see Kieran where you can take pictures");
+      recognizer.onend?.();
+      recognizer.say([result('where you can take pictures and it tells you', false)]);
+      const outcome = await begun.session.stop();
+      expect(outcome).toEqual({ ok: true, text: "I'd love to see Kieran where you can take pictures and it tells you", mode: 'on-device' });
+    });
+
+    it('says a phrase once when the restarted recogniser repeats the whole last phrase, grown, with a word heard differently', async () => {
+      install();
+      installRecording();
+      const begun = startListening({});
+      if (!begun.ok) throw new Error('expected listening to start');
+      const recognizer = FakeRecognizer.instances[0];
+      recognizer.say([result("I'd love to see Kieran", false)]);
+      recognizer.onend?.();
+      recognizer.say([result("I'd love to see Chiron where you can go", false)]);
+      expect(await begun.session.stop()).toEqual({ ok: true, text: "I'd love to see Chiron where you can go", mode: 'on-device' });
+    });
+
+    it('records no rest and makes none out, even after a long pause with the chosen input', async () => {
+      install();
+      installRecording();
+      const input = { label: 'Bluetooth headset', track: { kind: 'audio', clone: vi.fn() } as unknown as MediaStreamTrack, close: vi.fn(), silent: vi.fn() };
+      const begun = startListening({ openInput: () => Promise.resolve(input) });
+      if (!begun.ok) throw new Error('expected listening to start');
+      const recognizer = FakeRecognizer.instances[0];
+      await vi.waitFor(() => expect(recognizer.startFn).toHaveBeenCalledWith(input.track));
+      recognizer.say([result('words', true)]);
+      recognizer.onend?.();
+      expect(recognizer.startFn).toHaveBeenCalledTimes(2);
+      expect(recognizer.startFn).toHaveBeenLastCalledWith(input.track);
+      expect(Recorder.made).toHaveLength(0);
+      expect(input.silent).not.toHaveBeenCalled();
+      expect(await begun.session.stop()).toEqual({ ok: true, text: 'words', mode: 'on-device' });
+    });
+
+    it('with throughPauses: false and a page that cannot record, the recogniser is started again, as before', async () => {
+      install();
+      // no MediaRecorder stubbed: jsdom has none
+      const begun = startListening({ throughPauses: false });
+      if (!begun.ok) throw new Error('expected listening to start');
+      const recognizer = FakeRecognizer.instances[0];
+      recognizer.say([result('first part', true)]);
+      recognizer.onend?.();
+      expect(recognizer.startFn).toHaveBeenCalledTimes(2);
+      recognizer.say([result('second part', false)]);
+      expect(await begun.session.stop()).toEqual({ ok: true, text: 'first part second part', mode: 'on-device' });
+    });
+
+    it('missed: a stretch the speech service failed on (network) is said, with the words heard kept', async () => {
+      install();
+      installRecording();
+      const onFinal = vi.fn();
+      const begun = startListening({ onFinal });
+      if (!begun.ok) throw new Error('expected listening to start');
+      const recognizer = FakeRecognizer.instances[0];
+      recognizer.say([result('heard words', true)]);
+      recognizer.onerror?.({ error: 'network' });
+      recognizer.onend?.();
+      recognizer.say([result('and more', false)]);
+      const outcome = await begun.session.stop();
+      expect(outcome).toEqual({ ok: true, text: 'heard words and more', mode: 'on-device', missed: true, missedNote: expect.stringMatching(/could not be made out.*network/) });
+      expect(onFinal).toHaveBeenCalledWith('heard words and more');
+    });
+
+    it('missed: the recogniser that cannot be started again after a pause says the words after it were lost', async () => {
+      install();
+      installRecording();
+      const begun = startListening({});
+      if (!begun.ok) throw new Error('expected listening to start');
+      const recognizer = FakeRecognizer.instances[0];
+      recognizer.say([result('before', true)]);
+      recognizer.startFn.mockImplementation(() => {
+        throw new Error('busy');
+      });
+      recognizer.onend?.();
+      expect(await begun.session.stop()).toEqual({ ok: true, text: 'before', mode: 'on-device', missed: true, missedNote: expect.stringMatching(/after the pause could not be made out/) });
+    });
+
+    it('a clean hold carries no missed', async () => {
+      install();
+      installRecording();
+      const begun = startListening({});
+      if (!begun.ok) throw new Error('expected listening to start');
+      FakeRecognizer.instances[0].say([result('all clear', true)]);
+      const outcome = await begun.session.stop();
+      expect(outcome).toEqual({ ok: true, text: 'all clear', mode: 'on-device' });
+    });
   });
 });

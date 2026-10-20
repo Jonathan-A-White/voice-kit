@@ -2,13 +2,23 @@
 
 Newest first. Breaking changes come first in a release, each with its migration in one sentence.
 
-## Unreleased
+## Unreleased (0.4.0)
 
-- Fixed: a pause in a hold no longer rings the phone's start tone (mw-q6n8m0.5, carried from bsv-kit by mw-q6n8m0.18). The recogniser is started once in a hold;
-  when it ends by itself while he holds, the rest of the hold is recorded instead of the recogniser being started again,
-  and on release its words follow those heard before (`startListening`'s new `transcribeRest`, by default the recording
-  played into a fresh recogniser). Words that cannot be made out come back as the result's `missed` and `useHold`'s
-  notice. A page that cannot record starts the recogniser again, as before.
+- Fixed: a pause in a hold no longer cuts him off on Android (mw-06ggew.1, Postern's `listensThroughPauses` lifted in). `startListening`
+  takes a new option `throughPauses`, true by default: when the recogniser ends by itself while he holds, it is started again at once
+  (up to `MAX_IDLE_RESTARTS` quick ends in a row, as a page that cannot record always did), the words before and after the pause are
+  joined into one text and a phrase the restarted recogniser hears again is said once. Android's speech service hears nothing in the
+  recorded-rest replay of mw-q6n8m0.5 and the words after a pause were lost; an app no longer needs to hide `MediaRecorder` to get
+  this. The cost is the phone's start tone at each restart. Migration: none for an app that wants it; `throughPauses: false` keeps the
+  record-and-replay path (and its `transcribeRest`) for a page that can record.
+- Changed (breaking, only for code that read the 0.3.0-unreleased `missed`): the result's `missed` is `true` and the words for the
+  screen are its `missedNote`. A stretch that could not be made out (the speech service failed on it, the recogniser could not be started
+  again, the recording could not be read) is said: `useHold`'s notice shows it, `Released`'s 'heard' carries it as `missed`, and `Composer`
+  hands it to `onNotice` when the app takes notices.
+- Earlier in this release (mw-q6n8m0.5, carried from bsv-kit by mw-q6n8m0.18): with `throughPauses: false` a pause rings no bell. The
+  recogniser is started once in a hold; when it ends by itself while he holds, the rest of the hold is recorded and on release its words
+  follow those heard before (`startListening`'s `transcribeRest`, by default the recording played into a fresh recogniser). A page that
+  cannot record starts the recogniser again.
 
 ## Moved to voice-kit (2026-10-16)
 

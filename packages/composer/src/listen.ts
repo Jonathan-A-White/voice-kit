@@ -32,12 +32,16 @@
 // The hold does not wait for that stretch to end: an input that gives no result within INPUT_SILENT_MS of
 // the recogniser starting on it is given up on there and then, and a fresh recogniser goes on on the
 // default microphone while he still holds (mw-f7gmps.1).
-// The recogniser is started once in a hold and never again when it ends by itself (mw-q6n8m0.5): Android plays its start
-// tone on every start, a bell at each pause. A page that can record carries the rest of the hold on a recording instead (a
-// copy of the chosen input's track, or the default microphone, which the ended recogniser no longer holds) and on release
-// turns it into words (transcribeRest, or the recording replayed into a fresh recogniser: replay.ts), after the words heard
-// before the end. Words after the pause that cannot be made out are said so (missed), never dropped in silence. Only a page
-// that cannot record (no MediaRecorder, or the microphone refused) starts the recogniser again as before, bell and all.
+// A recogniser that ends by itself while he holds is started again at once, by default (throughPauses, mw-06ggew.1): the
+// hold goes on through a pause, the words heard before are kept and the words after follow them, each said once. The cost is
+// Android's start tone at each restart (mw-q6n8m0.5 spared it by recording the rest of the hold and playing the recording
+// into a fresh recogniser on release, but Android's speech service hears nothing in such a replay: the words after a pause
+// were lost). With throughPauses: false a page that can record does that instead: the rest of the hold is recorded (a copy of
+// the chosen input's track, or the default microphone, which the ended recogniser no longer holds) and on release turned into
+// words (transcribeRest, or the recording replayed into a fresh recogniser: replay.ts), after the words heard before the end.
+// A page that cannot record (no MediaRecorder, or the microphone refused) starts the recogniser again either way.
+// Words that could not be made out (a stretch the speech service failed on, a recogniser that could not be started again, a
+// recording that could not be read) are said so (missed, missedNote), never dropped in silence.
 
 import { canRecord, VoiceRecorder, type Recording } from './recorder.js';
 import { replayRecording } from './replay.js';
@@ -92,8 +96,10 @@ export type ListenResult =
       ok: true;
       text: string;
       mode: ListenMode;
-      /** Said when the words after a pause were recorded but could not be made out: `text` is the words heard before it. */
-      missed?: string;
+      /** True when a stretch of the hold could not be made out (a speech service failure, a recogniser that could not start again, a recording that could not be read): `text` is the words that were. */
+      missed?: true;
+      /** What to tell him about the missed stretch, when `missed`. */
+      missedNote?: string;
     }
   | { ok: false; text: string; error: ListenError };
 
@@ -130,6 +136,13 @@ export interface ListenOptions {
    * say. Not given, the recording is played into a fresh recogniser on release (replay.ts). A throw is said as missed words.
    */
   transcribeRest?: (recording: Recording) => Promise<string>;
+  /**
+   * True (the default): a recogniser that ends by itself while he holds, as Android Chrome's does on a pause, is started
+   * again at once and the hold goes on, the words before and after joined into one text. False: a page that can record
+   * records the rest of the hold instead and makes its words out on release (`transcribeRest`), which spares the start
+   * tone at a pause but needs a speech service that can hear a recording, and Android's does not.
+   */
+  throughPauses?: boolean;
 }
 
 // TypeScript's DOM lib has no SpeechRecognition types; these are the parts used here.
@@ -386,7 +399,7 @@ export function startListening(options: ListenOptions = {}): ListenStart {
   let waiting: ReturnType<typeof setTimeout> | undefined;
   // The rest of the hold, recorded once the recogniser ended by itself while he held (mw-q6n8m0.5); `opened` is false when it could not record.
   let rest: { recorder: VoiceRecorder; opened: Promise<boolean> } | undefined;
-  // Words after the pause that were recorded but could not be made out.
+  // What to say about a stretch of the hold that could not be made out.
   let missed: string | undefined;
   const dropped = new AbortController();
   let settle: (result: ListenResult) => void = () => {};
@@ -453,7 +466,7 @@ export function startListening(options: ListenOptions = {}): ListenStart {
     waiting = undefined;
     dropInput();
     const failure = error ?? (text ? null : transient);
-    outcome = failure ? { ok: false, text, error: failure } : { ok: true, text, mode, ...(missed ? { missed } : {}) };
+    outcome = failure ? { ok: false, text, error: failure } : { ok: true, text, mode, ...(missed ? { missed: true as const, missedNote: missed } : {}) };
     if (!failure) options.onFinal?.(text);
     settle(outcome);
   };
@@ -536,6 +549,8 @@ export function startListening(options: ListenOptions = {}): ListenStart {
       if (!live() || outcome || rest) return;
       if (!stopping && TRANSIENT_ERRORS.has(event.error)) {
         transient = listenError(event.error, app);
+        // The speech service failed on a stretch of what he said; the hold goes on, and the release says some may be missing.
+        if (event.error === 'network') missed = 'Some of the words could not be made out (the speech service failed: network).';
         return;
       }
       if (stopping && event.error === 'language-not-supported' && !announced && !text) {
@@ -564,15 +579,17 @@ export function startListening(options: ListenOptions = {}): ListenStart {
         // The chosen input gave nothing in a whole stretch: go on the phone's default microphone, and not that input again.
         if (input && !inputHeard) giveUpInput();
         carried = heard;
-        // Not started again (that start is the bell): the rest of the hold is recorded, its words come on release.
-        if (!recordRest(recognizer)) restartAfterEnd(recognizer);
+        // By default it is started again at once, the hold going on through the pause; throughPauses: false records the
+        // rest of the hold instead (no start, so no bell) and its words come on release.
+        if (options.throughPauses === false && recordRest(recognizer)) return;
+        restartAfterEnd(recognizer);
         return;
       }
       finish();
     };
   };
 
-  /** Starts the recogniser that ended by itself again, as a page that cannot record does: the hold goes on, the words heard so far kept. */
+  /** Starts the recogniser that ended by itself again, so the hold goes on through the pause with the words heard so far kept. */
   const restartAfterEnd = (recognizer: Recognizer) => {
     if (idleRestarts < MAX_IDLE_RESTARTS) {
       try {
@@ -581,6 +598,7 @@ export function startListening(options: ListenOptions = {}): ListenStart {
         return;
       } catch {
         // cannot restart: settle with what was heard
+        if (text) missed = 'The words after the pause could not be made out (listening could not start again).';
       }
     } else if (text) {
       // He has said words and still holds: a recogniser that keeps ending at once never ends his turn.
@@ -591,6 +609,7 @@ export function startListening(options: ListenOptions = {}): ListenStart {
         try {
           begin(recognizer);
         } catch {
+          missed = 'The words after the pause could not be made out (listening could not start again).';
           finish();
         }
       }, IDLE_RESTART_WAIT_MS);
@@ -605,7 +624,7 @@ export function startListening(options: ListenOptions = {}): ListenStart {
 
   /**
    * The recogniser ended by itself while he holds: records the rest of the hold (a copy of the chosen input's track, or the
-   * default microphone) instead of starting it again. False when this page cannot record; a microphone that will not open
+   * default microphone) instead of starting it again (throughPauses: false). False when this page cannot record; a microphone that will not open
    * starts the recogniser again after all, so nothing he says is lost.
    */
   const recordRest = (recognizer: Recognizer): boolean => {

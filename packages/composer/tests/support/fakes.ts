@@ -122,6 +122,8 @@ export function fakeTranscriber() {
     yields(words: string): void;
     stopped: boolean;
     aborted: boolean;
+    /** Given, the release says a stretch of the hold could not be made out (the result's missed and missedNote). */
+    missedNote?: string;
   } = {
     started: 0,
     stopped: false,
@@ -139,7 +141,8 @@ export function fakeTranscriber() {
           mode: 'on-device',
           stop: (): Promise<ListenResult> => {
             transcriber.stopped = true;
-            return Promise.resolve({ ok: true, text, mode: 'on-device' });
+            const missed = transcriber.missedNote ? { missed: true as const, missedNote: transcriber.missedNote } : {};
+            return Promise.resolve({ ok: true, text, mode: 'on-device', ...missed });
           },
           abort: () => {
             transcriber.aborted = true;
