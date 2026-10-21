@@ -61,9 +61,14 @@ export interface HoldOptions {
   onFailed?: (said: string) => void;
   /** Given, a page hidden while he holds (he left the app) ends the hold, and this gets the words heard so far. */
   onHidden?: (said: string) => void;
+  /**
+   * Given, a recogniser that settles by itself while he holds (it ended and could not be started again) ends the hold there and
+   * then, and this gets what the release would have (mw-06ggew.14). Not given, the hold goes on to his release as before.
+   */
+  onEnded?: (released: Released) => void;
 }
 
-export function useHold({ transcriber = browserSpeech, lang, appName, record = false, onFailed, onHidden }: HoldOptions = {}) {
+export function useHold({ transcriber = browserSpeech, lang, appName, record = false, onFailed, onHidden, onEnded }: HoldOptions = {}) {
   const [transcript, setTranscript] = useState('');
   const [notice, setNotice] = useState<string | undefined>();
   const [mode, setMode] = useState<ListenMode | undefined>();
@@ -80,10 +85,14 @@ export function useHold({ transcriber = browserSpeech, lang, appName, record = f
   const said = useRef('');
   const failed = useRef(onFailed);
   const hidden = useRef(onHidden);
+  const ended = useRef(onEnded);
   useEffect(() => {
     failed.current = onFailed;
     hidden.current = onHidden;
-  }, [onFailed, onHidden]);
+    ended.current = onEnded;
+  }, [onFailed, onHidden, onEnded]);
+  // begin's onEnd calls finish, which is made below
+  const finishing = useRef<() => Promise<Released>>(() => Promise.resolve({ status: 'idle' }));
 
   const dropRecording = useCallback(() => {
     const taken = recording.current;
@@ -164,6 +173,10 @@ export function useHold({ transcriber = browserSpeech, lang, appName, record = f
         setNotice(error.message);
         failed.current?.(said.current.trim());
       },
+      onEnd: () => {
+        if (hold.current !== thisHold || !ended.current) return;
+        void finishing.current().then((released) => ended.current?.(released));
+      },
     });
     if (!started.ok) {
       hold.current = null;
@@ -202,6 +215,7 @@ export function useHold({ transcriber = browserSpeech, lang, appName, record = f
     setNotice(result.ok ? 'No speech was heard.' : result.error.message);
     return { status: 'empty' };
   }, []);
+  finishing.current = finish;
 
   /** Ends the hold without sending: undefined when there was no hold, else the words heard so far (blank when none). */
   const drop = useCallback((): string | undefined => {
@@ -237,6 +251,108 @@ export function useHold({ transcriber = browserSpeech, lang, appName, record = f
     finish,
     drop,
   };
+}
+
+/** How a hold ended: he let go, the recogniser failed, it was cancelled (a slide off, the phone taking the touch, the app's own), the recogniser ended by itself and could not go on, or the page was hidden. */
+export type HoldEnding = 'release' | 'error' | 'cancel' | 'ended' | 'hidden';
+
+/** How a hold ended: letting go (or stopping a latched listen) is `cancelled: false`; every other end is `cancelled: true`. */
+export interface HoldEnd {
+  cancelled: boolean;
+  ended: HoldEnding;
+}
+
+/**
+ * The words of a hold, however it ended. 'heard': he let go and the recogniser settled them: words to send. 'kept': any other end
+ * (and a release the recogniser settled blank): the words heard so far, his, to keep unsent for him to send (the Composer puts them in its box).
+ */
+export type HoldWords = (Extract<Released, { status: 'heard' }> | Extract<Released, { status: 'kept' }>) & { ended: HoldEnding };
+
+export interface BarHoldOptions extends Omit<HoldOptions, 'onFailed' | 'onHidden' | 'onEnded'> {
+  /** Every hold's words, once, however it ended; not called for a hold that heard nothing. */
+  onWords: (text: string, words: HoldWords) => void;
+  /** A hold begins, before the microphone opens: pause what is playing aloud. Always followed by onHoldEnd. */
+  onHoldStart?: () => void;
+  /** The hold is over: after the last words are in (just before onWords), or at once on any other end. Give back what onHoldStart took. */
+  onHoldEnd?: (end: HoldEnd) => void;
+}
+
+/**
+ * THE hold of a hold-to-talk bar (mw-06ggew.14): the one place that starts a hold (press), lets it go (release), cancels it, and
+ * ends it when the recogniser fails, ends by itself or the page is hidden (useHold does the listening, listen.ts the restarts
+ * while held). The Composer and useTalk both hold through it, so a hold behaves as Postern's does in every app: whatever ends
+ * it, the words heard so far are handed to onWords, between onHoldStart and onHoldEnd.
+ */
+export function useBarHold({ onWords, onHoldStart, onHoldEnd, ...options }: BarHoldOptions) {
+  const [holding, setHolding] = useState(false);
+  // How many holds onHoldStart began and onHoldEnd has not yet closed: more than one when he presses again while the last words of the last hold are awaited.
+  const open = useRef(0);
+  const callbacks = useRef({ onWords, onHoldStart, onHoldEnd });
+  callbacks.current = { onWords, onHoldStart, onHoldEnd };
+
+  const close = useCallback((cancelled: boolean, ended: HoldEnding) => {
+    if (open.current === 0) return;
+    open.current -= 1;
+    callbacks.current.onHoldEnd?.({ cancelled, ended });
+  }, []);
+
+  /** The hold is over (not by a release): it closes, and the words heard so far are handed on, kept. */
+  const over = useCallback(
+    (ended: HoldEnding, said: string | undefined, recording?: Recording) => {
+      setHolding(false);
+      close(true, ended);
+      const text = said?.trim();
+      if (text) callbacks.current.onWords(text, { status: 'kept', text, recording, ended });
+    },
+    [close],
+  );
+
+  const hold = useHold({
+    ...options,
+    onFailed: (said) => over('error', said),
+    onHidden: (said) => over('hidden', said),
+    onEnded: (released) => (released.status === 'heard' || released.status === 'kept' ? over('ended', released.text, released.recording) : over('ended', undefined)),
+  });
+  const { begin, finish, drop } = hold;
+
+  /** A hold begins. False when it could not start (the notice says why); it is then over at once. */
+  const press = useCallback((): boolean => {
+    if (holding) return false;
+    open.current += 1;
+    callbacks.current.onHoldStart?.();
+    const started = begin();
+    setHolding(started);
+    if (!started) close(true, 'error');
+    return started;
+  }, [holding, begin, close]);
+
+  /** He lets go: the recogniser's last words are awaited, then handed on. */
+  const release = useCallback(async (): Promise<Released> => {
+    setHolding(false);
+    const released = await finish();
+    if (released.status === 'idle') return released;
+    close(false, 'release');
+    if (released.status === 'heard' || released.status === 'kept') callbacks.current.onWords(released.text.trim(), { ...released, ended: 'release' });
+    return released;
+  }, [finish, close]);
+
+  /** The hold is over without sending (a slide off, the phone taking the touch, the app's own cancel): the words so far are kept. */
+  const cancel = useCallback(() => over('cancel', drop()), [drop, over]);
+
+  // The hold went away mid-hold (unmounted): it is over, and what onHoldStart took is given back.
+  useEffect(
+    () => () => {
+      if (open.current > 0) {
+        open.current = 0;
+        callbacks.current.onHoldEnd?.({ cancelled: true, ended: 'cancel' });
+      }
+    },
+    [],
+  );
+
+  // begin, finish and drop stay inside: a caller holds through press, release and cancel, so every end is handed on
+  const { transcript, notice, setNotice, mode, mic, fellBack, input, supported } = hold;
+  return { transcript, notice, setNotice, mode, mic, fellBack, input, supported, holding, press, release, cancel };
 }
 
 async function stopRecording(held: HeldRecording): Promise<Recording | undefined> {

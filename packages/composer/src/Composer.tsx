@@ -3,10 +3,11 @@
 // files go as one message, the words its caption, through the app's onSend.
 // With something attached and nothing typed, a Send arrow stands beside the bar and one tap sends the files with
 // no words (mw-jtzpw0.9); the bar stays the big button and does not move.
+// The bar holds through useBarHold (useHold.ts), the one hold useTalk runs too (mw-06ggew.14), with onHoldStart and onHoldEnd around it.
 // The hold-to-talk bar: hold it and the words stream on screen, let go and the words, the voice note (when the
 // app asks for one) and whatever is attached go as one message; slide off the bar first and nothing goes.
 // Whatever ends a hold without sending it (a slide off, the phone taking the touch, the app hidden, the recogniser
-// failing, a release it settles with no words) leaves the words heard so far in the box, unsent, saying
+// failing or ending by itself and not starting again, a release it settles with no words) leaves the words heard so far in the box, unsent, saying
 // 'Kept what you said: tap Send.' (mw-f7gmps.3). A hold that ends with a notice and no words (the recogniser failed by
 // every route, nothing was heard) shows the notice above the bar, and the bar says 'Try again': a hold on it is a fresh
 // one, every route untried (mw-hgtlf5.1).
@@ -31,7 +32,7 @@ import { Icon } from './icons.js';
 import { formatDuration, type Recording } from './recorder.js';
 import type { Transcriber } from './transcriber.js';
 import { resolveSettings, type ComposerMode, type ComposerOpen, type ComposerSettings } from './settings.js';
-import { micName, useHold } from './useHold.js';
+import { micName, useBarHold, type HoldEnd, type HoldWords } from './useHold.js';
 
 export type { ComposerMode, ComposerOpen };
 
@@ -198,6 +199,10 @@ export interface ComposerProps {
   refuseFile?: (file: { name: string; type: string; size: number }) => string | undefined;
   /** Gets what the composer would say about a refused file or a failed send, in place of showing it in its own line. */
   onNotice?: (message: string) => void;
+  /** A hold of the bar begins, before the microphone opens: pause what is playing aloud. Always followed by onHoldEnd (mw-06ggew.14). */
+  onHoldStart?: () => void;
+  /** The hold is over (`ended` says how: 'release', 'error', 'cancel', 'ended', 'hidden'): give back what onHoldStart took. */
+  onHoldEnd?: (end: HoldEnd) => void;
   /** Words already in the box when it opens; the caret waits after them. */
   initialText?: string;
   /**
@@ -282,6 +287,8 @@ export function Composer({
   labels: given,
   refuseFile,
   onNotice,
+  onHoldStart,
+  onHoldEnd,
   initialText = '',
   text: textProp,
   onTextChange,
@@ -319,7 +326,6 @@ export function Composer({
   const [files, setFiles] = useState<Pending[]>([]);
   // The hold-to-talk bar is out in place of the text box: 'speak' opens with it, the mic brings it out.
   const [voice, setVoice] = useState(barFirst);
-  const [holding, setHolding] = useState(false);
   // A hold ended without sending and its words wait in the box (until they are sent).
   const [kept, setKept] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -328,20 +334,9 @@ export function Composer({
   const textarea = useRef<HTMLTextAreaElement>(null);
   const picker = useRef<HTMLInputElement>(null);
   const shutter = useRef<HTMLInputElement>(null);
-  const hold = useHold({
-    transcriber,
-    lang,
-    appName,
-    record: settings.voiceNote,
-    onFailed: (said) => {
-      setHolding(false);
-      keep(said);
-    },
-    onHidden: (said) => {
-      setHolding(false);
-      keep(said);
-    },
-  });
+  // the one hold (useBarHold), as useTalk's: whatever ends it, the words heard so far come to took()
+  const hold = useBarHold({ transcriber, lang, appName, record: settings.voiceNote, onHoldStart, onHoldEnd, onWords: (words, said) => void took(words, said) });
+  const holding = hold.holding;
 
   // Only when it opens: what he types after is his.
   useEffect(() => {
@@ -424,8 +419,7 @@ export function Composer({
   }
 
   function press() {
-    if (holding) return;
-    setHolding(hold.begin());
+    hold.press();
   }
 
   /** The words of a hold that ended without sending go in the box, unsent; the box shows in place of the bar. */
@@ -437,17 +431,14 @@ export function Composer({
     setKept(true);
   }
 
-  async function release() {
-    setHolding(false);
-    const released = await hold.finish();
+  /** What a hold handed on: words it kept (any end but a settled release) wait in the box; words heard on a release are sent. */
+  async function took(words: string, released: HoldWords) {
     if (released.status === 'kept') {
-      keep(released.text, released.recording ? await voiceFile(released.recording) : undefined);
+      keep(words, released.recording ? await voiceFile(released.recording) : undefined);
       return;
     }
-    if (released.status !== 'heard') return;
     // words that could not be made out are the app's to show too, when it takes the composer's notices
     if (released.missed && onNotice) onNotice(released.missed);
-    const words = released.text.trim();
     const voiceNote = released.recording ? await voiceFile(released.recording) : undefined;
     if (sendBy === 'button' || sendBlocked) {
       // send 'button': the words wait in the box, nothing selected, for him to fix a word; Send sends them
@@ -473,8 +464,7 @@ export function Composer({
   }
 
   function drop() {
-    setHolding(false);
-    keep(hold.drop() ?? '');
+    hold.cancel();
   }
 
   /** Sends what is in the box. `force` goes past the app's sendBlocked (its own Send button, from renderSend, decides that). */
@@ -627,7 +617,7 @@ export function Composer({
               listening={holding}
               disabled={busy || disabled}
               onPress={press}
-              onRelease={() => void release()}
+              onRelease={() => void hold.release()}
               onAbort={drop}
               dropOnSlideOff
             />

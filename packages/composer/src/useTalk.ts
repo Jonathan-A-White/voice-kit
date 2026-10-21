@@ -5,13 +5,16 @@
 //   useBarPress  the bar's press logic and nothing else: pointer and keyboard (Space, Enter) down and up, talk 'tap' latching
 //                (whisper-hid's talkPress), the slide off, and a hold delay. HoldToTalkBar draws it for a caller (the Composer)
 //                that runs the hold itself.
-//   useTalk      useBarPress over useHold: the caller says what the words do (`onWords`) and what must happen around a hold
+//   useTalk      useBarPress over useBarHold (useHold.ts), the one hold the Composer runs too (mw-06ggew.14): the caller says what
+//                the words do (`onWords`, which gets them however the hold ended) and what must happen around a hold
 //                (`onHoldStart`, `onHoldEnd`), and gets the bar's state and handlers back. TalkBar draws it.
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { KeyboardEvent, PointerEvent } from 'react';
 import { resolveSettings, type ComposerSettings, type ComposerTalk } from './settings.js';
 import type { Transcriber } from './transcriber.js';
-import { useHold, type Released } from './useHold.js';
+import { useBarHold, type HoldEnd, type HoldEnding, type HoldWords } from './useHold.js';
+
+export type { HoldEnd, HoldEnding, HoldWords };
 
 /** How far outside the bar the finger has to go before the hold counts as slid off, so a wobble at the edge does not drop it. */
 export const SLIDE_OFF_MARGIN_PX = 24;
@@ -208,19 +211,20 @@ export function useBarPress({ settings, listening, onPress, onRelease, onAbort, 
   return { talk, state, slid, latched, handlers };
 }
 
-/** How a hold ended: letting go (or stopping a latched listen) is `cancelled: false`; a slide off, a failure or a hidden page is `cancelled: true`. */
-export interface HoldEnd {
-  cancelled: boolean;
-}
-
 export interface TalkOptions {
-  /** Gets the words of a hold that was let go (not slid off), once the recogniser has settled. Not called for a hold that heard nothing. */
-  onWords: (text: string, released: Extract<Released, { status: 'heard' | 'kept' }>) => void;
+  /**
+   * Gets the words of every hold, once, however it ended (mw-06ggew.14), not for a hold that heard nothing. `words.status` 'heard':
+   * he let go and the recogniser settled them, words to send. 'kept': the hold ended any other way (`words.ended`: a slide off or
+   * the phone taking the touch 'cancel', the recogniser failing 'error' or ending by itself 'ended', the page hidden 'hidden'), or
+   * a release settled blank: the words heard so far, his, to keep unsent (the Composer puts them in its box) rather than lose.
+   */
+  onWords: (text: string, words: HoldWords) => void;
   /** A hold begins (after the hold delay), before the microphone opens: pause what is playing, say. Always followed by onHoldEnd. */
   onHoldStart?: () => void;
   /**
    * The hold is over: after the last words are in (just before onWords), or at once when it was cancelled (slid off, the phone
-   * took the touch, the recogniser failed, the page was hidden, the hold could not start). Give back what onHoldStart took.
+   * took the touch, the recogniser failed or ended by itself, the page was hidden, the hold could not start); `ended` says which.
+   * Give back what onHoldStart took.
    */
   onHoldEnd?: (end: HoldEnd) => void;
   /** How audio becomes text: the browser's recogniser unless given (transcriber.ts). */
@@ -240,72 +244,17 @@ export type Talk = ReturnType<typeof useTalk>;
 export function useTalk(settings: Partial<ComposerSettings> | undefined, options: TalkOptions) {
   const { onWords, onHoldStart, onHoldEnd, transcriber, lang, appName, holdDelayMs, dropOnSlideOff = true } = options;
   const { lang: settingsLang } = resolveSettings({ settings });
-  const [holding, setHolding] = useState(false);
-  // How many holds onHoldStart began and onHoldEnd has not yet closed: more than one when he presses again while the last words of the last hold are awaited.
-  const open = useRef(0);
-  const callbacks = useRef({ onWords, onHoldStart, onHoldEnd });
-  callbacks.current = { onWords, onHoldStart, onHoldEnd };
-
-  const close = useCallback((cancelled: boolean) => {
-    if (open.current === 0) return;
-    open.current -= 1;
-    callbacks.current.onHoldEnd?.({ cancelled });
-  }, []);
-
-  const hold = useHold({
-    transcriber,
-    lang: lang ?? settingsLang,
-    appName,
-    onFailed: () => {
-      setHolding(false);
-      close(true);
-    },
-    onHidden: () => {
-      setHolding(false);
-      close(true);
-    },
-  });
-  const { begin, finish, drop } = hold;
-
-  const onPress = useCallback(() => {
-    open.current += 1;
-    callbacks.current.onHoldStart?.();
-    const started = begin();
-    setHolding(started);
-    if (!started) close(true);
-  }, [begin, close]);
-
-  const onRelease = useCallback(async () => {
-    setHolding(false);
-    const released = await finish();
-    if (released.status === 'idle') return;
-    close(false);
-    if (released.status === 'heard' || released.status === 'kept') callbacks.current.onWords(released.text.trim(), released);
-  }, [finish, close]);
-
-  const onAbort = useCallback(() => {
-    setHolding(false);
-    drop();
-    close(true);
-  }, [drop, close]);
-
-  // The bar went away mid-hold: the hold is over, and what onHoldStart took is given back.
-  useEffect(
-    () => () => {
-      if (open.current > 0) {
-        open.current = 0;
-        callbacks.current.onHoldEnd?.({ cancelled: true });
-      }
-    },
-    [],
-  );
+  // the one hold (useBarHold), as the Composer's: whatever ends it, the words heard so far come to onWords
+  const hold = useBarHold({ transcriber, lang: lang ?? settingsLang, appName, onWords, onHoldStart, onHoldEnd });
+  const { holding, press: begin, release, cancel } = hold;
+  const onPress = useCallback(() => void begin(), [begin]);
 
   const press = useBarPress({
     settings,
     listening: holding,
     onPress,
-    onRelease: () => void onRelease(),
-    onAbort,
+    onRelease: () => void release(),
+    onAbort: cancel,
     dropOnSlideOff,
     holdDelayMs,
   });

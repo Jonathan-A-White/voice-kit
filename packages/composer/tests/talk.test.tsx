@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 // useTalk and TalkBar (mw-06ggew.3): the hold bar and its hook alone, for a caller with its own handler for the words
 // (Lampas's Talk sheet, Reader, Welcome, LetterDrill). talk hold|tap|off from the same settings; Space/Enter held on the
-// bar is a hold; holdDelayMs waits before listening starts; a slide off cancels and says so to onHoldEnd.
+// bar is a hold; holdDelayMs waits before listening starts; a slide off cancels and says so to onHoldEnd, its words handed on kept.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, renderHook, screen } from '@testing-library/react';
 import { LATCH_MS, TalkBar, useTalk } from '../src/index.js';
@@ -129,7 +129,7 @@ describe('talk tap, through useTalk', () => {
     expect(transcriber.stopped).toBe(true);
     expect(onWords).toHaveBeenCalledTimes(1);
     expect(onWords.mock.calls[0]![0]).toBe('keep it on');
-    expect(onHoldEnd).toHaveBeenCalledWith({ cancelled: false });
+    expect(onHoldEnd).toHaveBeenCalledWith({ cancelled: false, ended: 'release' });
     expect(bar().textContent).toContain('Hold to talk');
   });
 
@@ -235,7 +235,7 @@ describe('holdDelayMs', () => {
 });
 
 describe('a slide off', () => {
-  it('cancels: the mic is dropped, onWords is not called and onHoldEnd says cancelled', async () => {
+  it('cancels: the mic is dropped, the words so far go to onWords kept (unsent, mw-06ggew.14) and onHoldEnd says cancelled', async () => {
     const transcriber = fakeTranscriber();
     const onWords = vi.fn();
     const onHoldEnd = vi.fn();
@@ -250,8 +250,9 @@ describe('a slide off', () => {
     fireEvent.pointerUp(bar(), { clientX: 600, clientY: 10 });
     await pass();
     expect(transcriber.aborted).toBe(true);
-    expect(onWords).not.toHaveBeenCalled();
-    expect(onHoldEnd).toHaveBeenCalledWith({ cancelled: true });
+    expect(onWords).toHaveBeenCalledTimes(1);
+    expect(onWords).toHaveBeenCalledWith('never mind', { status: 'kept', text: 'never mind', recording: undefined, ended: 'cancel' });
+    expect(onHoldEnd).toHaveBeenCalledWith({ cancelled: true, ended: 'cancel' });
     expect(bar().textContent).toContain('Hold to talk');
   });
 
@@ -277,7 +278,7 @@ describe('a slide off', () => {
     fireEvent.pointerCancel(bar());
     await pass();
     expect(transcriber.aborted).toBe(true);
-    expect(onHoldEnd).toHaveBeenCalledWith({ cancelled: true });
+    expect(onHoldEnd).toHaveBeenCalledWith({ cancelled: true, ended: 'cancel' });
   });
 });
 
@@ -299,7 +300,7 @@ describe('a hold that cannot go on', () => {
     render(<TalkBar transcriber={transcriber} onWords={onWords} onHoldEnd={onHoldEnd} />);
     await press(1000);
     expect(onWords).not.toHaveBeenCalled();
-    expect(onHoldEnd).toHaveBeenCalledWith({ cancelled: false });
+    expect(onHoldEnd).toHaveBeenCalledWith({ cancelled: false, ended: 'release' });
   });
 });
 
