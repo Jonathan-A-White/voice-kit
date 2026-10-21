@@ -63,13 +63,18 @@ Three shapes, one example each:
 <Composer settings={{ talk: 'tap', send: 'button' }} labels={{ hold: 'Hold to answer' }} onSend={send} />
 
 // A bar alone: just the hold-to-talk bar, the words go to your own handler (see The parts).
-<TalkBar settings={{ talk: 'tap' }} onWords={(text) => ask(text)}
-  onHoldStart={pauseReading} onHoldEnd={({ cancelled }) => resumeReading()} />
+<TalkBar settings={{ talk: 'tap' }} onWords={(text, words) => (words.status === 'heard' ? ask(text) : keepInField(text))}
+  onHoldStart={pauseReading} onHoldEnd={() => resumeReading()} />
 ```
 
 `TalkBar` is the bar and the hold behind it, for an app whose words do something of its own (a Talk sheet that pauses the read-aloud, a
-drill, a reader's push-to-talk): `onWords` gets the words once a hold is let go; `onHoldStart` comes when listening starts and
-`onHoldEnd({ cancelled })` always follows, so what you paused is given back (`cancelled: true` for a slide off, a failure, a hidden page).
+drill, a reader's push-to-talk): `onWords(text, words)` gets the words of every hold, however it ended, so nothing he said is lost
+(not called for a hold that heard nothing). `words.status` is `'heard'` when he let go and the recogniser settled them: words to send.
+It is `'kept'` for any other end, the words heard so far, his, to keep unsent for him to send (the Composer puts them in its box with
+'Kept what you said: tap Send.'): `words.ended` says how it ended, `'cancel'` (a slide off, the phone taking the touch), `'error'` (the
+recogniser failed), `'ended'` (the recogniser ended by itself and could not be started again), `'hidden'` (he left the app), or
+`'release'` (a release the recogniser settled blank). `onHoldStart` comes when listening starts and `onHoldEnd({ cancelled, ended })`
+always follows, so what you paused is given back (`cancelled: false` only for a release).
 Space or Enter held on the focused bar is a hold; `holdDelayMs={500}` makes a press wait before listening starts (let go sooner, it is no
 hold); `labels` changes its words; `talk: 'off'` renders nothing. To draw the words so far or the notice beside the bar, run the hold
 yourself and pass it in:
@@ -78,6 +83,16 @@ yourself and pass it in:
 const talk = useTalk({ talk: 'tap' }, { onWords: ask, transcriber });
 <p>{talk.transcript || talk.notice}</p>
 <TalkBar talk={talk} />
+```
+
+### Pausing what is read aloud while he talks
+
+The `Composer` and `useTalk` hold through the same hold (`useBarHold`), so both take the same pair: `onHoldStart` as listening begins,
+`onHoldEnd` once it is over, however it ended. Page audio can take the microphone from the recogniser; pause it for the hold:
+
+```tsx
+<Composer onSend={send} onHoldStart={() => audio.pause()} onHoldEnd={() => void audio.play()} />
+<TalkBar onWords={ask} onHoldStart={() => audio.pause()} onHoldEnd={() => void audio.play()} />
 ```
 
 The props that came before the object (`mode`, `attach`, `camera`, `recordVoice`, `lang`) still work, as the fallbacks: a value in
@@ -97,6 +112,7 @@ prop, the layout the composer opens in, and `resolveSettings(props)` is where it
 | `labels`       | Any of the words on the screen (`DEFAULT_LABELS`): `hold` 'Hold to talk', `tryAgain` 'Try again' (the bar after a hold that ended with a notice), `typeInstead` and `placeholder` 'Type a message', `release`, `releaseToBox` (send `'button'`), `stop` (a latched listen), `hint` and its variants `hintTap`, `hintBox`, `hintTapBox`, `drop`, `kept`, `send`, `speak`, `attach`, `camera`, ... |
 | `refuseFile`   | `(file) => reason or undefined`: a refused file is not added and the reason is shown.            |
 | `onNotice`     | Takes what the composer would say about a refused file or a failed send (to show it as a toast). |
+| `onHoldStart`, `onHoldEnd` | A hold of the bar begins (before the microphone opens), and is over (`{ cancelled, ended }`, however it ended): pause what is read aloud and give it back. The same pair as `useTalk`'s; see _Pausing what is read aloud while he talks_. |
 | `lang`, `appName` | `lang` is the fallback for `settings.lang` (default the page's `<html lang>`); `appName` is the app's name in "the microphone is not allowed for ..." |
 | `open`         | `'bar'` or `'box'`: which shows first, and again after a send. Default: the bar in `mode` `'speak'`, the box in `'type'`. See below. |
 | `text`, `onTextChange`, `onKeyDown`, `fieldOverlay`, `sendBlocked`, `renderSend`, `canSendEmpty`, `incomingFiles`, `onFileTap`, `maxLength`, `minRows` | The ways in for an app's own features; see _Plugging in an app's own features_ below. |
@@ -247,7 +263,8 @@ here, and apps already theme these names, so they did not change.
 ## The parts
 
 The hooks and services the Composer is made of are exported too, for an app that draws its own:
-`TalkBar` and `useTalk` (the bar and its hold alone, words to your `onWords`), `HoldToTalkBar` (the bar when you run the hold: `settings.talk` hold, tap or off; drawn on `useBarPress`, the press logic `useTalk` uses too), `resolveSettings`, `useHold` (one hold: begin, finish, drop, the words so far), `browserSpeech`,
+`TalkBar` and `useTalk` (the bar and its hold alone, words to your `onWords`), `HoldToTalkBar` (the bar when you run the hold: `settings.talk` hold, tap or off; drawn on `useBarPress`, the press logic `useTalk` uses too), `resolveSettings`, `useBarHold` (THE hold behind both bars: press, release, cancel, and every end handed to `onWords` between
+`onHoldStart` and `onHoldEnd`; the Composer and `useTalk` both hold through it), `useHold` (the listening under it: begin, finish, drop, the words so far), `browserSpeech`,
 `transcribeRecording` and the `Transcriber` port, `startListening` (the recogniser with its fallbacks and
 the recorded rest of a hold), `openBluetoothInput` and `chooseInput` (which microphone), `VoiceRecorder`.
 

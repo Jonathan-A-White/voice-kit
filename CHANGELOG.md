@@ -8,6 +8,12 @@ Each library keeps its own changelog; this one records the repo's releases and p
 - [@voice-kit/speech](packages/speech/CHANGELOG.md)
 - [@voice-kit/testing](packages/testing/CHANGELOG.md)
 
+## v0.7.0 (2026-10-21)
+
+- @voice-kit/composer 0.7.0 (mw-06ggew.14): one hold for the Composer and `useTalk` (`useBarHold`); every way a hold ends hands on
+  the words heard so far, through both; `onHoldStart` and `onHoldEnd` on the Composer too. Breaking for an `onWords` that sends
+  whatever it gets: see [its changelog](packages/composer/CHANGELOG.md).
+
 ## 0.1.0 (2026-10-16, not yet tagged)
 
 - New: the repo. `@voice-kit/composer`, `@voice-kit/speech` and `@voice-kit/testing` moved from bsv-kit at

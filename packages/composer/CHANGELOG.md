@@ -2,6 +2,25 @@
 
 Newest first. Breaking changes come first in a release, each with its migration in one sentence.
 
+## 0.7.0 (2026-10-21)
+
+- Changed (breaking, mw-06ggew.14): `useTalk`'s `onWords` (and `TalkBar`'s) now gets the words of every hold, however it ended, as the
+  Composer keeps them: a slide off or the phone taking the touch, the recogniser failing, the recogniser ending by itself, the page hidden
+  each hand on the words heard so far as `{ status: 'kept', ended }` (before, they were dropped: Lampas's Talk sheet lost his words where
+  Postern's Composer kept them). The second argument is now `HoldWords`, a `Released` of status 'heard' or 'kept' with `ended`. Migration:
+  an `onWords` that sends whatever it gets should send only `words.status === 'heard'` and keep 'kept' words for him to send (a field).
+- Changed (breaking, mw-06ggew.14): `HoldEnd` (`onHoldEnd`) has `ended`, how the hold ended: 'release', 'error', 'cancel', 'ended' or
+  'hidden'. Migration: a test that matched `{ cancelled }` exactly matches `{ cancelled, ended }`.
+- Fixed (mw-06ggew.14): a recogniser that ends by itself while he holds and cannot be started again ended the listening in silence, and the
+  bar went on saying 'Release to send' while nothing was heard, so the release sent his words cut off where it gave up. The hold now ends
+  there and then (`ListenOptions.onEnd`, `HoldOptions.onEnded`): the words heard so far are kept (the Composer's box, `onWords` 'kept'),
+  with the notice that the words after could not be made out.
+- New (mw-06ggew.14): `useBarHold`, THE hold of a hold-to-talk bar: press, release and cancel, and every end (release, error, cancel,
+  ended, hidden) handed to `onWords` between `onHoldStart` and `onHoldEnd`. The Composer and `useTalk` both hold through it, so no app
+  gets a hold that behaves differently from Postern's. Exported with types `BarHoldOptions`, `HoldEnding`, `HoldWords`.
+- New (mw-06ggew.14): `Composer` takes `onHoldStart` and `onHoldEnd`, as `useTalk` does: pause what is read aloud while he talks. README
+  section 'Pausing what is read aloud while he talks'.
+
 ## Unreleased (0.6.0)
 
 - New (mw-06ggew.12): extension points on `Composer` for an app's own features (drafts, saved prompts, quotes, shared-in files, a file viewer,
