@@ -41,7 +41,8 @@
 // words (transcribeRest, or the recording replayed into a fresh recogniser: replay.ts), after the words heard before the end.
 // A page that cannot record (no MediaRecorder, or the microphone refused) starts the recogniser again either way.
 // Words that could not be made out (a stretch the speech service failed on, a recogniser that could not be started again, a
-// recording that could not be read) are said so (missed, missedNote), never dropped in silence.
+// recording that could not be read) are said so (missed, missedNote), never dropped in silence. A session that settles by itself
+// while he still holds says so at once (onEnd, mw-06ggew.14), so the hold ends there and his words are kept, not cut off on release.
 
 import { canRecord, VoiceRecorder, type Recording } from './recorder.js';
 import { replayRecording } from './replay.js';
@@ -143,6 +144,11 @@ export interface ListenOptions {
    * tone at a pause but needs a speech service that can hear a recording, and Android's does not.
    */
   throughPauses?: boolean;
+  /**
+   * The session settled by itself while he still holds (the recogniser ended and could not be started again): nothing more is
+   * heard, so the hold is over now, not when he lets go; stop() gives the words heard so far (mw-06ggew.14).
+   */
+  onEnd?: () => void;
 }
 
 // TypeScript's DOM lib has no SpeechRecognition types; these are the parts used here.
@@ -469,6 +475,8 @@ export function startListening(options: ListenOptions = {}): ListenStart {
     outcome = failure ? { ok: false, text, error: failure } : { ok: true, text, mode, ...(missed ? { missed: true as const, missedNote: missed } : {}) };
     if (!failure) options.onFinal?.(text);
     settle(outcome);
+    // not let go and no failure said: the recogniser gave up by itself, and the caller would go on showing a hold that hears nothing
+    if (!stopping && !error) options.onEnd?.();
   };
 
   /** Replaces the recogniser with a new one for `next` (same hold, in cloud mode unless `onDevice`; `fallback` tells the caller it fell back from on-device); false when it could not start, leaving the old one in place. */
