@@ -1,7 +1,7 @@
 {
   "name": "@voice-kit/talks",
-  "version": "0.1.0",
-  "description": "voice-kit: multi-turn conversations. A talk of turns with roles and times, the turn loop over a grind the app injects (send(request, files) answers), picture turns that are kept and sent only when asked, and a store interface with an in-memory store. No React, no DOM.",
+  "version": "0.2.0",
+  "description": "voice-kit: multi-turn conversations. A talk of turns with roles and times, the turn loop over a grind the app injects (send(request, files) answers), picture turns that are kept and sent only when asked, a store interface with an in-memory store, a Dexie store for the device (talks/dexie) and a searchable TalkList (talks/react). The core imports nothing: no React, no DOM.",
   "license": "MIT",
   "type": "module",
   "main": "./dist/index.js",
@@ -10,10 +10,34 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
-    }
+    },
+    "./dexie": {
+      "types": "./dist/dexieStore.d.ts",
+      "default": "./dist/dexieStore.js"
+    },
+    "./react": {
+      "types": "./dist/TalkList.d.ts",
+      "default": "./dist/TalkList.js"
+    },
+    "./styles.css": "./dist/styles.css"
   },
   "files": [
     "dist/**",
     "!**/*.tsbuildinfo"
-  ]
+  ],
+  "sideEffects": [
+    "*.css"
+  ],
+  "peerDependencies": {
+    "dexie": ">=4",
+    "react": ">=18"
+  },
+  "peerDependenciesMeta": {
+    "dexie": {
+      "optional": true
+    },
+    "react": {
+      "optional": true
+    }
+  }
 }

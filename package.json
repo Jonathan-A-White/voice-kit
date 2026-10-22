@@ -1,7 +1,7 @@
 {
   "name": "voice-kit",
   "version": "0.1.0",
-  "description": "Speaking and listening in the browser, for React PWAs: @voice-kit/composer (a hold-to-talk message composer, a React component), @voice-kit/speech (a read-aloud engine with Pause, Resume, Restart and Stop that keep the place, and a themeable SpeakingBar), @voice-kit/talks (multi-turn conversations: a talk of turns, the turn loop over an injected grind, picture turns and a store) and @voice-kit/testing (honest speech and microphone fakes for an app's tests, vitest and Playwright).",
+  "description": "Speaking and listening in the browser, for React PWAs: @voice-kit/composer (a hold-to-talk message composer, a React component), @voice-kit/speech (a read-aloud engine with Pause, Resume, Restart and Stop that keep the place, and a themeable SpeakingBar), @voice-kit/talks (multi-turn conversations: a talk of turns, the turn loop over an injected grind, picture turns, a store, a Dexie store and a searchable list) and @voice-kit/testing (honest speech, microphone and talk fakes for an app's tests, vitest and Playwright).",
   "license": "MIT",
   "type": "module",
   "repository": {
@@ -34,6 +34,15 @@
       "types": "./packages/talks/dist/index.d.ts",
       "default": "./packages/talks/dist/index.js"
     },
+    "./talks/dexie": {
+      "types": "./packages/talks/dist/dexieStore.d.ts",
+      "default": "./packages/talks/dist/dexieStore.js"
+    },
+    "./talks/react": {
+      "types": "./packages/talks/dist/TalkList.d.ts",
+      "default": "./packages/talks/dist/TalkList.js"
+    },
+    "./talks/styles.css": "./packages/talks/dist/styles.css",
     "./testing/speech": {
       "types": "./packages/testing/dist/speech.d.ts",
       "default": "./packages/testing/dist/speech.js"
@@ -41,6 +50,10 @@
     "./testing/mic": {
       "types": "./packages/testing/dist/mic.d.ts",
       "default": "./packages/testing/dist/mic.js"
+    },
+    "./testing/talks": {
+      "types": "./packages/testing/dist/talks.d.ts",
+      "default": "./packages/testing/dist/talks.js"
     },
     "./package.json": "./package.json"
   },
@@ -50,7 +63,7 @@
     "!**/*.tsbuildinfo"
   ],
   "scripts": {
-    "build": "tsc -b packages/composer/tsconfig.build.json packages/speech/tsconfig.build.json packages/talks/tsconfig.build.json packages/testing/tsconfig.build.json && node -e \"for (const p of ['composer', 'speech']) require('node:fs').copyFileSync('packages/' + p + '/src/styles.css', 'packages/' + p + '/dist/styles.css')\"",
+    "build": "tsc -b packages/composer/tsconfig.build.json packages/speech/tsconfig.build.json packages/talks/tsconfig.build.json packages/testing/tsconfig.build.json && node -e \"for (const p of ['composer', 'speech', 'talks']) require('node:fs').copyFileSync('packages/' + p + '/src/styles.css', 'packages/' + p + '/dist/styles.css')\"",
     "prepare": "npm run build",
     "lint": "eslint .",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p packages/composer/tsconfig.json --noEmit && tsc -p packages/speech/tsconfig.json --noEmit && tsc -p packages/talks/tsconfig.json --noEmit && tsc -p examples/composer-demo/tsconfig.json --noEmit",
@@ -61,13 +74,17 @@
   },
   "peerDependencies": {
     "react": ">=18",
-    "react-dom": ">=18"
+    "react-dom": ">=18",
+    "dexie": ">=4"
   },
   "peerDependenciesMeta": {
     "react": {
       "optional": true
     },
     "react-dom": {
+      "optional": true
+    },
+    "dexie": {
       "optional": true
     }
   },
@@ -78,7 +95,9 @@
     "@types/node": "^20.19.0",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
+    "dexie": "^4.4.6",
     "eslint": "^9.39.1",
+    "fake-indexeddb": "^6.2.6",
     "jsdom": "^28.1.0",
     "playwright-core": "^1.63.0",
     "react": "^19.3.0",
