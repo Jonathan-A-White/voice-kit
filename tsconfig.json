@@ -11,5 +11,5 @@
     }
   },
   "include": ["packages/*/src", "packages/*/tests", "vitest.config.ts", "eslint.config.js"],
-  "exclude": ["packages/composer", "packages/speech", "**/dist"]
+  "exclude": ["packages/composer", "packages/speech", "packages/talks", "**/dist"]
 }

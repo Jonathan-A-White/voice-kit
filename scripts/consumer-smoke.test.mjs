@@ -17,9 +17,10 @@ describe.skipIf(process.env.VOICE_KIT_SKIP_SMOKE === '1')('a consumer install of
       const e = /** @type {{ stdout?: string, stderr?: string }} */ (err);
       throw new Error(`consumer smoke test failed:\n${e.stdout ?? ''}\n${e.stderr ?? ''}`);
     }
-    expect(output).toContain('the exports map names the seven entry points');
+    expect(output).toContain('the exports map names the entry points');
     expect(output).toContain('voice-kit/composer renders');
     expect(output).toContain('voice-kit/speech and voice-kit/speech/react work');
+    expect(output).toContain('voice-kit/talks keeps a talk');
     expect(output).toContain('voice-kit/testing/speech and voice-kit/testing/mic run in vitest');
     expect(output).toContain('consumer smoke test passed');
   }, 600_000);

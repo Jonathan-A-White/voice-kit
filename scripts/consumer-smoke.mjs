@@ -4,6 +4,7 @@
 //     reaches no other voice-kit library;
 //   - 'voice-kit/speech' speaks sentence by sentence through the honest fake, and 'voice-kit/speech/react' renders its
 //     SpeakingBar with the same React; packages/speech/dist and its styles.css are packed;
+//   - 'voice-kit/talks' keeps a talk through an injected grind, with a picture turn, in plain node (no React); packages/talks/dist is packed;
 //   - 'voice-kit/testing/speech' and 'voice-kit/testing/mic' run in the vitest the app installs (fake timers), by import
 //     and by init script.
 // The "fresh clone" is the working tree as it stands (tracked and untracked files, minus what git ignores),
@@ -43,11 +44,11 @@ try {
   run('npm', ['install', '--no-audit', '--no-fund', `git+file://${clone}`], app, { timeout: 480_000 });
   const installed = join(app, 'node_modules', 'voice-kit');
 
-  // The exports map names the seven entry points (and package.json), nothing else: no deep imports.
+  // The exports map names the entry points (and package.json), nothing else: no deep imports.
   const entries = Object.keys(JSON.parse(readFileSync(join(installed, 'package.json'), 'utf-8')).exports).sort();
-  const expected = ['./composer', './composer/styles.css', './package.json', './speech', './speech/react', './speech/styles.css', './testing/mic', './testing/speech'];
+  const expected = ['./composer', './composer/styles.css', './package.json', './speech', './speech/react', './speech/styles.css', './talks', './testing/mic', './testing/speech'];
   if (JSON.stringify(entries) !== JSON.stringify(expected)) throw new Error('exports: ' + entries.join(', '));
-  console.log('the exports map names the seven entry points');
+  console.log('the exports map names the entry points');
 
   // Each library stands alone: walk an installed entry point's import graph and fail on any other voice-kit library.
   const specifier = /\b(?:import|export)\s[^'"`;]*?\bfrom\s*['"]([^'"]+)['"]|\bimport\s*['"]([^'"]+)['"]|\bimport\s*\(\s*['"]([^'"]+)['"]\s*\)/g;
@@ -129,6 +130,31 @@ console.log('voice-kit/speech and voice-kit/speech/react work');
 `,
   );
   console.log(run('node', ['speech.mjs'], app).trim());
+
+  // 4b. 'voice-kit/talks': packed (packages/talks/dist), resolved by the exports map, stands alone; a talk is kept through an injected
+  // grind in plain node, and a picture turn is sent once.
+  for (const file of ['index.js', 'talk.js', 'store.js']) {
+    if (!existsSync(join(installed, 'packages/talks/dist', file))) throw new Error(`packages/talks/dist/${file} is not packed`);
+  }
+  standsAlone('packages/talks/dist/index.js');
+  writeFileSync(
+    join(app, 'talks.mjs'),
+    `
+import { createMemoryStore, createTalks } from 'voice-kit/talks';
+
+const store = createMemoryStore();
+const sent = [];
+const talks = createTalks({ store, send: async (request, files) => (sent.push({ request, files }), 'answer to ' + request.message) });
+const talk = await talks.start({ title: 'Smoke' });
+await talks.ask(talk.id, 'look at this', { pictures: [{ bytes: new Uint8Array([1, 2, 3]), mime: 'image/png', name: 'p.png' }] });
+await talks.ask(talk.id, 'and now?');
+const kept = await store.get(talk.id);
+if (kept.turns.map((t) => t.role + ':' + t.text).join('|') !== 'user:look at this|assistant:answer to look at this|user:and now?|assistant:answer to and now?') throw new Error('turns: ' + JSON.stringify(kept.turns));
+if (sent[0].files.length !== 1 || sent[0].request.pictures !== 1 || sent[1].files.length !== 0) throw new Error('pictures: ' + JSON.stringify(sent));
+console.log('voice-kit/talks keeps a talk');
+`,
+  );
+  console.log(run('node', ['talks.mjs'], app).trim());
 
   // 5. 'voice-kit/testing/speech' and 'voice-kit/testing/mic' in the vitest the app installs: packed (packages/testing/dist),
   // resolved by the exports map, and working under fake timers, by import and by the init-script strings for Playwright.
