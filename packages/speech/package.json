@@ -1,6 +1,6 @@
 {
   "name": "@voice-kit/speech",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "voice-kit: a read-aloud engine and its bar: a text spoken a sentence at a time, Pause, Resume, Restart and Stop that keep the place, a page that hides or a screen that changes pauses it, a voice and language for each utterance; a React hook and a themeable SpeakingBar.",
   "license": "MIT",
   "type": "module",

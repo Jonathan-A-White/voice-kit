@@ -2,6 +2,17 @@
 
 Newest first. Breaking changes come first in a release, each with its migration in one sentence.
 
+## 0.2.0 (2026-10-21)
+
+- New (mw-vmx5cb.4): `speak(text, { voice, rate, pitch, rank })`, so an app no longer wraps `speechSynthesis.speak` for them. `voice` is a
+  `SpeechSynthesisVoice` used for every sentence instead of the language match (each utterance still names its own `lang`); `rate` and
+  `pitch` are set on every sentence, and kept over Pause/Resume and Restart; `rank` is handed on to `preferredVoice`. Left out, the
+  utterance gets today's values: the synthesiser's own rate and pitch of 1, and the first voice of the language.
+- New: `preferredVoice(voices, lang, { rank })`, with `rank(voice, lang) => number` applied after the language match: of the voices of
+  exactly the tag (else of the same language) the highest score wins, the first of equal scores, so a ranking can prefer quality
+  (a `Google` voice, a local one), a child-friendly voice or an app's own locale order but never a voice of another language. Without
+  `rank` the choice is today's. The types `VoiceRank` and `VoiceOptions` are exported.
+
 ## Moved to voice-kit (2026-10-16)
 
 - Changed (breaking): moved from bsv-kit at b8b2ba303b9397ddb83935f9bde74107903bb074, where this was @bsv-kit/speech 0.1.0. The package is now

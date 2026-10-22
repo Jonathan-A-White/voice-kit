@@ -48,16 +48,31 @@ Call `speak()` from the tap's own handler: Android Chrome refuses speech started
 
 | Function | What it does |
 | -------- | ------------ |
-| `speak(text, options?)` | Cancels any speech, then speaks `text`. Options: `key` (who started it), `onEnd`, `resumeIfPaused` (carry on from the kept sentence if this key and text were paused), `lang` (what Latin-letter text is read in; default the phone's language, `en-US` for a bare `en`), `prepare(text)` (the app's own rewrite before speaking, say its ids into words). A bare URL is not read aloud. Does nothing when the phone cannot speak: check `isSupported()`. |
+| `speak(text, options?)` | Cancels any speech, then speaks `text`. Options: `key` (who started it), `onEnd`, `resumeIfPaused` (carry on from the kept sentence if this key and text were paused), `lang` (what Latin-letter text is read in; default the phone's language, `en-US` for a bare `en`), `prepare(text)` (the app's own rewrite before speaking, say its ids into words), `voice` (a `SpeechSynthesisVoice` for every sentence instead of the language match), `rate` and `pitch` (set on every sentence; default the synthesiser's own 1), `rank` (see `preferredVoice`). A bare URL is not read aloud. Does nothing when the phone cannot speak: check `isSupported()`. |
 | `pause()`, `resume()`, `restart()`, `stop()` | Steer the speech. `pause()` cancels the queue and keeps the sentence (Android Chrome does not honour `speechSynthesis.pause()`); `resume()` queues the sentences from the kept one. |
 | `getSpeech()`, `subscribe(fn)` | `{ status: 'idle' \| 'playing' \| 'paused', key, index, count }`, the same object until it changes; `useSyncExternalStore`-ready. |
 | `isSpeaking(key)`, `isPausedOn(key, text)`, `whenDone(key, fn)` | Whose speech it is (a paused one still is), whether a screen coming back can offer Resume, and what to run when it is over for good. |
+| `preferredVoice(voices, lang, { rank }?)` | The voice for a language: exactly that tag, else the same language. With `rank(voice, lang) => number`, the best-ranked of those wins (the first of equals); a voice of another language never does. |
 | `languageOf(text)`, `scriptOf(text)`, `readingLang()` | The language tag a text is read in, from its letters (`el-GR`, `he-IL`, else the app's or the phone's), the script most of its letters are in, and the phone's language as a full tag. |
 
 The language is chosen **for each sentence**: a text that quotes a Greek word in an English sentence stays English; a sentence of
 Greek letters is read as `el-GR`; one with no letters ('42.') takes the language of the text around it. A voice is chosen
 for the language (an exact tag, else one of the same language; `iw` is read as `he`), and an utterance with no matching voice gets
 its language alone. The first speak waits up to a second for the phone to list its voices.
+
+Choosing the voice and the pace, without wrapping `speechSynthesis.speak`:
+
+```ts
+import { speak, preferredVoice } from 'voice-kit/speech';
+
+// Prefer a Google voice, then a local one, among the English voices; read slowly and a little higher.
+const quality = (v: SpeechSynthesisVoice) => (v.name.startsWith('Google') ? 2 : 0) + (v.localService ? 1 : 0);
+speak('Spell the word slowly.', { rank: quality, rate: 0.6, pitch: 1.1 });
+
+// Or pick the voice yourself, once, for every sentence:
+const voice = preferredVoice(speechSynthesis.getVoices(), 'en-US', { rank: quality });
+speak('Now this one.', { voice });
+```
 
 ## The bar and the hook (`voice-kit/speech/react`)
 

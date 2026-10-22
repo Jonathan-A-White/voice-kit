@@ -8,6 +8,11 @@ Each library keeps its own changelog; this one records the repo's releases and p
 - [@voice-kit/speech](packages/speech/CHANGELOG.md)
 - [@voice-kit/testing](packages/testing/CHANGELOG.md)
 
+## v0.8.0 (2026-10-21)
+
+- @voice-kit/speech 0.2.0 (mw-vmx5cb.4): `speak()` takes `voice`, `rate`, `pitch` and `rank`, and `preferredVoice()` takes a `rank`
+  function applied after the language match. Additive: left out, behaviour is today's. See [its changelog](packages/speech/CHANGELOG.md).
+
 ## v0.7.0 (2026-10-21)
 
 - @voice-kit/composer 0.7.0 (mw-06ggew.14): one hold for the Composer and `useTalk` (`useBarHold`); every way a hold ends hands on
