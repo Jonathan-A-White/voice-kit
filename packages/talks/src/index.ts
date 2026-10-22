@@ -1,5 +1,6 @@
 // @voice-kit/talks: multi-turn conversations. A Talk of turns with roles and times, the turn loop over a grind the app injects
-// (send(request, files) -> answer), picture turns, and a store interface with an in-memory store.
+// (send(request, files) -> answer), picture turns, a memory per talk (facts and a rolling summary folded into each request), search
+// over titles and turns, and a store interface with an in-memory store.
 export {
   createMemoryStore,
   TalkNotFoundError,
@@ -33,3 +34,16 @@ export {
   type Talks,
   type TalksOptions,
 } from './talk.js';
+export {
+  applyMemoryUpdate,
+  isMemoryEmpty,
+  isMemoryUpdate,
+  MEMORY_FACT_MAX_CHARS,
+  MEMORY_MAX_FACTS,
+  MEMORY_SUMMARY_MAX_CHARS,
+  readMemoryUpdate,
+  type MemoryChange,
+  type MemoryLimits,
+  type MemoryUpdate,
+} from './memory.js';
+export { SEARCH_MAX_MATCHES, searchTalks, type SearchMatch, type SearchOptions, type TalkHit } from './search.js';

@@ -3,7 +3,9 @@
 // a message, the earlier turns and any pictures, hands them to `send(request, files)` (any grind: a model call, a mill, a
 // fake) and keeps what he said and what came back, in order, with the times. It touches no DOM and no React, so the Composer's
 // useTalk (or any other way of getting the words) drives it with `onWords: (text) => talks.ask(id, text)`.
-import type { Picture, Role, Talk, TalkStore, Turn } from './store.js';
+import { applyMemoryUpdate, isMemoryEmpty, readMemoryUpdate, type MemoryChange, type MemoryLimits, type MemoryUpdate } from './memory.js';
+import { searchTalks, type SearchOptions, type TalkHit } from './search.js';
+import { TalkNotFoundError, type Picture, type Role, type Talk, type TalkMemory, type TalkStore, type Turn } from './store.js';
 
 /** A picture ready to send: its bytes, type and the name it goes under. */
 export type OutgoingPicture = Picture;
@@ -37,10 +39,14 @@ export interface HistoryEntry {
   text: string;
 }
 
-/** What the default request holds. `pictures` is there only when files go with this message: how many. */
+/**
+ * What the default request holds. `memory` is there only when the talk has kept a fact or a summary: the grind reads it as what
+ * is remembered of the turns that are no longer in `history`. `pictures` is there only when files go with this message: how many.
+ */
 export interface TalkRequest {
   message: string;
   history: HistoryEntry[];
+  memory?: TalkMemory;
   pictures?: number;
 }
 
@@ -53,6 +59,8 @@ export interface RequestInput {
   turns: Turn[];
   /** The files that go with this message, as `send` gets them: the resent pictures, then the new ones. */
   pictures: OutgoingPicture[];
+  /** What the talk remembers (the same as `talk.memory`): a custom request folds it in as it likes. */
+  memory: TalkMemory;
 }
 
 /** Wrong input to `ask`: nothing was sent and nothing kept. */
@@ -82,6 +90,8 @@ export interface Asked<Answer> {
   reply: Turn;
   /** The talk as it stands now. */
   talk: Talk;
+  /** What the answer changed in the talk's memory, and what it asked for and was refused. */
+  memory: MemoryChange;
 }
 
 interface BaseOptions<Request, Answer> {
@@ -100,6 +110,10 @@ interface BaseOptions<Request, Answer> {
   pictureOnlyText?: string;
   /** The clock: Date.now unless given. */
   now?: () => number;
+  /** What an answer changes in the talk's memory; the answer's own `memory_update` (readMemoryUpdate) unless given. Return undefined for no change. */
+  readMemory?: (answer: Answer) => MemoryUpdate | undefined;
+  /** How much a talk's memory holds; the MEMORY_* limits unless given. */
+  memoryLimits?: MemoryLimits;
 }
 
 export interface TalksOptions<Answer> extends BaseOptions<TalkRequest, Answer> {
@@ -121,6 +135,13 @@ export interface Talks<Answer> {
    * Asks on one talk are taken one at a time in the order made. A failure of the grind or a wrong input keeps nothing.
    */
   ask(id: string, message: string, options?: AskOptions): Promise<Asked<Answer>>;
+  /**
+   * Changes the talk's memory by hand, as an answer's `memory_update` does (queued behind the asks made before it). Rejects with
+   * TalkNotFoundError for a talk that is not there.
+   */
+  remember(id: string, update: MemoryUpdate): Promise<MemoryChange>;
+  /** The talks whose title or turns hold every word of `query` (searchTalks over this store). */
+  search(query: string, options?: SearchOptions): Promise<TalkHit[]>;
 }
 
 function defaultAnswerText(answer: unknown): string {
@@ -163,10 +184,12 @@ export function createTalks(options: TalksOptions<unknown> | CustomTalksOptions<
     pictureMimes = TALK_PICTURE_MIMES,
     pictureOnlyText = PICTURE_ONLY_QUESTION,
     now = Date.now,
+    memoryLimits,
   } = options;
   // the overloads keep the request and the builder in step; inside, the request is whatever the builder made
   const send = options.send as (request: unknown, files: OutgoingPicture[]) => Promise<unknown>;
   const custom = options.buildRequest;
+  const readMemory = (options.readMemory ?? readMemoryUpdate) as (answer: unknown) => MemoryUpdate | undefined;
   const maxRequestBytes = 'maxRequestBytes' in options ? options.maxRequestBytes : undefined;
   // asks on one talk wait for the one before, so the turns are kept in the order they were asked
   const queues = new Map<string, Promise<unknown>>();
@@ -176,6 +199,7 @@ export function createTalks(options: TalksOptions<unknown> | CustomTalksOptions<
     const request: TalkRequest = {
       message: input.message,
       history: input.turns.map(({ role, text }) => ({ role, text })),
+      ...(isMemoryEmpty(input.memory) ? {} : { memory: input.memory }),
       ...(input.pictures.length > 0 ? { pictures: input.pictures.length } : {}),
     };
     return maxRequestBytes === undefined ? request : fitHistory(request, maxRequestBytes);
@@ -199,24 +223,39 @@ export function createTalks(options: TalksOptions<unknown> | CustomTalksOptions<
     if (files.length > maxPictures) throw new TalkInputError(`${maxPictures} pictures at most; ${files.length} would go.`);
 
     const at = now();
-    const request = build({ talk, message: text, turns: maxHistory > 0 ? talk.turns.slice(-maxHistory) : [], pictures: files });
+    const request = build({ talk, message: text, turns: maxHistory > 0 ? talk.turns.slice(-maxHistory) : [], pictures: files, memory: talk.memory });
     const answer = await send(request, files);
     const user: Turn = { role: 'user', text, ...(pictures.length > 0 ? { pictures } : {}), at };
     const reply: Turn = { role: 'assistant', text: answerText(answer), at: now() };
-    const kept = await store.append(id, [user, reply]);
-    return { answer, user, reply, talk: kept };
+    const appended = await store.append(id, [user, reply]);
+    const update = readMemory(answer);
+    const memory = applyMemoryUpdate(appended.memory, update ?? {}, memoryLimits);
+    const changed = memory.applied.length > 0;
+    return { answer, user, reply, talk: changed ? await store.setMemory(id, memory.memory) : appended, memory };
+  }
+
+  async function remember(id: string, update: MemoryUpdate): Promise<MemoryChange> {
+    const talk = await store.get(id);
+    if (!talk) throw new TalkNotFoundError(id);
+    const change = applyMemoryUpdate(talk.memory, update, memoryLimits);
+    if (change.applied.length > 0) await store.setMemory(id, change.memory);
+    return change;
+  }
+
+  function queued<T>(id: string, task: () => Promise<T>): Promise<T> {
+    const result = (queues.get(id) ?? Promise.resolve()).then(task);
+    const tail = result.catch(() => undefined);
+    queues.set(id, tail);
+    void tail.then(() => {
+      if (queues.get(id) === tail) queues.delete(id);
+    });
+    return result;
   }
 
   return {
     start: (init = {}) => store.create({ title: init.title, now: now() }),
-    ask(id, message, askOptions = {}) {
-      const result = (queues.get(id) ?? Promise.resolve()).then(() => run(id, message, askOptions));
-      const tail = result.catch(() => undefined);
-      queues.set(id, tail);
-      void tail.then(() => {
-        if (queues.get(id) === tail) queues.delete(id);
-      });
-      return result;
-    },
+    ask: (id, message, askOptions = {}) => queued(id, () => run(id, message, askOptions)),
+    remember: (id, update) => queued(id, () => remember(id, update)),
+    search: (query, searchOptions) => searchTalks(store, query, searchOptions),
   };
 }
