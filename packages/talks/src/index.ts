@@ -1,0 +1,35 @@
+// @voice-kit/talks: multi-turn conversations. A Talk of turns with roles and times, the turn loop over a grind the app injects
+// (send(request, files) -> answer), picture turns, and a store interface with an in-memory store.
+export {
+  createMemoryStore,
+  TalkNotFoundError,
+  type CreateTalk,
+  type MemoryStoreOptions,
+  type Picture,
+  type Role,
+  type Talk,
+  type TalkMemory,
+  type TalkStore,
+  type TalkSummary,
+  type Turn,
+} from './store.js';
+export {
+  createTalks,
+  dataUrlOf,
+  fitHistory,
+  isTalkPicture,
+  MAX_HISTORY_TURNS,
+  PICTURE_ONLY_QUESTION,
+  TALK_MAX_PICTURES,
+  TALK_PICTURE_MIMES,
+  TalkInputError,
+  type AskOptions,
+  type Asked,
+  type CustomTalksOptions,
+  type HistoryEntry,
+  type OutgoingPicture,
+  type RequestInput,
+  type TalkRequest,
+  type Talks,
+  type TalksOptions,
+} from './talk.js';

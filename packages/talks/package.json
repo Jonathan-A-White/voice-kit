@@ -1,0 +1,19 @@
+{
+  "name": "@voice-kit/talks",
+  "version": "0.1.0",
+  "description": "voice-kit: multi-turn conversations. A talk of turns with roles and times, the turn loop over a grind the app injects (send(request, files) answers), picture turns that are kept and sent only when asked, and a store interface with an in-memory store. No React, no DOM.",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist/**",
+    "!**/*.tsbuildinfo"
+  ]
+}
