@@ -1,6 +1,6 @@
 // engine.ts — Postern's read-aloud engine (src/services/speech.ts), lifted: reads a message or question aloud with the phone's
 // own speechSynthesis (Web Speech API). Nothing here reaches the network — the text is only ever spoken locally.
-import { languageOf, latinLang, preferredVoice } from './lang.js';
+import { languageOf, latinLang, preferredVoice, type VoiceRank } from './lang.js';
 
 export function isSupported(): boolean {
   return typeof window !== 'undefined' && 'speechSynthesis' in window;
@@ -46,6 +46,14 @@ export interface SpeakOptions {
   lang?: string;
   /** Rewrites the text before it is cut into sentences and spoken (an app's ids and markup into words); `isPausedOn` still compares the text as given. */
   prepare?: (text: string) => string;
+  /** The voice for every sentence, whatever its language (default: the phone's best voice for each sentence's language, see `rank`). Each utterance still names its own language. */
+  voice?: SpeechSynthesisVoice;
+  /** How fast it is read, 0.1 to 10 (default: the synthesiser's own 1). Applies to every sentence, and to a Resume or Restart. */
+  rate?: number;
+  /** How high it is read, 0 to 2 (default: the synthesiser's own 1). */
+  pitch?: number;
+  /** Chooses among the voices of a sentence's language, as the `rank` of `preferredVoice`; unused when `voice` is given. */
+  rank?: VoiceRank;
 }
 
 export type SpeechStatus = 'idle' | 'playing' | 'paused';
@@ -78,6 +86,11 @@ interface Reading {
   index: number;
   status: 'playing' | 'paused';
   onEnd?: () => void;
+  /** The voice, rate, pitch and voice ranking the speech was started with; set on an utterance only when given. */
+  voice?: SpeechSynthesisVoice;
+  rate?: number;
+  pitch?: number;
+  rank?: VoiceRank;
   /** What a screen that has gone wants done when this reading is over for good (it ended, was stopped or was replaced), not when it is only paused. */
   done: Array<() => void>;
 }
@@ -179,8 +192,10 @@ function play(synth: SpeechSynthesis, current: Reading): void {
       const utterance = new SpeechSynthesisUtterance(current.sentences[i]);
       const lang = languageOf(current.sentences[i], { lang: current.latin, fallback: current.textLang });
       utterance.lang = lang;
-      const voice = preferredVoice(voices, lang);
+      const voice = current.voice ?? preferredVoice(voices, lang, { rank: current.rank });
       if (voice) utterance.voice = voice;
+      if (current.rate !== undefined) utterance.rate = current.rate;
+      if (current.pitch !== undefined) utterance.pitch = current.pitch;
       const reached = (index: number) => {
         if (mine !== epoch || index <= current.index) return;
         current.index = index;
@@ -242,6 +257,10 @@ export function speak(text: string, options: SpeakOptions = {}): void {
     index: 0,
     status: 'playing',
     onEnd: options.onEnd,
+    voice: options.voice,
+    rate: options.rate,
+    pitch: options.pitch,
+    rank: options.rank,
     done: [],
   };
   publish();

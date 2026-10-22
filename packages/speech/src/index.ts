@@ -29,5 +29,7 @@ export {
   GREEK_LANG,
   HEBREW_LANG,
   type LanguageOptions,
+  type VoiceOptions,
+  type VoiceRank,
   type Script,
 } from './lang.js';

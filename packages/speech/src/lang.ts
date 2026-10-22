@@ -74,9 +74,34 @@ export function languageOf(text: string, options: LanguageOptions = {}): string 
   }
 }
 
-/** The voice for `lang`: one of exactly that tag, else one of the same language. Undefined when the phone lists none. */
-export function preferredVoice(voices: SpeechSynthesisVoice[], lang: string): SpeechSynthesisVoice | undefined {
+/** Scores a voice for `lang` (the language tag it is wanted for); the higher the score, the more it is preferred. */
+export type VoiceRank = (voice: SpeechSynthesisVoice, lang: string) => number;
+
+export interface VoiceOptions {
+  /** Chooses among the voices that match the language: the highest score wins, the first of equal scores. Default: the first match. */
+  rank?: VoiceRank;
+}
+
+/**
+ * The voice for `lang`: one of exactly that tag, else one of the same language. Undefined when the phone lists none.
+ * With a `rank`, it is applied after the language match: of the voices of exactly the tag (or, with none, of the same language)
+ * the best-ranked wins, so a ranking can prefer quality, a child-friendly voice or an app's own locale order but never a voice of another language.
+ */
+export function preferredVoice(voices: SpeechSynthesisVoice[], lang: string, options: VoiceOptions = {}): SpeechSynthesisVoice | undefined {
   const want = normaliseTag(lang);
   const language = primary(want);
-  return voices.find((voice) => normaliseTag(voice.lang) === want) ?? voices.find((voice) => primary(normaliseTag(voice.lang)) === language);
+  const exact = voices.filter((voice) => normaliseTag(voice.lang) === want);
+  const matches = exact.length > 0 ? exact : voices.filter((voice) => primary(normaliseTag(voice.lang)) === language);
+  const { rank } = options;
+  if (!rank) return matches[0];
+  let best: SpeechSynthesisVoice | undefined;
+  let bestScore = -Infinity;
+  for (const voice of matches) {
+    const score = rank(voice, lang);
+    if (best === undefined || score > bestScore) {
+      best = voice;
+      bestScore = score;
+    }
+  }
+  return best;
 }

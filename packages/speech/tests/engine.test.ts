@@ -403,6 +403,102 @@ describe('the language and voice of each utterance', () => {
   });
 });
 
+describe('voice, rate, pitch and rank of each utterance', () => {
+  const ENGLISH = 'The tutor said hello. And then goodbye.';
+  const voices = [
+    { voiceURI: 'Robot', name: 'Robot', lang: 'en-US', localService: false, default: false },
+    { voiceURI: 'Google US English', name: 'Google US English', lang: 'en-US', localService: false, default: false },
+    { voiceURI: 'Samantha', name: 'Samantha', lang: 'en-US', localService: true, default: false },
+  ];
+
+  /** Every utterance the page hands the synthesiser, so what the log does not keep (pitch) can be read. */
+  function utterances(fake: HonestSpeech): Array<{ voice: { name: string } | null; rate: number; pitch: number; lang: string }> {
+    const handed: Array<{ voice: { name: string } | null; rate: number; pitch: number; lang: string }> = [];
+    const real = fake.synth.speak.bind(fake.synth);
+    vi.spyOn(fake.synth, 'speak').mockImplementation((u) => {
+      handed.push(u);
+      real(u);
+    });
+    return handed;
+  }
+
+  beforeEach(() => {
+    vi.stubGlobal('navigator', { language: 'en' });
+  });
+
+  it('leaves rate and pitch at the synthesiser\'s own 1, and the voice at the language match, when none is given', () => {
+    install({ voices });
+    const handed = utterances(synth!);
+    speak(ENGLISH);
+    expect(handed).toHaveLength(2);
+    for (const u of handed) expect(u).toMatchObject({ rate: 1, pitch: 1, voice: { name: 'Robot' }, lang: 'en-US' });
+  });
+
+  it('gives every sentence the rate and the pitch asked for', () => {
+    install({ voices });
+    const handed = utterances(synth!);
+    speak(ENGLISH, { rate: 0.6, pitch: 1.3 });
+    expect(handed.map((u) => [u.rate, u.pitch])).toEqual([
+      [0.6, 1.3],
+      [0.6, 1.3],
+    ]);
+    expect(synth!.log.map((e) => e.rate)).toEqual([0.6, 0.6]);
+  });
+
+  it('takes the rate alone or the pitch alone, leaving the other at 1', () => {
+    install({ voices });
+    const handed = utterances(synth!);
+    speak('One sentence.', { rate: 0.8 });
+    speak('Another sentence.', { pitch: 0.5 });
+    expect(handed.map((u) => [u.rate, u.pitch])).toEqual([
+      [0.8, 1],
+      [1, 0.5],
+    ]);
+  });
+
+  it('speaks with the voice given, for every sentence, whatever the language match would pick', () => {
+    install({ voices });
+    const handed = utterances(synth!);
+    const wanted = synth!.synth.getVoices()[2] as unknown as SpeechSynthesisVoice;
+    speak(ENGLISH, { voice: wanted });
+    expect(handed.map((u) => u.voice?.name)).toEqual(['Samantha', 'Samantha']);
+  });
+
+  it('keeps the language of each sentence when a voice is given', () => {
+    install({ voices });
+    const handed = utterances(synth!);
+    speak('Καλημέρα σας.', { voice: synth!.synth.getVoices()[2] as unknown as SpeechSynthesisVoice });
+    expect(handed[0]).toMatchObject({ lang: 'el-GR', voice: { name: 'Samantha' } });
+  });
+
+  it('chooses among the voices of the language by the rank given', () => {
+    install({ voices });
+    const handed = utterances(synth!);
+    speak(ENGLISH, { rank: (v) => (v.name.startsWith('Google') ? 2 : 0) + (v.localService ? 1 : 0) });
+    expect(handed.map((u) => u.voice?.name)).toEqual(['Google US English', 'Google US English']);
+  });
+
+  it('a given voice wins over a rank', () => {
+    install({ voices });
+    const handed = utterances(synth!);
+    speak('One sentence.', { voice: synth!.synth.getVoices()[0] as unknown as SpeechSynthesisVoice, rank: (v) => (v.localService ? 1 : 0) });
+    expect(handed[0].voice?.name).toBe('Robot');
+  });
+
+  it('keeps the rate, pitch, voice and rank over a pause and a resume', () => {
+    install({ voices });
+    const handed = utterances(synth!);
+    speak(THREE, { rate: 0.7, pitch: 1.2, rank: (v) => (v.localService ? 1 : 0) });
+    pause();
+    resume();
+    const resumed = handed.slice(-2);
+    expect(resumed.map((u) => [u.rate, u.pitch, u.voice?.name])).toEqual([
+      [0.7, 1.2, 'Samantha'],
+      [0.7, 1.2, 'Samantha'],
+    ]);
+  });
+});
+
 describe('speechText: what is spoken is not what is shown', () => {
   it('drops a bare URL and keeps the punctuation after it', () => {
     expect(speechText('see https://example.com/x')).toBe('see');
