@@ -12,10 +12,11 @@ working code in [Postern](https://github.com/Jonathan-A-White/postern) by way of
   English, from its letters) and a voice for it. A React entry gives `useSpeaking(key)` and a themeable `SpeakingBar`.
   See [packages/speech](packages/speech/README.md).
 - `@voice-kit/talks`: multi-turn conversations: a talk of turns with roles and times, the turn loop over a grind the app
-  injects, picture turns, and a store interface with an in-memory store. No React, no DOM; the Composer's `useTalk`
-  drives it as it is. See [packages/talks](packages/talks/README.md).
+  injects, picture turns, memory and search, and a store interface with an in-memory store. The core has no React and no DOM;
+  the Composer's `useTalk` drives it as it is. Beside it: a Dexie store for the device and a searchable `TalkList`. See [packages/talks](packages/talks/README.md).
 - `@voice-kit/testing`: honest fakes for an app's tests, in vitest and in Playwright: a speech synthesiser and a
-  microphone (getUserMedia, MediaRecorder, SpeechRecognition) that behave like Android Chrome in time. See
+  microphone (getUserMedia, MediaRecorder, SpeechRecognition) that behave like Android Chrome in time, and a scripted grind and a
+  recording store for tests of a talk. See
   [packages/testing](packages/testing/README.md).
 
 What belongs here: the browser's speech and microphone APIs, the UI over them, and honest fakes of exactly those APIs.
@@ -141,8 +142,13 @@ In Playwright the same fakes go in as init scripts: `page.addInitScript(speechIn
 | `voice-kit/speech` | `speak`, `pause`, `resume`, `restart`, `stop`, ... | read aloud a sentence at a time, keeping the place; language and voice per utterance | `src/services/speech.ts` |
 | `voice-kit/speech/react` | `SpeakingBar`, `useSpeaking`, `useSpeech` | the one bar for anything read aloud, and the hook a speaker button reads (React) | `src/cockpit/`: `SpeakingBar.tsx`, `useSpeaking.ts` |
 | `voice-kit/speech/styles.css` | | the bar's default look | |
+| `voice-kit/talks` | `createTalks`, `createMemoryStore`, `searchTalks`, ... | multi-turn conversations over an injected grind; no React, no DOM | (new; carved from Lampas) |
+| `voice-kit/talks/dexie` | `createDexieStore` | a `TalkStore` kept on the device in IndexedDB (needs `dexie`) | Lampas `src/data/repositories/talks.ts` |
+| `voice-kit/talks/react` | `TalkList` | a searchable list of the kept talks that opens one (React) | Lampas `src/Conversations.tsx` |
+| `voice-kit/talks/styles.css` | | the list's default look | |
 | `voice-kit/testing/speech` | `installSpeech`, `speechInitScript` | TEST-ONLY honest speechSynthesis, vitest and Playwright | (new; not from Postern) |
 | `voice-kit/testing/mic` | `installMic`, `micInitScript`, `clips` | TEST-ONLY honest getUserMedia, MediaRecorder and SpeechRecognition | (new; not from Postern) |
+| `voice-kit/testing/talks` | `createFakeGrind`, `createFakeTalkStore` | TEST-ONLY a grind that answers scripted turns, a store that records | (new) |
 
 ## Credits
 

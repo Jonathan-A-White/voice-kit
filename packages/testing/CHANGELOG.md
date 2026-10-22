@@ -2,6 +2,13 @@
 
 Newest first. Breaking changes come first in a release, each with its migration in one sentence.
 
+## 0.2.0 (2026-10-22, not yet tagged)
+
+- New (mw-79en7t.31): `voice-kit/testing/talks`, also exported from the package index: `createFakeGrind(script)`, a grind for
+  `createTalks` that answers the scripted turns in order (a value, a function of the request, or an `Error` to reject with),
+  records each call, and rejects when its script is used up; and `createFakeTalkStore()`, an in-memory `TalkStore` that records
+  every call (`calls`). Additive: the speech and mic fakes are unchanged. Like the rest of the package it imports nothing.
+
 ## Moved to voice-kit (2026-10-16)
 
 - Changed (breaking): moved from bsv-kit at b8b2ba303b9397ddb83935f9bde74107903bb074, where this was @bsv-kit/testing 0.1.0 with the unreleased recorder change below. The package is now

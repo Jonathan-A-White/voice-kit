@@ -21,6 +21,7 @@ Then import the subpaths:
 | ------------------------- | ------------------------------------------------------------------ |
 | `voice-kit/testing/speech`  | `speechSynthesis`, `SpeechSynthesisUtterance`                       |
 | `voice-kit/testing/mic`     | `navigator.mediaDevices.getUserMedia`, `MediaRecorder`, `SpeechRecognition` and `webkitSpeechRecognition` |
+| `voice-kit/testing/talks`   | a grind that answers scripted turns, and a talk store that records (see below)                      |
 
 (The fake Postern backend for grist tests, `bsv-kit/testing`, did not move: it stays in
 [bsv-kit](https://github.com/Jonathan-A-White/bsv-kit) with grist.)
@@ -119,3 +120,27 @@ from their own start (Android Chrome would let only one hold the microphone).
 
 The clips are eSpeak NG's speech, resampled with FFmpeg; the Playwright smoke uses playwright-core. See the credits in the
 [root README](../../README.md#credits).
+
+## Talks
+
+For a test of an app that keeps talks with `@voice-kit/talks`: no window, no timers, plain objects.
+
+```ts
+import { createTalks } from 'voice-kit/talks';
+import { createFakeGrind, createFakeTalkStore } from 'voice-kit/testing/talks';
+
+const grind = createFakeGrind(['Grace is a gift.', (request) => `You asked: ${request.message}`, new Error('the grind is down')]);
+const store = createFakeTalkStore();
+const talks = createTalks({ store, send: grind.send });
+
+const talk = await talks.start();
+await talks.ask(talk.id, 'What is grace?'); // answered by the first scripted turn
+await talks.ask(talk.id, 'And mercy?'); // the second: a function of the request
+await expect(talks.ask(talk.id, 'Again?')).rejects.toThrow('the grind is down'); // the third rejects, and nothing is kept
+expect(grind.calls).toHaveLength(3); // every call, with its request and files
+expect(store.calls.map((c) => c.method)); // every store call, in order, with its arguments
+```
+
+A script that is used up rejects instead of inventing an answer, so a test that asks more than it scripted fails. The fake store
+behaves as the real ones do (copies out; a talk that is not there rejects), so a test can read what was kept with `store.get`.
+The fakes meet the `TalkStore` and `send` shapes by their structure, so this package still imports nothing from `@voice-kit/talks`.

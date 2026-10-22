@@ -4,9 +4,10 @@ Multi-turn conversations, for every app that talks to a model. A **talk** is a l
 `assistant`), its words, the pictures that went with it, and the time. The **turn loop** takes what he said, builds the request
 from the earlier turns, hands it to a **grind you inject** (`send(request, files) -> answer`: a model call, a mill, a fake),
 and keeps both turns in order. A **store** keeps the talks; the one here is in memory, and the `TalkStore` interface is what any
-other (IndexedDB, a server) meets.
+other (IndexedDB, a server) meets. Beside the core are two entry points that need something of the app's: a **Dexie store**
+that keeps talks on the device (`voice-kit/talks/dexie`) and a **TalkList** that shows them and opens one (`voice-kit/talks/react`).
 
-It has no framework and no dependency: no React, no DOM, nothing from the other voice-kit libraries (a test says so). It reaches no
+The core has no framework and no dependency: no React, no DOM, nothing from the other voice-kit libraries (a test says so). It reaches no
 network of its own: the grind you inject does that. The Composer's `useTalk` drives it as it is, with `onWords: (text) =>
 talks.ask(id, text)`.
 
@@ -115,8 +116,45 @@ A grind that throws, or a wrong input, keeps nothing and rejects the `ask`; the 
 for the one before, so turns asked at once are kept in the order asked. Times come from `now` (`Date.now` unless given): his turn is
 stamped when the ask starts, the answer's when it arrives.
 
+## On the device: the Dexie store
+
+`createDexieStore()` from `voice-kit/talks/dexie` is a `TalkStore` kept in IndexedDB through Dexie, so talks outlive the page. The
+app installs `dexie` (version 4 or later; an optional peer of this package). It has a database of its own with a row per talk and a
+row per turn, so a list reads no turns; pictures and memory are kept with the talk and go when it goes. It passes the same contract
+tests as the in-memory store.
+
+```ts
+import { createTalks } from 'voice-kit/talks';
+import { createDexieStore } from 'voice-kit/talks/dexie';
+
+const store = createDexieStore({ name: 'my-app-talks' }); // 'voice-kit-talks' unless given
+const talks = createTalks({ store, send: callMyGrind });
+// ... the talks are still there after a reload; store.close() closes the connection
+```
+
+In a test, `fake-indexeddb` stands in for the browser: `createDexieStore({ name, indexedDB, IDBKeyRange })` with both from
+`'fake-indexeddb'` (or `import 'fake-indexeddb/auto'` before the first store is made).
+
+## On screen: TalkList
+
+`TalkList` from `voice-kit/talks/react` lists the talks in a store, the one added to last first, with a search field over their
+titles and turns (`searchTalks`, so a found talk shows the line that matched). A tap calls `onOpen` with the talk's id: what opening
+looks like (a sheet, a route, a Composer over the talk) is the app's.
+
+```tsx
+import { TalkList } from 'voice-kit/talks/react';
+import 'voice-kit/talks/styles.css'; // optional: or style the bk-talklist__* classes yourself
+
+<TalkList store={store} onOpen={(id) => openTalk(id)} />;
+```
+
+Props: `store`, `onOpen(id)`; `limit`; `refreshKey` (change it to read the store again after a talk is added to, renamed or
+removed); `labels` (the words it shows, in the app's language: `placeholder`, `searchLabel`, `listLabel`, `untitled`, `empty`,
+`noMatches`, `failed`, `turns(count)`); `formatTime(ms)`; `className`. The theme is the `--bk-talklist-*` custom properties named at
+the top of `styles.css`.
+
 ## The store
 
 `TalkStore`: `create`, `get`, `list` (summaries, last added to first), `append`, `rename`, `setMemory`, `remove`. Every method is
-async and what comes out is a copy. `tests/store.test.ts` holds a contract any store must keep; the in-memory store passes it.
+async and what comes out is a copy. `tests/storeContract.ts` holds a contract any store must keep; the in-memory store and the Dexie store pass it.
 A talk's `memory` (`{ facts, summary }`) is kept with it (`setMemory`) and goes when it goes.

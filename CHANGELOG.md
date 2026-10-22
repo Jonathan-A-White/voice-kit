@@ -6,7 +6,19 @@ Each library keeps its own changelog; this one records the repo's releases and p
 
 - [@voice-kit/composer](packages/composer/CHANGELOG.md)
 - [@voice-kit/speech](packages/speech/CHANGELOG.md)
+- [@voice-kit/talks](packages/talks/CHANGELOG.md)
 - [@voice-kit/testing](packages/testing/CHANGELOG.md)
+
+## v0.9.0 (2026-10-22)
+
+- @voice-kit/talks 0.2.0 (mw-79en7t.31): talks kept on the device and shown on screen. `voice-kit/talks/dexie` (`createDexieStore`, a
+  `TalkStore` in IndexedDB through Dexie, held to the same contract as the in-memory store), `voice-kit/talks/react` (`TalkList`, a
+  searchable list that opens a talk) and `voice-kit/talks/styles.css`. The core `voice-kit/talks` still imports nothing. `dexie` is
+  a new optional peer. See [its changelog](packages/talks/CHANGELOG.md).
+- @voice-kit/testing 0.2.0 (mw-79en7t.31): `voice-kit/testing/talks` (also exported from the package index): `createFakeGrind`, a grind
+  that answers scripted turns, and `createFakeTalkStore`, an in-memory store that records every call. Additive. See
+  [its changelog](packages/testing/CHANGELOG.md).
+- The consumer smoke covers the new entry points (the exports map now has twelve).
 
 ## v0.8.0 (2026-10-21)
 
