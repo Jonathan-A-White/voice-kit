@@ -9,5 +9,11 @@ Newest first. Breaking changes come first in a release, each with its migration 
   kept with the turn and sent once, again only when `ask` names the turn in `resend`; `fitHistory`; the `TalkStore` interface and
   `createMemoryStore()`. Carved from Lampas's `src/data/repositories/talks.ts`, `src/services/talk.ts` and `src/talk/pictures.ts`,
   without the Bible and Greek parts. It imports nothing, so it works with the Composer's `useTalk` as it is.
-- Not yet here (next steps of the library): the memory of a talk folded into each request, search over titles and turns, the Dexie
-  store, a list to open a talk from, and the fakes in `@voice-kit/testing`.
+- New (mw-79en7t.30): memory. A talk keeps facts and a rolling summary beside its turns, and the default request carries them as
+  `memory` (only when there is something), so a thing said at turn 1 is still in the request at turn 30. An answer's `memory_update`
+  (`{ add?, remove?, summary? }`) is applied with limits (40 facts, 300 and 1500 characters) and `talks.remember(id, update)` does the
+  same by hand; `ask` returns what was applied and refused. `readMemory` and `memoryLimits` options. Carved from Lampas's
+  `src/talk/memoryUpdate.ts` and `src/data/repositories/memory.ts` without the Bible naming scheme, the index and the Greek offer.
+- New (mw-79en7t.30): `searchTalks(store, query)` and `talks.search(query)`: the talks with every word of the query in a title or
+  a turn, with where and a snippet; case and accents ignored.
+- Not yet here (next steps of the library): the Dexie store, a list to open a talk from, and the fakes in `@voice-kit/testing`.
