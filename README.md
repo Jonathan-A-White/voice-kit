@@ -11,6 +11,9 @@ working code in [Postern](https://github.com/Jonathan-A-White/postern) by way of
   keep the place, a hidden page or a left screen pauses it, and every utterance names its language (Greek, Hebrew or
   English, from its letters) and a voice for it. A React entry gives `useSpeaking(key)` and a themeable `SpeakingBar`.
   See [packages/speech](packages/speech/README.md).
+- `@voice-kit/talks`: multi-turn conversations: a talk of turns with roles and times, the turn loop over a grind the app
+  injects, picture turns, and a store interface with an in-memory store. No React, no DOM; the Composer's `useTalk`
+  drives it as it is. See [packages/talks](packages/talks/README.md).
 - `@voice-kit/testing`: honest fakes for an app's tests, in vitest and in Playwright: a speech synthesiser and a
   microphone (getUserMedia, MediaRecorder, SpeechRecognition) that behave like Android Chrome in time. See
   [packages/testing](packages/testing/README.md).
