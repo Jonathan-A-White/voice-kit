@@ -5,6 +5,8 @@
 //   - 'voice-kit/speech' speaks sentence by sentence through the honest fake, and 'voice-kit/speech/react' renders its
 //     SpeakingBar with the same React; packages/speech/dist and its styles.css are packed;
 //   - 'voice-kit/talks' keeps a talk through an injected grind, with a picture turn, in plain node (no React); packages/talks/dist is packed;
+//     'voice-kit/talks/dexie' keeps it in IndexedDB (fake-indexeddb) and 'voice-kit/talks/react' renders TalkList with the app's React;
+//   - 'voice-kit/testing/talks' drives that loop with a scripted grind and a recording store;
 //   - 'voice-kit/testing/speech' and 'voice-kit/testing/mic' run in the vitest the app installs (fake timers), by import
 //     and by init script.
 // The "fresh clone" is the working tree as it stands (tracked and untracked files, minus what git ignores),
@@ -46,7 +48,7 @@ try {
 
   // The exports map names the entry points (and package.json), nothing else: no deep imports.
   const entries = Object.keys(JSON.parse(readFileSync(join(installed, 'package.json'), 'utf-8')).exports).sort();
-  const expected = ['./composer', './composer/styles.css', './package.json', './speech', './speech/react', './speech/styles.css', './talks', './testing/mic', './testing/speech'];
+  const expected = ['./composer', './composer/styles.css', './package.json', './speech', './speech/react', './speech/styles.css', './talks', './talks/dexie', './talks/react', './talks/styles.css', './testing/mic', './testing/speech', './testing/talks'];
   if (JSON.stringify(entries) !== JSON.stringify(expected)) throw new Error('exports: ' + entries.join(', '));
   console.log('the exports map names the entry points');
 
@@ -156,9 +158,71 @@ console.log('voice-kit/talks keeps a talk');
   );
   console.log(run('node', ['talks.mjs'], app).trim());
 
+  // 4c. 'voice-kit/talks/dexie' (the app brings dexie) keeps the same talk in IndexedDB and reads it back after a reopen;
+  // 'voice-kit/talks/react' renders TalkList with the app's React; the stylesheet is packed; neither reaches another voice-kit library.
+  for (const file of ['dexieStore.js', 'TalkList.js', 'search.js', 'styles.css']) {
+    if (!existsSync(join(installed, 'packages/talks/dist', file))) throw new Error(`packages/talks/dist/${file} is not packed`);
+  }
+  standsAlone('packages/talks/dist/dexieStore.js');
+  standsAlone('packages/talks/dist/TalkList.js');
+  run('npm', ['install', '--no-audit', '--no-fund', 'dexie@4', 'fake-indexeddb@6'], app, { timeout: 480_000 });
+  writeFileSync(
+    join(app, 'talks-device.mjs'),
+    `
+import { createElement } from 'react';
+import { renderToString } from 'react-dom/server';
+import { createRequire } from 'node:module';
+import { existsSync } from 'node:fs';
+import { IDBKeyRange, indexedDB } from 'fake-indexeddb';
+import { createTalks } from 'voice-kit/talks';
+import { createDexieStore } from 'voice-kit/talks/dexie';
+import { TalkList } from 'voice-kit/talks/react';
+
+const open = () => createDexieStore({ name: 'smoke', indexedDB, IDBKeyRange });
+const first = open();
+const talks = createTalks({ store: first, send: async (request) => 'answer to ' + request.message });
+const talk = await talks.start({ title: 'On the device' });
+await talks.ask(talk.id, 'is this kept');
+first.close();
+const kept = await open().get(talk.id);
+if (kept.turns.map((t) => t.text).join('|') !== 'is this kept|answer to is this kept') throw new Error('turns: ' + JSON.stringify(kept.turns));
+const html = renderToString(createElement(TalkList, { store: first, onOpen: () => {} }));
+if (!html.includes('bk-talklist') || !html.includes('aria-label="Search conversations"')) throw new Error('talk list html: ' + html);
+const css = createRequire(import.meta.url).resolve('voice-kit/talks/styles.css');
+if (!existsSync(css)) throw new Error('styles.css is not packed');
+console.log('voice-kit/talks/dexie keeps a talk and voice-kit/talks/react renders');
+process.exit(0);
+`,
+  );
+  console.log(run('node', ['talks-device.mjs'], app).trim());
+
+  // 4d. 'voice-kit/testing/talks': a scripted grind and a recording store drive the real loop.
+  writeFileSync(
+    join(app, 'talks-fakes.mjs'),
+    `
+import { createTalks } from 'voice-kit/talks';
+import { createFakeGrind, createFakeTalkStore } from 'voice-kit/testing/talks';
+
+const grind = createFakeGrind(['first answer']);
+const store = createFakeTalkStore();
+const talks = createTalks({ store, send: grind.send });
+const talk = await talks.start();
+await talks.ask(talk.id, 'hello');
+if (grind.calls.length !== 1 || !store.calls.some((c) => c.method === 'append')) throw new Error('not recorded');
+try {
+  await talks.ask(talk.id, 'again');
+  throw new Error('a used-up script answered');
+} catch (e) {
+  if (!/script is used up/.test(String(e.message))) throw e;
+}
+console.log('voice-kit/testing/talks drives a talk');
+`,
+  );
+  console.log(run('node', ['talks-fakes.mjs'], app).trim());
+
   // 5. 'voice-kit/testing/speech' and 'voice-kit/testing/mic' in the vitest the app installs: packed (packages/testing/dist),
   // resolved by the exports map, and working under fake timers, by import and by the init-script strings for Playwright.
-  for (const file of ['index.js', 'speech.js', 'mic.js', 'clips.js']) {
+  for (const file of ['index.js', 'speech.js', 'mic.js', 'clips.js', 'talks.js']) {
     if (!existsSync(join(installed, 'packages/testing/dist', file))) throw new Error(`packages/testing/dist/${file} is not packed`);
   }
   // --legacy-peer-deps: npm 10.8 (the runner's) crashes ('Cannot read properties of null (reading edgesOut)') resolving vitest's
