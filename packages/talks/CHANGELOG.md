@@ -2,6 +2,14 @@
 
 Newest first. Breaking changes come first in a release, each with its migration in one sentence.
 
+## 0.6.0 (2026-10-23, not yet tagged)
+
+- New (mw-o480n1.1): an app's own cutting steps. `fitRequest(request, steps, { maxBytes, extraBytes?, sizeOf? })` runs an ordered list
+  of `Cut`s (`(request) => request | null`), each taken again while the request is over budget until it returns `null`, and stops as
+  soon as the request fits; `extraBytes` weighs with the request (a header), `sizeOf` replaces `jsonBytes`. `fitHistory` is now
+  `fitRequest(request, [clipLongAnswers, dropOldestTurn], { maxBytes })` and behaves as before. Also exported: `clipLongAnswers`,
+  `dropOldestTurn`, `clipText`, `jsonBytes`, `CLIPPED_CHARS` (240), `CLIP_MARK` and the types `Cut` and `FitBudget`. Additive.
+
 ## 0.5.0 (2026-10-23, not yet tagged)
 
 - New (mw-t3xu9a.3): `voice-kit/talks/grind` (`@voice-kit/talks/grind`), the grind side of the tutor client, in plain node with no

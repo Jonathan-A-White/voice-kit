@@ -9,6 +9,13 @@ Each library keeps its own changelog; this one records the repo's releases and p
 - [@voice-kit/talks](packages/talks/CHANGELOG.md)
 - [@voice-kit/testing](packages/testing/CHANGELOG.md)
 
+## v0.14.0 (2026-10-23)
+
+- @voice-kit/talks 0.6.0 (mw-o480n1.1): an app's own cutting steps in `fitHistory`: `fitRequest(request, steps, { maxBytes, extraBytes?,
+  sizeOf? })` runs an ordered list of cuts, each repeated while the request is over budget until it has nothing left to cut; the kit's
+  `fitHistory` is two such steps and behaves as before. Also `clipLongAnswers`, `dropOldestTurn`, `clipText`, `jsonBytes`,
+  `CLIPPED_CHARS` and `CLIP_MARK`. Additive. See [its changelog](packages/talks/CHANGELOG.md).
+
 ## v0.13.0 (2026-10-23)
 
 - @voice-kit/composer 0.8.0 (mw-fu7dqf.3): `strictLang`, a hold that hears one language or nothing (never en-US, never the browser's

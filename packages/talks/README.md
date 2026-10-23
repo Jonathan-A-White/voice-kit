@@ -56,6 +56,37 @@ The default request is `{ message, history, pictures? }`: `history` is the last 
 oldest first, and `pictures` is there only when files go with this message: how many. Give `maxRequestBytes` and the history is
 cut to fit (`fitHistory`: the oldest long answer is clipped, then the oldest turn dropped; the message never).
 
+### Fitting a request to a budget
+
+`fitHistory` is two cuts over a small engine you can use for your own request. A `Cut<R>` is `(request) => R | null`: the request
+with one thing less, or `null` when the cut has nothing more to take. `fitRequest(request, steps, { maxBytes, extraBytes?, sizeOf? })`
+runs the cuts in the order given; each is taken again and again while the request is over budget, until it returns `null`, and then
+the next one is tried. It stops as soon as the request fits; a request that fits comes back as given, and when every cut is spent the
+last request stands (nothing throws). `extraBytes` is what travels beside the request and weighs with it, such as a header; `sizeOf`
+is `jsonBytes` (the UTF-8 length of the JSON) unless given.
+
+```ts
+import { clipText, fitRequest, type Cut } from '@voice-kit/talks';
+
+interface Ask { message: string; verses: string[]; history: { role: string; text: string }[]; notes: string[] }
+
+const dropFarthestVerse: Cut<Ask> = (r) => (r.verses.length > 0 ? { ...r, verses: r.verses.slice(0, -1) } : null);
+const clipHistory: Cut<Ask> = (r) => {
+  const at = r.history.findIndex((t) => t.text.length > 240);
+  return at < 0 ? null : { ...r, history: r.history.map((t, i) => (i === at ? { ...t, text: clipText(t.text, 240) } : t)) };
+};
+const dropOlderTurn: Cut<Ask> = (r) => (r.history.length > 0 ? { ...r, history: r.history.slice(1) } : null);
+const dropNote: Cut<Ask> = (r) => (r.notes.length > 0 ? { ...r, notes: r.notes.slice(1) } : null);
+
+// the app's own cuts in its own order; the header weighs with the request
+const fitted = fitRequest(ask, [clipHistory, dropFarthestVerse, dropOlderTurn, dropNote], { maxBytes: 12_000, extraBytes: header.length });
+```
+
+The kit's own two cuts are exported for the default request: `clipLongAnswers` (the oldest assistant answer longer than
+`CLIPPED_CHARS`, 240, clipped with `CLIP_MARK`, `…`) and `dropOldestTurn`; `fitHistory(request, n)` is
+`fitRequest(request, [clipLongAnswers, dropOldestTurn], { maxBytes: n })`. `clipText(text, max, mark?)` and `jsonBytes(value)` are
+exported too.
+
 For a grind with its own shape, give `buildRequest({ talk, message, turns, pictures }) -> request` and `answerText(answer) ->
 string`; `send` is then typed by what you build and what it answers.
 
