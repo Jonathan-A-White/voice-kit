@@ -16,6 +16,10 @@
   font-size: var(--bk-talklist-font-size, 1rem);
 }
 
+.bk-talklist__searchwrap {
+  display: block;
+}
+
 .bk-talklist__search {
   box-sizing: border-box;
   width: 100%;

@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { createMemoryStore, type TalkStore } from '../src/index.js';
-import { TalkList } from '../src/TalkList.js';
+import { createMemoryStore, type TalkReader, type TalkStore } from '../src/index.js';
+import { TalkList, type TalkListRow } from '../src/TalkList.js';
 
 afterEach(cleanup);
 
@@ -72,5 +72,141 @@ describe('TalkList', () => {
     await store.create({ title: 'Brand new', now: 99 });
     rerender(<TalkList store={store} onOpen={() => {}} refreshKey={2} />);
     expect(await screen.findByText('Brand new')).toBeTruthy();
+  });
+
+  it('draws the app\'s own row through renderRow; its open calls onOpen with that talk\'s id once', async () => {
+    const { store, ids } = await seeded();
+    const onOpen = vi.fn();
+    render(
+      <TalkList
+        store={store}
+        onOpen={onOpen}
+        renderRow={(row, open) => (
+          <button type="button" data-mine={row.id} onClick={open}>
+            {row.summary.turnCount} / {row.line}
+          </button>
+        )}
+      />,
+    );
+    await screen.findAllByRole('listitem');
+    const mine = document.querySelectorAll('[data-mine]');
+    expect(mine).toHaveLength(3);
+    expect(document.querySelector('.bk-talklist__row')).toBeNull();
+    fireEvent.click(document.querySelector(`[data-mine="${ids[0]}"]`)!);
+    expect(onOpen).toHaveBeenCalledExactlyOnceWith(ids[0]);
+    expect(document.querySelector(`[data-mine="${ids[0]}"]`)!.textContent).toBe('2 / What is adoption in this chapter?');
+  });
+
+  it('hides the talks filter refuses, and says the list is empty when every one is hidden', async () => {
+    const { store } = await seeded();
+    const { unmount } = render(<TalkList store={store} onOpen={() => {}} filter={(row) => row.title !== 'Grace'} />);
+    await screen.findAllByRole('listitem');
+    expect(screen.getAllByRole('listitem')).toHaveLength(2);
+    expect(screen.queryByText('Grace')).toBeNull();
+    unmount();
+    render(<TalkList store={store} onOpen={() => {}} filter={() => false} />);
+    expect(await screen.findByText(/No conversations yet/)).toBeTruthy();
+    expect(screen.queryAllByRole('listitem')).toHaveLength(0);
+  });
+
+  it('draws the app\'s note through renderNote, with the kit\'s text, for empty and noMatches', async () => {
+    const { store } = await seeded();
+    const renderNote = vi.fn((kind: string, text: string) => (
+      <div data-note={kind}>{text}</div>
+    ));
+    const { unmount } = render(<TalkList store={createMemoryStore()} onOpen={() => {}} renderNote={renderNote} />);
+    const empty = await waitFor(() => {
+      const el = document.querySelector('[data-note="empty"]');
+      expect(el).toBeTruthy();
+      return el!;
+    });
+    expect(empty.textContent).toMatch(/No conversations yet/);
+    expect(document.querySelector('p.bk-talklist__note')).toBeNull();
+    unmount();
+    render(<TalkList store={store} onOpen={() => {}} renderNote={renderNote} />);
+    await screen.findAllByRole('listitem');
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'zebra' } });
+    const none = await waitFor(() => {
+      const el = document.querySelector('[data-note="noMatches"]');
+      expect(el).toBeTruthy();
+      return el!;
+    });
+    expect(none.textContent).toMatch(/No conversation has those words/);
+  });
+
+  it('draws the app\'s note for a store that could not be read', async () => {
+    const broken: TalkReader = { list: () => Promise.reject(new Error('no')), get: async () => undefined };
+    render(<TalkList store={broken} onOpen={() => {}} renderNote={(kind, text) => <div data-note={kind}>{text}</div>} />);
+    const el = await waitFor(() => {
+      const found = document.querySelector('[data-note="failed"]');
+      expect(found).toBeTruthy();
+      return found!;
+    });
+    expect(el.textContent).toBe('The conversations could not be read.');
+  });
+
+  it('passes search options to searchTalks: the custom snippet is the row\'s line and row.hit is the hit', async () => {
+    const { store, ids } = await seeded();
+    const seen: TalkListRow<Record<string, unknown>>[] = [];
+    render(
+      <TalkList
+        store={store}
+        onOpen={() => {}}
+        search={{ snippet: (text) => `«${text.length}»` }}
+        renderRow={(row, open) => {
+          seen.push(row);
+          return (
+            <button type="button" data-mine={row.id} onClick={open}>
+              {row.line}
+            </button>
+          );
+        }}
+      />,
+    );
+    await screen.findAllByRole('listitem');
+    // not searching: no hit, the line is the first text
+    expect(seen.every((r) => r.hit === undefined)).toBe(true);
+    seen.length = 0;
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'child of god' } });
+    await waitFor(() => expect(screen.getAllByRole('listitem')).toHaveLength(1));
+    const row = seen[seen.length - 1];
+    expect(row.id).toBe(ids[0]);
+    expect(row.line).toBe('«32»');
+    expect(row.hit?.id).toBe(ids[0]);
+    expect(row.hit?.matches.find((m) => m.in === 'turn')?.snippet).toBe('«32»');
+    expect(row.summary.id).toBe(ids[0]);
+    expect(row.summary.turnCount).toBe(2);
+  });
+
+  it('adds classNames beside the bk-talklist classes, and wraps the search field', async () => {
+    const { store } = await seeded();
+    const { container } = render(
+      <TalkList
+        store={store}
+        onOpen={() => {}}
+        classNames={{ root: 'r', searchWrap: 'w', search: 's', list: 'l', item: 'i', row: 'o', note: 'n' }}
+      />,
+    );
+    await screen.findAllByRole('listitem');
+    const root = container.firstElementChild!;
+    expect(root.className).toBe('bk-talklist r');
+    const wrap = root.querySelector('.bk-talklist__searchwrap')!;
+    expect(wrap.className).toBe('bk-talklist__searchwrap w');
+    expect(wrap.querySelector('input')!.className).toBe('bk-talklist__search s');
+    expect(root.querySelector('ul')!.className).toBe('bk-talklist__list l');
+    expect(root.querySelector('li')!.className).toBe('bk-talklist__item i');
+    expect(root.querySelector('li > button')!.className).toBe('bk-talklist__row o');
+    fireEvent.change(wrap.querySelector('input')!, { target: { value: 'zebra' } });
+    await waitFor(() => expect(root.querySelector('p')!.className).toBe('bk-talklist__note n'));
+  });
+
+  it('renders a reader that has only list and get', async () => {
+    const { store, ids } = await seeded();
+    const reader: TalkReader = { list: (o) => store.list(o), get: (id) => store.get(id) };
+    render(<TalkList store={reader} onOpen={() => {}} />);
+    expect(await screen.findAllByRole('listitem')).toHaveLength(3);
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'firstfruits' } });
+    await waitFor(() => expect(screen.getAllByRole('listitem')).toHaveLength(1));
+    expect(ids).toHaveLength(3);
   });
 });
