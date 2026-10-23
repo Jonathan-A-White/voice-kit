@@ -9,6 +9,13 @@ Each library keeps its own changelog; this one records the repo's releases and p
 - [@voice-kit/talks](packages/talks/CHANGELOG.md)
 - [@voice-kit/testing](packages/testing/CHANGELOG.md)
 
+## v0.16.0 (2026-10-23)
+
+- @voice-kit/talks 0.8.0 and @voice-kit/testing 0.4.0 (mw-o480n1.3): app fields on a turn: `Turn<F>.fields?` and `TalkSummary<F>.fields?`,
+  kept by copy by the in-memory store, the Dexie store (still schema version 2) and the fake of `@voice-kit/testing`; `TalkReader<F>`
+  (`list` and `get` only) is what `TalkList` and `searchTalks` read through. The type argument defaults, so an app that gives no fields
+  is unchanged. Additive. See [talks](packages/talks/CHANGELOG.md) and [testing](packages/testing/CHANGELOG.md).
+
 ## v0.15.0 (2026-10-23)
 
 - @voice-kit/talks 0.7.0 (mw-o480n1.2): notes an app keeps by name: `applyNoteUpdates` over an app's `NoteStore` (`nameOf`, `append`,

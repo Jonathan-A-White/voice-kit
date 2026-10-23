@@ -2,6 +2,19 @@
 
 Newest first. Breaking changes come first in a release, each with its migration in one sentence.
 
+## 0.8.0 (2026-10-23, not yet tagged)
+
+- New (mw-o480n1.3): app fields on a turn. `Turn<F>` gains `fields?: F` (what the app keeps with a turn beyond the kit's own; the kit
+  reads nothing in it), `TalkSummary<F>` gains `fields?: F` (the app's own summary of a talk: a store of this library never fills it, a
+  reader an app writes over its own tables may), and `Talk<F>`, `TalkStore<F>`, `createMemoryStore<F>()` and `createDexieStore<F>()`
+  carry the type. `F` defaults to `Record<string, unknown>`, so an app that gives no fields writes the types as it always did. The
+  in-memory and Dexie stores keep a turn's fields by copy (a structured clone where there is one, else a JSON round trip), on `append`
+  and on `get`; a turn kept without fields reads back without the key. Dexie keeps them in the turn's row with no index, so the schema
+  stays at version 2 and a database made before reads as it did.
+- New: `TalkReader<F>`, `Pick<TalkStore<F>, 'list' | 'get'>`: what a list and a search read through. `searchTalks` and `TalkList` now
+  take one (any `TalkStore` is one), so an app whose talks live in its own tables gives a reader without pretending to create or rename.
+  Additive.
+
 ## 0.7.0 (2026-10-23, not yet tagged)
 
 - New (mw-o480n1.2): notes an app keeps by name, beside the per-talk memory (which is unchanged). `applyNoteUpdates(updates, notes,

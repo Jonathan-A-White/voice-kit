@@ -143,4 +143,6 @@ expect(store.calls.map((c) => c.method)); // every store call, in order, with it
 
 A script that is used up rejects instead of inventing an answer, so a test that asks more than it scripted fails. The fake store
 behaves as the real ones do (copies out; a talk that is not there rejects), so a test can read what was kept with `store.get`.
+The fake store keeps a turn's `fields` (what an app keeps with a turn: `@voice-kit/talks` 0.8.0) by copy, as the real stores do, and
+`createFakeTalkStore<Mine>()` types them.
 The fakes meet the `TalkStore` and `send` shapes by their structure, so this package still imports nothing from `@voice-kit/talks`.

@@ -2,6 +2,12 @@
 
 Newest first. Breaking changes come first in a release, each with its migration in one sentence.
 
+## 0.4.0 (2026-10-23, not yet tagged)
+
+- New (mw-o480n1.3): the fake talk store keeps a turn's `fields` (what an app keeps with a turn) by copy, as the in-memory and Dexie
+  stores of `@voice-kit/talks` 0.8.0 do; `FakeTurn<F>`, `FakeTalk<F>`, `FakeTalkSummary<F>`, `FakeTalkStore<F>` and
+  `createFakeTalkStore<F>()` carry the type, `F` defaulting to `Record<string, unknown>`. Additive.
+
 ## 0.3.1 (2026-10-23, not yet tagged)
 
 - Changed (mw-t3xu9a.2): the fake talk store keeps the tutor record's new kinds, `'turn'` and `'weights'` (with `names`), for

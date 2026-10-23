@@ -387,3 +387,24 @@ async and what comes out is a copy. `TutorStore`, which the tutor client needs b
 names)`, `note(records)`, `record(screen?)`. `tests/storeContract.ts` holds a contract any store must keep; the in-memory store, the
 Dexie store and the fake of `voice-kit/testing/talks` pass it, and all three are both.
 A talk's `memory` (`{ facts, summary }`) is kept with it (`setMemory`) and goes when it goes.
+
+### App fields on a turn
+
+A turn can carry what the app keeps with it beyond the kit's own: `Turn<F>.fields?`. The kit reads nothing in it; every store keeps it by
+copy (a structured clone where there is one, else a JSON round trip), so it must be plain data, and a turn kept without fields reads back
+without the key. `F` defaults to `Record<string, unknown>`, so an app that gives none writes `Turn`, `TalkStore` and the rest as before.
+
+```ts
+interface Mine { cleanQ?: string; links?: string[] }
+const store: TalkStore<Mine> = createMemoryStore<Mine>(); // createDexieStore<Mine>() likewise: fields sit in the turn's row, schema still version 2
+await store.append(id, [{ role: 'user', text: 'What is grace?', at: Date.now(), fields: { cleanQ: 'grace' } }]);
+(await store.get(id))!.turns[0].fields; // { cleanQ: 'grace' }
+```
+
+`TalkSummary<F>.fields?` is the app's own summary of a talk (what its list row shows beyond the kit's); a store of this library never
+fills it, but a reader an app writes may.
+
+### TalkReader
+
+`TalkReader<F>` is `Pick<TalkStore<F>, 'list' | 'get'>`: what `searchTalks` and `TalkList` read through. An app whose talks live in its
+own tables gives one without pretending to create, rename or remove; any `TalkStore` is already one.
