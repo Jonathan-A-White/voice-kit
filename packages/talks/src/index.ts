@@ -67,3 +67,18 @@ export {
   type Registry,
   type RegistryInit,
 } from './registry.js';
+export {
+  createTutorClient,
+  TUTOR_MAX_ROUNDS,
+  type Done,
+  type Pending,
+  type Taken,
+  type TutorAnswerFields,
+  type TutorAsked,
+  type TutorClient,
+  type TutorClientOptions,
+  type TutorFields,
+  type TutorRequest,
+  type TutorTalksOptions,
+  type Went,
+} from './tutorClient.js';
