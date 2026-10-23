@@ -243,6 +243,40 @@ the ones that were asked back often lately. No model is involved; the whole of i
 
 A record from before 0.4.0 has no `turn` lines, so its screens count all their ask-backs until they have turns of their own.
 
+## The grind side
+
+The tutor client speaks one protocol with every app (the request's `facts` and `catalogue`, the answer's `asks`, `do`, `go`, `misses`
+and `said`), so the words that teach it to the model live once, here, and each app's grind includes them. `voice-kit/talks/grind`
+gives three things and imports nothing, so a Node script (the app's grind build) can use it:
+
+- `instructionsPart`: markdown, under 6,000 bytes (`INSTRUCTIONS_MAX_BYTES`), to concatenate into the grind's instructions. It teaches
+  the catalogue's format (`{ name, is, kind?, core?, tell?, args? }`, and that a missing `tell` only means the request was cut), when
+  to ask back rather than guess (once, for everything it needs, only a `fact` of the catalogue), that `do` and `go` go only through
+  the catalogue with the args as described, what `free`, `undoable` and `confirm` do, a miss when something is wanted that the
+  catalogue lacks (never an invented name), and one line in `said` on what it did.
+- `answerFragment`: a JSON schema (draft 2020-12) of `asks`, `do`, `go`, `misses` and `said`, all optional, a `do` or a `go` needing
+  its `name`. Merge its `properties` into the app's answer schema; the app's own fields (`answer`, its words) stay its own.
+- `answerExamples`: one answer of each kind (`asks`, `doAndGo`, `miss`, `sayOnly`), for the grind's examples and for a smoke test;
+  each validates against the fragment and the client carries each out as written.
+
+```ts
+import { answerExamples, answerFragment, instructionsPart } from 'voice-kit/talks/grind';
+
+// in the app's grind build (a Node script)
+const grind = {
+  instructions: [myInstructions, instructionsPart].join('\n\n'),
+  answerSchema: {
+    ...mySchema,
+    properties: { ...mySchema.properties, ...answerFragment.properties },
+  },
+  examples: [{ input: myRequestExample, answer: { answer: 'Done.', ...answerExamples.doAndGo } }],
+};
+```
+
+The same text and JSON are in the package as plain files, `grind/instructions.md` and `grind/answer.fragment.json`, for a build
+that reads files (a test holds them equal to the exports). Both describe the protocol as the client carries it out: if the client's
+fields change, they change with it, in the same release.
+
 ## On the device: the Dexie store
 
 `createDexieStore()` from `voice-kit/talks/dexie` is a `TalkStore` kept in IndexedDB through Dexie, so talks outlive the page. The

@@ -145,6 +145,7 @@ In Playwright the same fakes go in as init scripts: `page.addInitScript(speechIn
 | `voice-kit/talks` | `createTalks`, `createMemoryStore`, `searchTalks`, `defineRegistry`, `createTutorClient`, ... | multi-turn conversations over an injected grind; no React, no DOM | (new; carved from Lampas) |
 | `voice-kit/talks/dexie` | `createDexieStore` | a `TalkStore` kept on the device in IndexedDB (needs `dexie`) | Lampas `src/data/repositories/talks.ts` |
 | `voice-kit/talks/react` | `TalkList` | a searchable list of the kept talks that opens one (React) | Lampas `src/Conversations.tsx` |
+| `voice-kit/talks/grind` | `instructionsPart`, `answerFragment`, `answerExamples` | the grind side of the tutor client: the words and the answer schema fragment an app's grind includes (plain node) | (new) |
 | `voice-kit/talks/styles.css` | | the list's default look | |
 | `voice-kit/testing/speech` | `installSpeech`, `speechInitScript` | TEST-ONLY honest speechSynthesis, vitest and Playwright | (new; not from Postern) |
 | `voice-kit/testing/mic` | `installMic`, `micInitScript`, `clips` | TEST-ONLY honest getUserMedia, MediaRecorder and SpeechRecognition | (new; not from Postern) |

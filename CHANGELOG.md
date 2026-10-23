@@ -9,6 +9,12 @@ Each library keeps its own changelog; this one records the repo's releases and p
 - [@voice-kit/talks](packages/talks/CHANGELOG.md)
 - [@voice-kit/testing](packages/testing/CHANGELOG.md)
 
+## v0.12.0 (2026-10-23)
+
+- @voice-kit/talks 0.5.0 (mw-t3xu9a.3): the grind side of the tutor client, `voice-kit/talks/grind`: the instructions part that teaches
+  the protocol (under 6,000 bytes), the answer schema fragment for `asks`, `do`, `go`, `misses` and `said`, and an example answer of
+  each kind; the plain files ship too. Additive. See [its changelog](packages/talks/CHANGELOG.md).
+
 ## v0.11.0 (2026-10-23)
 
 - @voice-kit/talks 0.4.0 (mw-t3xu9a.2): the tutor client learns what to carry up front, by counting. A screen's up-front list is the

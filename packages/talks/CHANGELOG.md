@@ -2,6 +2,14 @@
 
 Newest first. Breaking changes come first in a release, each with its migration in one sentence.
 
+## 0.5.0 (2026-10-23, not yet tagged)
+
+- New (mw-t3xu9a.3): `voice-kit/talks/grind` (`@voice-kit/talks/grind`), the grind side of the tutor client, in plain node with no
+  import. `instructionsPart` is the markdown that teaches the protocol (the catalogue's format, when to ask back, `do` and `go` only
+  through the catalogue, the three command kinds, a miss for what the catalogue lacks, one line of `said`), under 6,000 bytes;
+  `answerFragment` is the JSON schema of `asks`, `do`, `go`, `misses` and `said` for an app's answer schema; `answerExamples` is
+  one answer of each kind. The same text and JSON ship as `grind/instructions.md` and `grind/answer.fragment.json`. Additive.
+
 ## 0.4.0 (2026-10-23, not yet tagged)
 
 - New (mw-t3xu9a.2): the tutor client learns what to carry up front, by counting. `tutor.upFront(screen)` is the core facts plus the
