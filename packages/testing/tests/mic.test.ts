@@ -216,6 +216,33 @@ describe('MediaRecorder with recorderType audio/wav', () => {
     expect(bytes.subarray(44)).toEqual(stream.read(0, 600));
   });
 
+  it('a recording stopped at once is a WAV whose RIFF and data sizes say its length, so a decoder reads it to its end', async () => {
+    const { bytes } = await recordFor(0);
+    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    expect(bytes.length).toBe(44);
+    expect(view.getUint32(4, true)).toBe(bytes.length - 8);
+    expect(view.getUint32(40, true)).toBe(bytes.length - 44);
+  });
+
+  it('measures the hold on a clock the wall clock cannot move: a step back of the wall clock mid-hold leaves the data whole (it once read Infinity in <audio>)', async () => {
+    install({ recorderType: 'audio/wav' });
+    const stream = await open();
+    const rec: Rec = new mic.MediaRecorder(stream);
+    const chunks: Blob[] = [];
+    rec.ondataavailable = (e) => chunks.push(e.data);
+    rec.start();
+    await vi.advanceTimersByTimeAsync(400);
+    vi.setSystemTime(Date.now() - 800);
+    await vi.advanceTimersByTimeAsync(300);
+    rec.stop();
+    await vi.advanceTimersByTimeAsync(10);
+    const bytes = new Uint8Array(await new Blob(chunks).arrayBuffer());
+    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    expect(view.getUint32(40, true)).toBe(700 * 16 * 2);
+    expect(view.getUint32(4, true)).toBe(bytes.length - 8);
+    expect(stream.elapsedMs()).toBe(700 + 10);
+  });
+
   it('says it supports audio/wav, which the default recorder (Android Chrome) does not', () => {
     expect(mic.MediaRecorder.isTypeSupported('audio/wav')).toBe(false);
     install({ recorderType: 'audio/wav' });

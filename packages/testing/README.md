@@ -56,7 +56,7 @@ it('Listen plays past the verse', async () => {
 });
 ```
 
-Install the fakes before the app code runs, after `vi.useFakeTimers()`: the fakes read the timers and `Date` when they are used.
+Install the fakes before the app code runs, after `vi.useFakeTimers()`: the fakes read the timers and the clock (`performance.now` for the mic, `Date` for speech) when they are used.
 To use another clock, pass `{ clock: { now, setTimeout, clearTimeout } }`.
 
 ## In Playwright
