@@ -9,6 +9,13 @@ Each library keeps its own changelog; this one records the repo's releases and p
 - [@voice-kit/talks](packages/talks/CHANGELOG.md)
 - [@voice-kit/testing](packages/testing/CHANGELOG.md)
 
+## v0.15.0 (2026-10-23)
+
+- @voice-kit/talks 0.7.0 (mw-o480n1.2): notes an app keeps by name: `applyNoteUpdates` over an app's `NoteStore` (`nameOf`, `append`,
+  `replace`, `remove`) applies a grind's `memory_update` list, an append always and a replace or remove only when `directed`; a name
+  outside the app's scheme or a write that fails is refused as a line, never thrown. Also `isNoteUpdate` and `readNoteUpdates`. The
+  per-talk memory is unchanged. Additive. See [its changelog](packages/talks/CHANGELOG.md).
+
 ## v0.14.0 (2026-10-23)
 
 - @voice-kit/talks 0.6.0 (mw-o480n1.1): an app's own cutting steps in `fitHistory`: `fitRequest(request, steps, { maxBytes, extraBytes?,

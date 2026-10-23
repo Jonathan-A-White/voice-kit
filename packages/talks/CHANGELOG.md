@@ -2,6 +2,16 @@
 
 Newest first. Breaking changes come first in a release, each with its migration in one sentence.
 
+## 0.7.0 (2026-10-23, not yet tagged)
+
+- New (mw-o480n1.2): notes an app keeps by name, beside the per-talk memory (which is unchanged). `applyNoteUpdates(updates, notes,
+  { when?, warn? })` applies a list of `NoteUpdate`s (`{ name, append | replace | remove, directed? }`) over the app's `NoteStore`
+  (`{ nameOf, append, replace, remove }`, each write answering `'saved'` or the reason it was not): an append goes through, a replace
+  or remove only when `directed`, a name `nameOf` refuses is refused, and a write that answers a reason or throws is refused, never
+  thrown. It answers `{ applied, refused }` as lines: `Added to X`, `Replaced X`, `Removed X`, `Did not change X: why`; each refused
+  line also goes to `warn`. `isNoteUpdate(value, limits)` and `readNoteUpdates(answer, limits)` (an answer's `memory_update` list,
+  or `undefined` when any entry is malformed) take `NoteLimits { nameMax, appendMax, replaceMax }`. Additive.
+
 ## 0.6.0 (2026-10-23, not yet tagged)
 
 - New (mw-o480n1.1): an app's own cutting steps. `fitRequest(request, steps, { maxBytes, extraBytes?, sizeOf? })` runs an ordered list
