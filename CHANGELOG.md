@@ -9,6 +9,13 @@ Each library keeps its own changelog; this one records the repo's releases and p
 - [@voice-kit/talks](packages/talks/CHANGELOG.md)
 - [@voice-kit/testing](packages/testing/CHANGELOG.md)
 
+## v0.18.0 (2026-10-23)
+
+- @voice-kit/talks 0.10.0 (mw-o480n1.5): the app's own look in `TalkList`: `renderRow(row, open)`, `filter(row)`, `search` (the `searchTalks`
+  options), `renderNote(kind, text)` and `classNames`; each row carries its `summary` and, when searching, its `hit`; the store is a
+  `TalkReader`. The search field now sits in a `<div class="bk-talklist__searchwrap">`; otherwise the default list draws as before.
+  Additive. See [its changelog](packages/talks/CHANGELOG.md).
+
 ## v0.17.0 (2026-10-23)
 
 - @voice-kit/talks 0.9.0 (mw-o480n1.4): a pluggable search: `searchTalks` takes `places(talk)` (what is searched: the title and each

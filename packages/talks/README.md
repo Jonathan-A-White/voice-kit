@@ -405,7 +405,38 @@ import 'voice-kit/talks/styles.css'; // optional: or style the bk-talklist__* cl
 Props: `store`, `onOpen(id)`; `limit`; `refreshKey` (change it to read the store again after a talk is added to, renamed or
 removed); `labels` (the words it shows, in the app's language: `placeholder`, `searchLabel`, `listLabel`, `untitled`, `empty`,
 `noMatches`, `failed`, `turns(count)`); `formatTime(ms)`; `className`. The theme is the `--bk-talklist-*` custom properties named at
-the top of `styles.css`.
+the top of `styles.css`. `store` is a `TalkReader` (`list` and `get` only), so a reader over an app's own tables will do.
+
+The app's own look (all optional; without them the list draws as it always did, plus one wrapper):
+
+| Prop | What it does |
+| --- | --- |
+| `renderRow(row, open)` | draws the whole row inside the kit's `<li>`; `open()` calls `onOpen(row.id)`. `row` is a `TalkListRow`: `id`, `title`, `line` (the first turn match's snippet when searching, else the first text), `updatedAt`, `turnCount`, `summary` (the store's `TalkSummary`, with the app's `fields` if the reader fills them) and `hit` (the `TalkHit`, only when searching) |
+| `filter(row)` | rows it refuses are not drawn and do not count toward the empty note |
+| `search` | the `searchTalks` options (`places`, `fold`, `snippet`, `maxMatches`), given with the list's `limit` |
+| `renderNote(kind, text)` | the app's note for `'empty'`, `'noMatches'` or `'failed'` in place of the kit's `<p>`, given the kit's text |
+| `classNames` | classes added beside the `bk-talklist` ones, for `root`, `searchWrap`, `search`, `note`, `list`, `item` and `row` (`row` is the kit's button, so it has no effect when `renderRow` draws the row) |
+
+The search field sits in a `<div class="bk-talklist__searchwrap">` (no style but `display: block`), so an app can make it sticky.
+
+### Your own rows
+
+```tsx
+<TalkList
+  store={reader}
+  onOpen={(id) => openTalk(id)}
+  filter={(row) => canOpen(row.id)}
+  search={{ snippet: (text, at, term) => lineAround(text, at, term) }}
+  classNames={{ searchWrap: 'sticky top-0', search: 'my-input' }}
+  renderNote={(kind, text) => <p data-note={kind}>{text}</p>}
+  renderRow={(row, open) => (
+    <button type="button" data-recent-talk={row.id} onClick={open}>
+      {placeInWords(row.id)} · {new Date(row.updatedAt).toLocaleDateString()}
+      <span>{row.line}</span>
+    </button>
+  )}
+/>
+```
 
 ## The store
 

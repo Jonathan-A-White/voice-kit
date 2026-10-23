@@ -2,6 +2,17 @@
 
 Newest first. Breaking changes come first in a release, each with its migration in one sentence.
 
+## 0.10.0 (2026-10-23, not yet tagged)
+
+- New (mw-o480n1.5): the app's own look in `TalkList`. `renderRow(row, open)` draws the whole row inside the kit's `<li>` (`row` is a
+  `TalkListRow`: `id`, `title`, `line`, `updatedAt`, `turnCount?`, `summary` (the `TalkSummary`) and, when searching, `hit` (the
+  `TalkHit`)); `filter(row)` hides rows (they do not count toward the empty note); `search` passes `searchTalks` options through
+  (`places`, `fold`, `snippet`, `maxMatches`; the list's `limit` goes with them); `renderNote(kind, text)` draws the app's note for
+  `'empty'`, `'noMatches'` and `'failed'`; `classNames` adds classes to `root`, `searchWrap`, `search`, `note`, `list`, `item` and
+  `row`. `TalkList` takes a `TalkReader<F>` and is generic in `F`. Exports `TalkListRow` and `TalkListPart`. Without the new props the
+  list draws as before, with one new element: the search field now sits in `<div class="bk-talklist__searchwrap">` (styled only
+  `display: block`), so a stylesheet that selected `.bk-talklist > input` must select `.bk-talklist__search`. Additive.
+
 ## 0.9.0 (2026-10-23, not yet tagged)
 
 - New (mw-o480n1.4): a pluggable search. `SearchOptions<F>` gains `places(talk)` (the `SearchPlace[]` searched, in order, `{ in:
