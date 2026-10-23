@@ -1,6 +1,7 @@
 // @voice-kit/talks: multi-turn conversations. A Talk of turns with roles and times, the turn loop over a grind the app injects
 // (send(request, files) -> answer), picture turns, a memory per talk (facts and a rolling summary folded into each request), search
-// over titles and turns, and a store interface with an in-memory store.
+// over titles and turns, and a store interface with an in-memory store. The tutor client drives a talk through an app's registry of
+// named facts, commands and places (mw-t3xu9a.1).
 export {
   createMemoryStore,
   TalkNotFoundError,
@@ -50,3 +51,19 @@ export {
   type MemoryUpdate,
 } from './memory.js';
 export { SEARCH_MAX_MATCHES, searchTalks, type SearchMatch, type SearchOptions, type TalkHit } from './search.js';
+export {
+  checkArgs,
+  defineRegistry,
+  type ArgsSchema,
+  type CatalogueEntry,
+  type Command,
+  type CommandKind,
+  type CommandResult,
+  type Fact,
+  type Opened,
+  type Place,
+  type Ran,
+  type Read,
+  type Registry,
+  type RegistryInit,
+} from './registry.js';
