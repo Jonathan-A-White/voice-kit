@@ -79,10 +79,11 @@ export interface FakeTalkSummary {
 export interface FakeTutorRecord {
   at: number;
   screen: string;
-  kind: 'ask' | 'miss';
+  kind: 'ask' | 'miss' | 'turn' | 'weights';
   name: string;
   turn: number;
   why?: string;
+  names?: string[];
 }
 
 export type FakeTalkStoreMethod = 'create' | 'get' | 'list' | 'append' | 'rename' | 'setMemory' | 'remove' | 'upFront' | 'setUpFront' | 'note' | 'record';
@@ -204,11 +205,11 @@ export function createFakeTalkStore({ newId, now = Date.now }: FakeTalkStoreOpti
     },
     async note(records) {
       log('note', records);
-      kept.push(...records.map((r) => ({ ...r })));
+      kept.push(...records.map((r) => ({ ...r, ...(r.names ? { names: [...r.names] } : {}) })));
     },
     async record(screen) {
       log('record', screen);
-      return kept.filter((r) => screen === undefined || r.screen === screen).map((r) => ({ ...r }));
+      return kept.filter((r) => screen === undefined || r.screen === screen).map((r) => ({ ...r, ...(r.names ? { names: [...r.names] } : {}) }));
     },
   };
 }

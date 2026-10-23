@@ -1,8 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createFakeGrind } from '../../testing/src/talks.js';
-import { createMemoryStore, createTutorClient, defineRegistry, type Command, type Fact, type TalkRequest, type TutorRequest } from '../src/index.js';
+import { createMemoryStore, createTutorClient, defineRegistry, type Command, type Fact, type TalkRequest, type TutorRecord, type TutorRequest } from '../src/index.js';
 
 const bytes = (value: unknown): number => new TextEncoder().encode(JSON.stringify(value)).length;
+
+/** What the client recorded, besides the turn line it writes for each turn (stats.test.ts counts those). */
+const lines = async (store: { record(): Promise<TutorRecord[]> }): Promise<TutorRecord[]> => (await store.record()).filter((r) => r.kind !== 'turn');
 
 /** A clock that moves 1000 ms each time it is read. */
 function clock(start = 1_000_000) {
@@ -65,7 +68,7 @@ describe('the request', () => {
     await store.setUpFront('drill', ['broken', 'plan']);
     const request = await client.buildRequest(4, { message: 'hi' });
     expect(Object.keys(request.facts)).toEqual(['today', 'where', 'plan']);
-    expect(await store.record()).toEqual([{ at: expect.any(Number), screen: 'drill', kind: 'miss', name: 'broken', turn: 4, why: 'broken could not be read: no database' }]);
+    expect(await lines(store)).toEqual([{ at: expect.any(Number), screen: 'drill', kind: 'miss', name: 'broken', turn: 4, why: 'broken could not be read: no database' }]);
   });
 
   it('over budgetBytes: the tell lines of the non-core entries go first, then the newest non-core facts; the core facts and the app fields never', async () => {
@@ -141,11 +144,12 @@ describe('asks: a follow-up round', () => {
 
     const record = await store.record('drill');
     expect(record.map(({ kind, name, turn: n, screen }) => ({ kind, name, turn: n, screen }))).toEqual([
+      { kind: 'turn', name: '', turn: 0, screen: 'drill' },
       { kind: 'ask', name: 'plan', turn: 0, screen: 'drill' },
       { kind: 'ask', name: 'rusty', turn: 0, screen: 'drill' },
       { kind: 'miss', name: 'lottery numbers', turn: 0, screen: 'drill' },
     ]);
-    expect(record[2].why).toMatch(/no fact called "lottery numbers"/);
+    expect(record[3].why).toMatch(/no fact called "lottery numbers"/);
     expect(turn.records).toEqual(record);
   });
 
@@ -156,7 +160,7 @@ describe('asks: a follow-up round', () => {
     expect(grind.calls).toHaveLength(2);
     expect(turn.answer).toEqual({ text: 'Here it is.', asks: ['rusty'] });
     expect(turn.rounds).toBe(2);
-    expect((await store.record()).map((r) => [r.kind, r.name])).toEqual([
+    expect((await lines(store)).map((r) => [r.kind, r.name])).toEqual([
       ['ask', 'plan'],
       ['miss', 'rusty'],
     ]);
@@ -167,7 +171,7 @@ describe('asks: a follow-up round', () => {
     const talk = await client.start();
     await client.ask(talk.id, 'first');
     await client.ask(talk.id, 'second');
-    expect((await store.record()).map((r) => r.turn)).toEqual([2]);
+    expect((await lines(store)).map((r) => r.turn)).toEqual([2]);
   });
 
   it('a grind that fails in the follow-up keeps nothing, as any failed ask', async () => {
@@ -226,7 +230,7 @@ describe('do and go', () => {
     expect(setTheme).not.toHaveBeenCalled();
     expect(open).not.toHaveBeenCalled();
     expect(onGo).not.toHaveBeenCalled();
-    const misses = (await store.record()).map((r) => [r.kind, r.name, r.why]);
+    const misses = (await lines(store)).map((r) => [r.kind, r.name, r.why]);
     expect(misses).toEqual([
       ['miss', 'fly', 'there is no command called "fly"'],
       ['miss', 'setTheme', 'args.theme must be one of "dark", "light"'],
@@ -244,7 +248,7 @@ describe('do and go', () => {
     const turn = await client.ask((await client.start()).id, 'take me to the moon');
     expect(onGo).not.toHaveBeenCalled();
     expect(turn.went).toBeUndefined();
-    expect((await store.record()).map((r) => r.why)).toEqual(['there is no place called "moon"']);
+    expect((await lines(store)).map((r) => r.why)).toEqual(['there is no place called "moon"']);
   });
 
   it('takeAnswer carries out an answer the app got some other way', async () => {
@@ -252,6 +256,6 @@ describe('do and go', () => {
     const taken = await client.takeAnswer({ do: [{ name: 'markDone' }], misses: [{ wanted: 'x', why: 'y' }] }, 7);
     expect(runs.mark).toHaveBeenCalledTimes(1);
     expect(taken.done).toEqual([{ name: 'markDone', kind: 'free', said: 'Marked done.' }]);
-    expect(await store.record()).toEqual([{ at: expect.any(Number), screen: 'drill', kind: 'miss', name: 'x', turn: 7, why: 'y' }]);
+    expect(await lines(store)).toEqual([{ at: expect.any(Number), screen: 'drill', kind: 'miss', name: 'x', turn: 7, why: 'y' }]);
   });
 });

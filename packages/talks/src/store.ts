@@ -76,8 +76,12 @@ export interface TalkStore {
   remove(id: string): Promise<void>;
 }
 
-/** What the tutor client noted: a fact it asked back for and was given ('ask'), or something it wanted that the app did not have or would not do ('miss'). */
-export type TutorRecordKind = 'ask' | 'miss';
+/**
+ * What the tutor client noted: a fact it asked back for and was given ('ask'), something it wanted that the app did not have or
+ * would not do ('miss'), a turn taken on the screen ('turn', so ask-backs can be counted per turn: stats.ts), or an up-front
+ * list applied for the screen ('weights', with its source in `name` and the list in `names`).
+ */
+export type TutorRecordKind = 'ask' | 'miss' | 'turn' | 'weights';
 
 /** One line of the tutor record: when, on which screen, what, and the talk turn (his turn's place in the talk) it belongs to. */
 export interface TutorRecord {
@@ -85,11 +89,13 @@ export interface TutorRecord {
   at: number;
   screen: string;
   kind: TutorRecordKind;
-  /** the fact, command or place by name; for a miss the answer named, what it wanted */
+  /** the fact, command or place by name; for a miss the answer named, what it wanted; for a turn empty; for weights who applied it ('grist' or 'app') */
   name: string;
   turn: number;
   /** for a miss: why it was not had */
   why?: string;
+  /** for weights: the list applied */
+  names?: string[];
 }
 
 /**
@@ -117,7 +123,7 @@ const clonePicture = (p: Picture): Picture => ({ bytes: p.bytes.slice(), mime: p
 const cloneTurn = (t: Turn): Turn => ({ role: t.role, text: t.text, ...(t.pictures ? { pictures: t.pictures.map(clonePicture) } : {}), at: t.at });
 const cloneMemory = (m: TalkMemory): TalkMemory => ({ facts: [...m.facts], summary: m.summary });
 const cloneTalk = (t: Talk): Talk => ({ ...t, turns: t.turns.map(cloneTurn), memory: cloneMemory(t.memory) });
-const cloneRecord = (r: TutorRecord): TutorRecord => ({ ...r });
+const cloneRecord = (r: TutorRecord): TutorRecord => ({ ...r, ...(r.names ? { names: [...r.names] } : {}) });
 
 export interface MemoryStoreOptions {
   /** Makes the id of a new talk: a random UUID unless given. */

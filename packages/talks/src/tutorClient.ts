@@ -8,6 +8,7 @@
 // their own registry.
 import { isMemoryEmpty } from './memory.js';
 import type { CatalogueEntry, CommandKind, Registry } from './registry.js';
+import { createStats, type LearnOptions, type Stats } from './stats.js';
 import type { TalkStore, TutorRecord, TutorStore } from './store.js';
 import { createTalks, type AskOptions, type Asked, type CustomTalksOptions, type OutgoingPicture, type RequestInput, type TalkRequest, type Talks } from './talk.js';
 
@@ -76,7 +77,7 @@ export interface TutorAsked<Answer> extends Asked<Answer>, Taken {
   asked: Record<string, unknown>;
   /** The screen the turn was taken on. */
   screen: string;
-  /** Everything recorded in the turn, in order: the ask-backs and the misses. */
+  /** Everything recorded in the turn, in order: the turn line, the ask-backs and the misses. */
   records: TutorRecord[];
 }
 
@@ -99,11 +100,13 @@ export interface TutorClientOptions<Answer, Fields extends object> {
   onGo?: (went: Went) => void;
   /** The clock: Date.now unless given. */
   now?: () => number;
+  /** What counts as asked back often lately: `askBacks` times in the last `turns` turns of a screen (2 in 50, provisional). */
+  learn?: LearnOptions;
   /** answerText, maxHistory, readMemory and the rest, as createTalks takes them. */
   talks?: TutorTalksOptions<Answer>;
 }
 
-export interface TutorClient<Answer> {
+export interface TutorClient<Answer> extends Stats {
   start: Talks<Answer>['start'];
   /**
    * Takes one turn of the talk: builds the request, sends it, and when the answer asks for facts reads them and sends a
@@ -166,6 +169,7 @@ function fit<F extends object>(fields: F, facts: [string, unknown][], core: Read
 
 export function createTutorClient<Answer = string, Fields extends object = TalkRequest>(options: TutorClientOptions<Answer, Fields>): TutorClient<Answer> {
   const { store, send, registry, screen, budgetBytes, onGo, now = Date.now } = options;
+  const stats = createStats({ store, registry, now, ...options.learn });
   const appFields = options.buildRequest ?? (defaultFields as unknown as (input: RequestInput) => Fields);
   // the turn being taken on each talk; a talk's turns are taken one at a time, so its send finds its own
   const taking = new Map<string, TurnNotes & { rounds: 1 | 2; asked: Record<string, unknown> }>();
@@ -177,8 +181,7 @@ export function createTutorClient<Answer = string, Fields extends object = TalkR
 
   async function request<F extends object>(notes: TurnNotes, fields: F): Promise<TutorRequest<F>> {
     const core = new Set(registry.facts.filter((f) => f.core).map((f) => f.name));
-    const upFront = (await store.upFront(notes.screen)).filter((name) => registry.fact(name) && !core.has(name));
-    const names = [...new Set([...core, ...upFront])];
+    const names = [...new Set(await stats.upFront(notes.screen))];
     const facts: [string, unknown][] = [];
     for (const [name, read] of await Promise.all(names.map(async (name) => [name, await registry.read(name)] as const))) {
       if (read.ok) facts.push([name, read.value]);
@@ -253,6 +256,7 @@ export function createTutorClient<Answer = string, Fields extends object = TalkR
     async send({ input }, files) {
       const notes = taking.get(input.talk.id) ?? { screen: screen(), turn: 0, records: [], rounds: 1, asked: {} };
       notes.turn = input.talk.turns.length;
+      note(notes, 'turn', '');
       const first = await request(notes, appFields(input));
       const answer = await send(first, files);
       const asks = asksOf(answer);
@@ -294,12 +298,14 @@ export function createTutorClient<Answer = string, Fields extends object = TalkR
   }
 
   return {
+    ...stats,
     start: talks.start,
     ask: (id, message, askOptions = {}) => queued(id, () => take(id, message, askOptions)),
     remember: talks.remember,
     search: talks.search,
     async buildRequest(turn, fields) {
       const notes: TurnNotes = { screen: screen(), turn, records: [] };
+      note(notes, 'turn', '');
       const built = await request(notes, fields);
       await store.note(notes.records);
       return built;

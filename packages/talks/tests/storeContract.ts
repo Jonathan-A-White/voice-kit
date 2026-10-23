@@ -78,6 +78,17 @@ export function storeContract(name: string, make: () => TalkStore & TutorStore) 
       expect((await store.record())[0].name).toBe('plan');
     });
 
+    it('keeps turn lines and weights lines, with the list applied, as they were noted', async () => {
+      const store = make();
+      const turn: TutorRecord = { at: 20, screen: 'drill', kind: 'turn', name: '', turn: 4 };
+      const weights: TutorRecord = { at: 21, screen: 'drill', kind: 'weights', name: 'grist', turn: 0, names: ['plan', 'rusty'] };
+      await store.note([turn, weights]);
+      expect(await store.record('drill')).toEqual([turn, weights]);
+      const read = await store.record();
+      read[1].names!.push('changed');
+      expect((await store.record())[1].names).toEqual(['plan', 'rusty']);
+    });
+
     it("keeps each screen's up-front list, empty until set", async () => {
       const store = make();
       expect(await store.upFront('drill')).toEqual([]);

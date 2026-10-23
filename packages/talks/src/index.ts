@@ -68,6 +68,21 @@ export {
   type RegistryInit,
 } from './registry.js';
 export {
+  createStats,
+  DEFAULT_ASK_BACKS,
+  DEFAULT_WINDOW_TURNS,
+  type Applied,
+  type Change,
+  type LearnOptions,
+  type MissReport,
+  type ScreenReport,
+  type ScreenStats,
+  type Stats,
+  type StatsOptions,
+  type WeightsReport,
+  type WeightsSource,
+} from './stats.js';
+export {
   createTutorClient,
   TUTOR_MAX_ROUNDS,
   type Done,

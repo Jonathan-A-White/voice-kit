@@ -83,7 +83,7 @@ const defaultId = (): string => globalThis.crypto?.randomUUID?.() ?? `talk-${Dat
 const keepPicture = (p: Picture): Picture => ({ bytes: p.bytes.slice(), mime: p.mime, name: p.name });
 const keepTurn = (t: Turn): Turn => ({ role: t.role, text: t.text, ...(t.pictures ? { pictures: t.pictures.map(keepPicture) } : {}), at: t.at });
 const turnOf = ({ role, text, pictures, at }: TurnRow): Turn => ({ role, text, ...(pictures ? { pictures } : {}), at });
-const recordOf = ({ at, screen, kind, name, turn, why }: RecordRow): TutorRecord => ({ at, screen, kind, name, turn, ...(why === undefined ? {} : { why }) });
+const recordOf = ({ at, screen, kind, name, turn, why, names }: RecordRow): TutorRecord => ({ at, screen, kind, name, turn, ...(why === undefined ? {} : { why }), ...(names === undefined ? {} : { names: [...names] }) });
 const talkOf = (row: TalkRow, turns: TurnRow[]): Talk => ({
   id: row.id,
   title: row.title,
