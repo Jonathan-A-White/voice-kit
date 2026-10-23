@@ -46,7 +46,7 @@ export interface MicOptions {
   silent?: boolean | number;
   /** The permission is refused: getUserMedia rejects with NotAllowedError and the recogniser errors 'not-allowed'. Default false. */
   denied?: boolean;
-  /** Defaults to the global timers and Date. Cannot go into an init script (the page's own clock is used there). */
+  /** Defaults to the global timers and performance.now (a monotonic clock: Date.now steps back when the host's clock is corrected, and a recording would read a negative length). Cannot go into an init script (the page's own clock is used there). */
   clock?: Clock;
   /** How long getUserMedia takes to answer. Default 100. */
   grantMs?: number;
@@ -224,7 +224,7 @@ function mountMic(target: object, options: MicOptions & { clip: Clip }): MicFake
     recorderType: options.recorderType ?? 'audio/webm;codecs=opus',
     label: options.label ?? 'Default - Fake microphone',
     clock: options.clock ?? {
-      now: () => Date.now(),
+      now: () => (globalThis.performance ? globalThis.performance.now() : Date.now()),
       setTimeout: (fn, ms) => globalThis.setTimeout(fn, ms),
       clearTimeout: (handle) => globalThis.clearTimeout(handle as ReturnType<typeof setTimeout>),
     },

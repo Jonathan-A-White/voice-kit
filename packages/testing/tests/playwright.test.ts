@@ -86,18 +86,21 @@ describe('the fakes in Chromium, installed by init script', () => {
       const parts = [];
       recorder.ondataavailable = (e) => parts.push(e.data);
       const stopped = new Promise((resolve) => (recorder.onstop = resolve));
+      const startedAt = performance.now();
       recorder.start();
       await new Promise((resolve) => setTimeout(resolve, 1000));
       recorder.stop();
+      const heldMs = performance.now() - startedAt;
       await stopped;
       const audio = new Audio(URL.createObjectURL(new Blob(parts, { type: ${JSON.stringify(type)} })));
       return new Promise((resolve) => {
         audio.onerror = () => resolve('error');
-        audio.onloadedmetadata = () => resolve('ok:' + audio.duration.toFixed(1));
+        // A timer under load runs late, so the length to expect is the hold as the page timed it, not 1000 ms.
+        audio.onloadedmetadata = () => resolve(Math.abs(audio.duration * 1000 - heldMs) <= 100 && heldMs >= 990 ? 'ok' : 'wrong:' + audio.duration + ' for ' + heldMs);
       });
     })()`;
     await openPage([micInitScript({ recorderType: 'audio/wav' })]);
-    expect(await inPage<string>(play('audio/wav'))).toBe('ok:1.0');
+    expect(await inPage<string>(play('audio/wav'))).toBe('ok');
     await page.close();
     await openPage([micInitScript()]);
     expect(await inPage<string>(play('audio/webm;codecs=opus'))).toBe('error');

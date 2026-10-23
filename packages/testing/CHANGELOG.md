@@ -7,6 +7,8 @@ Newest first. Breaking changes come first in a release, each with its migration 
 - New (mw-o480n1.3): the fake talk store keeps a turn's `fields` (what an app keeps with a turn) by copy, as the in-memory and Dexie
   stores of `@voice-kit/talks` 0.8.0 do; `FakeTurn<F>`, `FakeTalk<F>`, `FakeTalkSummary<F>`, `FakeTalkStore<F>` and
   `createFakeTalkStore<F>()` carry the type, `F` defaulting to `Record<string, unknown>`. Additive.
+- Fixed (mw-o480n1.11): the fake mic's default clock is `performance.now`, not `Date.now`: when the host's wall clock stepped back during a
+  recording the hold read negative, the recording was empty and an `<audio>` element read its WAV's duration as Infinity.
 
 ## 0.3.1 (2026-10-23, not yet tagged)
 
