@@ -71,7 +71,16 @@ export {
   type NoteUpdate,
   type NoteWrite,
 } from './notes.js';
-export { SEARCH_MAX_MATCHES, searchTalks, type SearchMatch, type SearchOptions, type TalkHit } from './search.js';
+export {
+  defaultSnippet,
+  foldText,
+  SEARCH_MAX_MATCHES,
+  searchTalks,
+  type SearchMatch,
+  type SearchOptions,
+  type SearchPlace,
+  type TalkHit,
+} from './search.js';
 export {
   checkArgs,
   defineRegistry,

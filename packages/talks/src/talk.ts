@@ -141,7 +141,7 @@ export interface Talks<Answer> {
    * TalkNotFoundError for a talk that is not there.
    */
   remember(id: string, update: MemoryUpdate): Promise<MemoryChange>;
-  /** The talks whose title or turns hold every word of `query` (searchTalks over this store). */
+  /** The talks whose title or turns hold every word of `query` (searchTalks over this store, with the same options). */
   search(query: string, options?: SearchOptions): Promise<TalkHit[]>;
 }
 
