@@ -6,6 +6,7 @@
 // It passes the same contract as the in-memory store (tests/storeContract.ts).
 import { Dexie, type EntityTable } from 'dexie';
 import {
+  copyFields,
   TalkNotFoundError,
   type CreateTalk,
   type Picture,
@@ -29,7 +30,7 @@ interface TalkRow {
   firstText?: string;
 }
 
-interface TurnRow extends Turn {
+interface TurnRow<F = Record<string, unknown>> extends Turn<F> {
   /** the order the turns were kept in */
   seq?: number;
   talkId: string;
@@ -71,7 +72,7 @@ export interface DexieStoreOptions {
   IDBKeyRange?: typeof IDBKeyRange;
 }
 
-export interface DexieTalkStore extends TalkStore, TutorStore {
+export interface DexieTalkStore<F = Record<string, unknown>> extends TalkStore<F>, TutorStore {
   /** Closes the database connection; the talks stay kept. Using the store again reopens it. */
   close(): void;
 }
@@ -81,10 +82,17 @@ const defaultId = (): string => globalThis.crypto?.randomUUID?.() ?? `talk-${Dat
 
 // A typed array stored as a view would keep its whole underlying buffer: store a picture's bytes in a buffer of their own.
 const keepPicture = (p: Picture): Picture => ({ bytes: p.bytes.slice(), mime: p.mime, name: p.name });
-const keepTurn = (t: Turn): Turn => ({ role: t.role, text: t.text, ...(t.pictures ? { pictures: t.pictures.map(keepPicture) } : {}), at: t.at });
-const turnOf = ({ role, text, pictures, at }: TurnRow): Turn => ({ role, text, ...(pictures ? { pictures } : {}), at });
+const keepTurn = <F>(t: Turn<F>): Turn<F> => ({
+  role: t.role,
+  text: t.text,
+  ...(t.pictures ? { pictures: t.pictures.map(keepPicture) } : {}),
+  at: t.at,
+  ...(t.fields === undefined ? {} : { fields: copyFields(t.fields) }),
+});
+// fields are in the row but in no index, so the schema stays at version 2; a row kept before has none and reads back without the key
+const turnOf = <F>({ role, text, pictures, at, fields }: TurnRow<F>): Turn<F> => ({ role, text, ...(pictures ? { pictures } : {}), at, ...(fields === undefined ? {} : { fields }) });
 const recordOf = ({ at, screen, kind, name, turn, why, names }: RecordRow): TutorRecord => ({ at, screen, kind, name, turn, ...(why === undefined ? {} : { why }), ...(names === undefined ? {} : { names: [...names] }) });
-const talkOf = (row: TalkRow, turns: TurnRow[]): Talk => ({
+const talkOf = <F>(row: TalkRow, turns: TurnRow<F>[]): Talk<F> => ({
   id: row.id,
   title: row.title,
   turns: turns.map(turnOf),
@@ -94,14 +102,14 @@ const talkOf = (row: TalkRow, turns: TurnRow[]): Talk => ({
 });
 
 /** A TalkStore on the device: it outlives the page. Each method is one IndexedDB transaction. */
-export function createDexieStore({ name = 'voice-kit-talks', newId = defaultId, now = Date.now, indexedDB, IDBKeyRange }: DexieStoreOptions = {}): DexieTalkStore {
+export function createDexieStore<F = Record<string, unknown>>({ name = 'voice-kit-talks', newId = defaultId, now = Date.now, indexedDB, IDBKeyRange }: DexieStoreOptions = {}): DexieTalkStore<F> {
   const db = new TalksDatabase(name, { indexedDB, IDBKeyRange });
   const need = async (id: string): Promise<TalkRow> => {
     const row = await db.talks.get(id);
     if (!row) throw new TalkNotFoundError(id);
     return row;
   };
-  const read = async (id: string): Promise<Talk> => talkOf(await need(id), await db.turns.where('talkId').equals(id).sortBy('seq'));
+  const read = async (id: string): Promise<Talk<F>> => talkOf<F>(await need(id), (await db.turns.where('talkId').equals(id).sortBy('seq')) as TurnRow<F>[]);
 
   return {
     close: () => db.close(),
@@ -109,23 +117,23 @@ export function createDexieStore({ name = 'voice-kit-talks', newId = defaultId, 
       const at = init.now ?? now();
       const row: TalkRow = { id: newId(), title: init.title ?? '', memory: { facts: [], summary: '' }, createdAt: at, updatedAt: at, turnCount: 0 };
       await db.talks.add(row);
-      return talkOf(row, []);
+      return talkOf<F>(row, []);
     },
     async get(id) {
       return db.transaction('r', db.talks, db.turns, async () => {
         const row = await db.talks.get(id);
-        return row ? talkOf(row, await db.turns.where('talkId').equals(id).sortBy('seq')) : undefined;
+        return row ? talkOf<F>(row, (await db.turns.where('talkId').equals(id).sortBy('seq')) as TurnRow<F>[]) : undefined;
       });
     },
     async list({ limit } = {}) {
       const rows = await (limit === undefined ? db.talks.orderBy('updatedAt').reverse().toArray() : db.talks.orderBy('updatedAt').reverse().limit(limit).toArray());
-      return rows.map((r): TalkSummary => ({ id: r.id, title: r.title, turnCount: r.turnCount, firstText: r.firstText ?? '', createdAt: r.createdAt, updatedAt: r.updatedAt }));
+      return rows.map((r): TalkSummary<F> => ({ id: r.id, title: r.title, turnCount: r.turnCount, firstText: r.firstText ?? '', createdAt: r.createdAt, updatedAt: r.updatedAt }));
     },
     async append(id, turns) {
       return db.transaction('rw', db.talks, db.turns, async () => {
         const row = await need(id);
         if (turns.length > 0) {
-          await db.turns.bulkAdd(turns.map((t) => ({ ...keepTurn(t), talkId: id })));
+          await db.turns.bulkAdd(turns.map((t) => ({ ...keepTurn(t), talkId: id }) as TurnRow));
           const firstSaid = row.firstText === undefined ? turns.find((t) => t.role === 'user') : undefined;
           await db.talks.update(id, {
             turnCount: row.turnCount + turns.length,

@@ -11,6 +11,7 @@ export {
   type Role,
   type Talk,
   type TalkMemory,
+  type TalkReader,
   type TalkStore,
   type TalkSummary,
   type TutorRecord,

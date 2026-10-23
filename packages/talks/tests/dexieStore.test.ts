@@ -35,6 +35,18 @@ describe('the Dexie store, beyond the contract', () => {
     expect(talk.memory).toEqual({ facts: ['a'], summary: 's' });
   });
 
+  it("keeps a turn's fields across a close and a reopen", async () => {
+    const first = createDexieStore({ name: 'talks-fields', indexedDB, IDBKeyRange });
+    const { id } = await first.create({ now: 1 });
+    await first.append(id, [{ role: 'user', text: 'q', at: 2, fields: { cleanQ: 'x', n: 2 } }, { role: 'assistant', text: 'a', at: 3 }]);
+    first.close();
+    const second = createDexieStore({ name: 'talks-fields', indexedDB, IDBKeyRange });
+    opened.push(second);
+    const turns = (await second.get(id))!.turns;
+    expect(turns[0].fields).toEqual({ cleanQ: 'x', n: 2 });
+    expect('fields' in turns[1]).toBe(false);
+  });
+
   it('opens a version-1 database (before the tutor tables) and keeps its talks', async () => {
     const old = new Dexie('talks-version-1', { indexedDB, IDBKeyRange });
     old.version(1).stores({ talks: 'id, updatedAt', turns: '++seq, talkId' });

@@ -1,10 +1,10 @@
 // TalkList.tsx (mw-79en7t.31) — the talks kept in a store, as a list he can search and open. Carved from Lampas's
 // src/Conversations.tsx (every conversation kept on the phone, newest first, one search field over their words, a tap opens one)
-// with the Bible parts left behind: it reads a TalkStore (list, and searchTalks over it) and tells the app which talk was
+// with the Bible parts left behind: it reads a TalkReader (list, and searchTalks over it) and tells the app which talk was
 // tapped; what opening it looks like (a sheet, a route, a Composer) is the app's. Own entry point (`voice-kit/talks/react`).
 import { useEffect, useState, type ReactNode } from 'react';
 import { searchTalks } from './search.js';
-import type { TalkStore } from './store.js';
+import type { TalkReader } from './store.js';
 
 /** The words TalkList shows; any left out are the English below. */
 export interface TalkListLabels {
@@ -38,7 +38,8 @@ export const DEFAULT_TALK_LIST_LABELS: TalkListLabels = {
 };
 
 export interface TalkListProps {
-  store: TalkStore;
+  /** Where the talks are read: a TalkStore, or any reader of list and get. */
+  store: TalkReader;
   /** He tapped a talk: its id. */
   onOpen: (id: string) => void;
   /** The most talks listed: all unless given. */

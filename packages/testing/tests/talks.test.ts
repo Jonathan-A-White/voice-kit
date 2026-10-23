@@ -80,6 +80,22 @@ describe('createFakeTalkStore', () => {
   });
 });
 
+describe('createFakeTalkStore: app fields on a turn', () => {
+  it('records an append with fields and gives them back by copy', async () => {
+    const store = createFakeTalkStore();
+    const { id } = await store.create();
+    const fields = { cleanQ: 'x', nested: { n: 1 } };
+    await store.append(id, [{ role: 'user', text: 'q', at: 1, fields }, { role: 'assistant', text: 'a', at: 2 }]);
+    expect(store.calls[1].args).toEqual([id, [{ role: 'user', text: 'q', at: 1, fields }, { role: 'assistant', text: 'a', at: 2 }]]);
+    fields.nested.n = 2;
+    const read = (await store.get(id))!;
+    expect(read.turns[0].fields).toEqual({ cleanQ: 'x', nested: { n: 1 } });
+    expect('fields' in read.turns[1]).toBe(false);
+    (read.turns[0].fields as typeof fields).cleanQ = 'changed';
+    expect((await store.get(id))!.turns[0].fields).toEqual({ cleanQ: 'x', nested: { n: 1 } });
+  });
+});
+
 describe('the index', () => {
   it('still exports the speech and mic fakes, and adds the talk fakes', () => {
     for (const name of ['installSpeech', 'speechInitScript', 'installMic', 'micInitScript', 'clips', 'createFakeGrind', 'createFakeTalkStore']) {

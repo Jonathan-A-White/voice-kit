@@ -12,12 +12,17 @@ export interface Picture {
 
 export type Role = 'user' | 'assistant';
 
-/** One thing said in a talk: who said it, the words, the pictures that went with it (his, not re-sent unless asked) and when (ms since the epoch). */
-export interface Turn {
+/**
+ * One thing said in a talk: who said it, the words, the pictures that went with it (his, not re-sent unless asked) and when (ms since the epoch).
+ * `F` is what the app keeps with a turn beyond the kit's own (`fields`): the kit reads nothing in it and a store keeps it by copy.
+ */
+export interface Turn<F = Record<string, unknown>> {
   role: Role;
   text: string;
   pictures?: Picture[];
   at: number;
+  /** What the app keeps with this turn; absent unless given. Plain data: a store copies it (structured clone, else JSON). */
+  fields?: F;
 }
 
 /**
@@ -30,10 +35,10 @@ export interface TalkMemory {
 }
 
 /** A conversation: its turns oldest first, and its memory. */
-export interface Talk {
+export interface Talk<F = Record<string, unknown>> {
   id: string;
   title: string;
-  turns: Turn[];
+  turns: Turn<F>[];
   memory: TalkMemory;
   /** ms since the epoch */
   createdAt: number;
@@ -42,13 +47,15 @@ export interface Talk {
 }
 
 /** A talk as a list shows it: its title, how many turns, the first thing he said and when it was last added to. */
-export interface TalkSummary {
+export interface TalkSummary<F = Record<string, unknown>> {
   id: string;
   title: string;
   turnCount: number;
   firstText: string;
   createdAt: number;
   updatedAt: number;
+  /** The app's own summary of a talk. A store in this library never fills it; a reader an app writes over its own tables may. */
+  fields?: F;
 }
 
 export interface CreateTalk {
@@ -63,18 +70,24 @@ export interface CreateTalk {
  * changes nothing kept. A method that names a talk that is not there rejects with TalkNotFoundError, except `get` (undefined)
  * and `remove` (nothing to do).
  */
-export interface TalkStore {
-  create(init?: CreateTalk): Promise<Talk>;
-  get(id: string): Promise<Talk | undefined>;
+export interface TalkStore<F = Record<string, unknown>> {
+  create(init?: CreateTalk): Promise<Talk<F>>;
+  get(id: string): Promise<Talk<F> | undefined>;
   /** The talks, the one added to last first (at most `limit`). */
-  list(options?: { limit?: number }): Promise<TalkSummary[]>;
+  list(options?: { limit?: number }): Promise<TalkSummary<F>[]>;
   /** Adds turns at the end, in the order given; returns the talk. */
-  append(id: string, turns: Turn[]): Promise<Talk>;
-  rename(id: string, title: string): Promise<Talk>;
-  setMemory(id: string, memory: TalkMemory): Promise<Talk>;
+  append(id: string, turns: Turn<F>[]): Promise<Talk<F>>;
+  rename(id: string, title: string): Promise<Talk<F>>;
+  setMemory(id: string, memory: TalkMemory): Promise<Talk<F>>;
   /** Forgets the talk: its turns, their pictures and its memory. */
   remove(id: string): Promise<void>;
 }
+
+/**
+ * What a list and a search read through: `list` and `get` of a TalkStore, nothing to write. An app whose talks live in its own
+ * tables gives one without pretending to create or rename; any TalkStore is one.
+ */
+export type TalkReader<F = Record<string, unknown>> = Pick<TalkStore<F>, 'list' | 'get'>;
 
 /**
  * What the tutor client noted: a fact it asked back for and was given ('ask'), something it wanted that the app did not have or
@@ -120,9 +133,17 @@ export class TalkNotFoundError extends Error {
 }
 
 const clonePicture = (p: Picture): Picture => ({ bytes: p.bytes.slice(), mime: p.mime, name: p.name });
-const cloneTurn = (t: Turn): Turn => ({ role: t.role, text: t.text, ...(t.pictures ? { pictures: t.pictures.map(clonePicture) } : {}), at: t.at });
+/** A copy of an app's fields: a structured clone where there is one, else a JSON round trip. Shared by the stores of this library. */
+export const copyFields = <F>(fields: F): F => (typeof structuredClone === 'function' ? structuredClone(fields) : (JSON.parse(JSON.stringify(fields)) as F));
+const cloneTurn = <F>(t: Turn<F>): Turn<F> => ({
+  role: t.role,
+  text: t.text,
+  ...(t.pictures ? { pictures: t.pictures.map(clonePicture) } : {}),
+  at: t.at,
+  ...(t.fields === undefined ? {} : { fields: copyFields(t.fields) }),
+});
 const cloneMemory = (m: TalkMemory): TalkMemory => ({ facts: [...m.facts], summary: m.summary });
-const cloneTalk = (t: Talk): Talk => ({ ...t, turns: t.turns.map(cloneTurn), memory: cloneMemory(t.memory) });
+const cloneTalk = <F>(t: Talk<F>): Talk<F> => ({ ...t, turns: t.turns.map(cloneTurn), memory: cloneMemory(t.memory) });
 const cloneRecord = (r: TutorRecord): TutorRecord => ({ ...r, ...(r.names ? { names: [...r.names] } : {}) });
 
 export interface MemoryStoreOptions {
@@ -136,11 +157,11 @@ let counter = 0;
 const defaultId = (): string => globalThis.crypto?.randomUUID?.() ?? `talk-${Date.now().toString(36)}-${(++counter).toString(36)}`;
 
 /** A TalkStore in memory, with the tutor client's record and up-front lists: gone with the page. For tests, and for a talk that need not outlive the session. */
-export function createMemoryStore({ newId = defaultId, now = Date.now }: MemoryStoreOptions = {}): TalkStore & TutorStore {
-  const talks = new Map<string, Talk>();
+export function createMemoryStore<F = Record<string, unknown>>({ newId = defaultId, now = Date.now }: MemoryStoreOptions = {}): TalkStore<F> & TutorStore {
+  const talks = new Map<string, Talk<F>>();
   const kept: TutorRecord[] = [];
   const lists = new Map<string, string[]>();
-  const need = (id: string): Talk => {
+  const need = (id: string): Talk<F> => {
     const talk = talks.get(id);
     if (!talk) throw new TalkNotFoundError(id);
     return talk;
@@ -148,7 +169,7 @@ export function createMemoryStore({ newId = defaultId, now = Date.now }: MemoryS
   return {
     async create(init = {}) {
       const at = init.now ?? now();
-      const talk: Talk = { id: newId(), title: init.title ?? '', turns: [], memory: { facts: [], summary: '' }, createdAt: at, updatedAt: at };
+      const talk: Talk<F> = { id: newId(), title: init.title ?? '', turns: [], memory: { facts: [], summary: '' }, createdAt: at, updatedAt: at };
       talks.set(talk.id, talk);
       return cloneTalk(talk);
     },
@@ -158,7 +179,7 @@ export function createMemoryStore({ newId = defaultId, now = Date.now }: MemoryS
     },
     async list({ limit } = {}) {
       const summaries = [...talks.values()]
-        .map((t): TalkSummary => ({
+        .map((t): TalkSummary<F> => ({
           id: t.id,
           title: t.title,
           turnCount: t.turns.length,

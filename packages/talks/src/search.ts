@@ -1,7 +1,7 @@
 // search.ts (mw-79en7t.30) — search over the titles and turns of the talks in a store. Lampas's list filtered its conversations
-// by title; this looks in the turns too, and tells where it found the words. It reads only through the TalkStore interface
+// by title; this looks in the turns too, and tells where it found the words. It reads only through the TalkReader interface
 // (list, get), so it works for any store, and it matches by plain words: no index, no ranking beyond the order below.
-import type { Role, TalkStore } from './store.js';
+import type { Role, TalkReader } from './store.js';
 
 export interface SearchOptions {
   /** The most talks returned: all unless given. */
@@ -51,7 +51,7 @@ const snippetOf = (text: string, at: number, length: number): string => {
  * spaces, matched anywhere in the text, ignoring case and accents). A talk whose title matches comes first, then the talk last
  * added to. A blank query finds nothing.
  */
-export async function searchTalks(store: TalkStore, query: string, { limit, maxMatches = SEARCH_MAX_MATCHES }: SearchOptions = {}): Promise<TalkHit[]> {
+export async function searchTalks(store: TalkReader, query: string, { limit, maxMatches = SEARCH_MAX_MATCHES }: SearchOptions = {}): Promise<TalkHit[]> {
   const terms = fold(query).split(/\s+/).filter((t) => t !== '');
   if (terms.length === 0) return [];
   const found = (text: string): number => {

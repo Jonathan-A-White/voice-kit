@@ -60,6 +60,23 @@ export function storeContract(name: string, make: () => TalkStore & TutorStore) 
       expect(again.memory.facts).toEqual([]);
     });
 
+    it("keeps a turn's fields as given, by copy", async () => {
+      const store = make();
+      const { id } = await store.create();
+      const given = { cleanQ: 'x', n: 2, nested: { list: [1, 2] } };
+      await store.append(id, [{ role: 'user', text: 'a', at: 1, fields: given }, { role: 'assistant', text: 'b', at: 2 }]);
+      given.nested.list.push(3);
+      const read = (await store.get(id))!;
+      expect(read.turns[0].fields).toEqual({ cleanQ: 'x', n: 2, nested: { list: [1, 2] } });
+      expect('fields' in read.turns[1]).toBe(false);
+      (read.turns[0].fields as typeof given).cleanQ = 'changed';
+      (read.turns[0].fields as typeof given).nested.list.push(9);
+      expect((await store.get(id))!.turns[0].fields).toEqual({ cleanQ: 'x', n: 2, nested: { list: [1, 2] } });
+      const after = await store.append(id, [{ role: 'user', text: 'c', at: 3, fields: { k: 1 } }]);
+      expect(after.turns.map((t) => t.fields)).toEqual([{ cleanQ: 'x', n: 2, nested: { list: [1, 2] } }, undefined, { k: 1 }]);
+      expect((await store.list())[0]).not.toHaveProperty('fields');
+    });
+
     it('keeps the tutor record, oldest first, all of it or one screen', async () => {
       const store = make();
       expect(await store.record()).toEqual([]);
