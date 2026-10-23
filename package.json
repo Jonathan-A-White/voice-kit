@@ -1,7 +1,7 @@
 {
   "name": "voice-kit",
   "version": "0.1.0",
-  "description": "Speaking and listening in the browser, for React PWAs: @voice-kit/composer (a hold-to-talk message composer, a React component), @voice-kit/speech (a read-aloud engine with Pause, Resume, Restart and Stop that keep the place, and a themeable SpeakingBar), @voice-kit/talks (multi-turn conversations: a talk of turns, the turn loop over an injected grind, picture turns, a store, a Dexie store and a searchable list) and @voice-kit/testing (honest speech, microphone and talk fakes for an app's tests, vitest and Playwright).",
+  "description": "Speaking and listening in the browser, for React PWAs: @voice-kit/composer (a hold-to-talk message composer, a React component), @voice-kit/speech (a read-aloud engine with Pause, Resume, Restart and Stop that keep the place, and a themeable SpeakingBar), @voice-kit/talks (multi-turn conversations: a talk of turns, the turn loop over an injected grind, picture turns, a store, a Dexie store and a searchable list), @voice-kit/forms (a form as the tutor sees it, and the command that sends it) and @voice-kit/testing (honest speech, microphone and talk fakes for an app's tests, vitest and Playwright).",
   "license": "MIT",
   "type": "module",
   "repository": {
@@ -47,6 +47,10 @@
       "default": "./packages/talks/dist/grind.js"
     },
     "./talks/styles.css": "./packages/talks/dist/styles.css",
+    "./forms": {
+      "types": "./packages/forms/dist/index.d.ts",
+      "default": "./packages/forms/dist/index.js"
+    },
     "./testing/speech": {
       "types": "./packages/testing/dist/speech.d.ts",
       "default": "./packages/testing/dist/speech.js"
@@ -68,10 +72,10 @@
     "!**/*.tsbuildinfo"
   ],
   "scripts": {
-    "build": "tsc -b packages/composer/tsconfig.build.json packages/speech/tsconfig.build.json packages/talks/tsconfig.build.json packages/testing/tsconfig.build.json && node -e \"for (const p of ['composer', 'speech', 'talks']) require('node:fs').copyFileSync('packages/' + p + '/src/styles.css', 'packages/' + p + '/dist/styles.css')\"",
+    "build": "tsc -b packages/composer/tsconfig.build.json packages/speech/tsconfig.build.json packages/talks/tsconfig.build.json packages/forms/tsconfig.build.json packages/testing/tsconfig.build.json && node -e \"for (const p of ['composer', 'speech', 'talks']) require('node:fs').copyFileSync('packages/' + p + '/src/styles.css', 'packages/' + p + '/dist/styles.css')\"",
     "prepare": "npm run build",
     "lint": "eslint .",
-    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p packages/composer/tsconfig.json --noEmit && tsc -p packages/speech/tsconfig.json --noEmit && tsc -p packages/talks/tsconfig.json --noEmit && tsc -p examples/composer-demo/tsconfig.json --noEmit",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p packages/composer/tsconfig.json --noEmit && tsc -p packages/speech/tsconfig.json --noEmit && tsc -p packages/talks/tsconfig.json --noEmit && tsc -p packages/forms/tsconfig.json --noEmit && tsc -p examples/composer-demo/tsconfig.json --noEmit",
     "test": "npm run check:personal && vitest run",
     "check:personal": "node scripts/check-personal.mjs",
     "smoke": "node scripts/consumer-smoke.mjs",

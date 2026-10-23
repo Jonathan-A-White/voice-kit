@@ -9,6 +9,7 @@ export default defineConfig({
       'voice-kit/testing/speech': fileURLToPath(new URL('./packages/testing/src/speech.ts', import.meta.url)),
       'voice-kit/testing/mic': fileURLToPath(new URL('./packages/testing/src/mic.ts', import.meta.url)),
       'voice-kit/talks': fileURLToPath(new URL('./packages/talks/src/index.ts', import.meta.url)),
+      'voice-kit/forms': fileURLToPath(new URL('./packages/forms/src/index.ts', import.meta.url)),
       'voice-kit/composer': fileURLToPath(new URL('./packages/composer/src/index.ts', import.meta.url)),
     },
   },
