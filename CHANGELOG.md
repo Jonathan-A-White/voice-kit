@@ -9,6 +9,13 @@ Each library keeps its own changelog; this one records the repo's releases and p
 - [@voice-kit/talks](packages/talks/CHANGELOG.md)
 - [@voice-kit/testing](packages/testing/CHANGELOG.md)
 
+## v0.17.0 (2026-10-23)
+
+- @voice-kit/talks 0.9.0 (mw-o480n1.4): a pluggable search: `searchTalks` takes `places(talk)` (what is searched: the title and each
+  turn unless given), `fold(text)` (`foldText`, case and accents, unless given) and `snippet(text, at, term)` (`defaultSnippet`, the
+  kit's 30-before/60-after line, unless given); `maxMatches` may be `Infinity`. With none given the results are as before. Additive.
+  See [its changelog](packages/talks/CHANGELOG.md).
+
 ## v0.16.0 (2026-10-23)
 
 - @voice-kit/talks 0.8.0 and @voice-kit/testing 0.4.0 (mw-o480n1.3): app fields on a turn: `Turn<F>.fields?` and `TalkSummary<F>.fields?`,

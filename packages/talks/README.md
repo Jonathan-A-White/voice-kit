@@ -169,6 +169,33 @@ const hits = await talks.search('firstfruit');
 A talk whose title matches comes first, then the talk last added to; `limit` caps the talks and `maxMatches` (3) the matches
 shown for each (`matchCount` counts all). A blank query finds nothing.
 
+An app whose talks are not shaped like the kit's (or whose words are not matched the kit's way) gives the search three plugs, each
+unchanged from the kit's own when left out. `searchTalks(reader, query, options)` reads through a `TalkReader` (`list` and `get`
+only), and `talks.search` passes the same options through.
+
+- `places(talk)` answers the `SearchPlace[]` searched, in order: `{ in: 'title' | 'turn', turn?, role?, text }`. By default the title,
+  then each turn. Every word of the query must sit in one place, so an app that keeps a question and its answer as one pair makes
+  one place of the two:
+
+  ```ts
+  const hits = await searchTalks(reader, 'grace gift', {
+    places: (talk) =>
+      talk.turns.flatMap((turn, i) =>
+        turn.role === 'user'
+          ? [{ in: 'turn', turn: i, role: 'user', text: `${turn.text}\n${talk.turns[i + 1]?.text ?? ''}` }]
+          : [],
+      ),
+  });
+  ```
+
+- `fold(text)` folds the query and each text before they are matched: `foldText` (case and accents) by default; `(t) => t.toLowerCase()`
+  matches case only. The index found is an index in the folded text, used in the original, so a fold must keep the length (as
+  `foldText` does) or come with a `snippet` of its own.
+- `snippet(text, at, term)` is the line a turn match carries, from the place's text, the index of the first word in the folded text
+  and that word: `defaultSnippet` (30 characters before, 60 after, on one line) by default.
+
+`maxMatches` may be `Infinity`, to keep every match of a talk.
+
 ## Pictures
 
 `ask(id, message, { pictures })` sends up to four JPEG, PNG or WebP pictures (`{ bytes, mime, name }`) with the message as `files`,

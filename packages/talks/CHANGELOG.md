@@ -2,6 +2,16 @@
 
 Newest first. Breaking changes come first in a release, each with its migration in one sentence.
 
+## 0.9.0 (2026-10-23, not yet tagged)
+
+- New (mw-o480n1.4): a pluggable search. `SearchOptions<F>` gains `places(talk)` (the `SearchPlace[]` searched, in order, `{ in:
+  'title' | 'turn', turn?, role?, text }`: the title then each turn unless given, so an app may make one place of a question and its
+  answer), `fold(text)` (how the query and the texts are folded: `foldText`, case and accents, unless given; a fold must keep the
+  text's length or come with its own `snippet`) and `snippet(text, at, term)` (the line a turn match carries: `defaultSnippet`, 30
+  characters before and 60 after, unless given). `maxMatches` may be `Infinity`. `searchTalks` reads through a `TalkReader<F>`.
+  Exports `SearchPlace`, `foldText` and `defaultSnippet`; `talks.search` passes the options through. With none given the results are
+  as before. Additive.
+
 ## 0.8.0 (2026-10-23, not yet tagged)
 
 - New (mw-o480n1.3): app fields on a turn. `Turn<F>` gains `fields?: F` (what the app keeps with a turn beyond the kit's own; the kit
