@@ -9,6 +9,12 @@ Each library keeps its own changelog; this one records the repo's releases and p
 - [@voice-kit/talks](packages/talks/CHANGELOG.md)
 - [@voice-kit/testing](packages/testing/CHANGELOG.md)
 
+## v0.18.1 (2026-10-23)
+
+- @voice-kit/forms 0.1.1 (mw-63u3pr.1): the grind fragment `helping-with-a-form.md` gives one rule for optional fields: once every
+  required field holds something the tutor says the form is ready and leaves `form_ask` out (it may name the empty optional fields in
+  that sentence), instead of also being told to go on to optional ones. Text only. See [its changelog](packages/forms/CHANGELOG.md).
+
 ## v0.18.0 (2026-10-23)
 
 - @voice-kit/talks 0.10.0 (mw-o480n1.5): the app's own look in `TalkList`: `renderRow(row, open)`, `filter(row)`, `search` (the `searchTalks`

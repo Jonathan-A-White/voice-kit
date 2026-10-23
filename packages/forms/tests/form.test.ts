@@ -122,6 +122,19 @@ describe('the grind fragment', () => {
     expect(new TextEncoder().encode(grind).length).toBeLessThan(3000);
   });
 
+  it('gives one rule for the optional fields: asked while a required one is empty, named in the ready sentence after', () => {
+    expect(grind).not.toContain('then optional ones');
+    const bullets = grind.split('\n').filter((line) => line.startsWith('- '));
+    const ready = bullets.filter((line) => line.includes('leave `form_ask` out'));
+    expect(ready).toHaveLength(1);
+    expect(ready[0]).toContain('every required field holds something');
+    expect(ready[0]).toContain('optional');
+    // the order bullet no longer sends him on to optional fields once the required ones are held
+    const order = bullets.filter((line) => line.includes('screen order'));
+    expect(order).toHaveLength(1);
+    expect(order[0]).not.toContain('optional');
+  });
+
   it('names the choice rule, the Send-button rule and that the tutor never sends', () => {
     expect(grind).toContain('one of its `options`, exactly');
     expect(grind).toContain('shows a Send button');

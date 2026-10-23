@@ -98,7 +98,8 @@ When the answer comes back, three small helpers:
 ## The grind fragment
 
 `grind/helping-with-a-form.md` (packed with the package, under 3,000 bytes) is an instructions part for the app's grind: 'Helping
-him fill in a form'. It teaches one question at a time, a `choice` answered with one of its options exactly, a Send button that the
-tutor mentions but never presses, and that the tutor never sends. Include it in the grind's instructions. The answer schema needs
-`form_values` (a list of `{ field, value }`, at most 8) and `form_ask` (a field name); they are the app's, as the rest of its answer
-schema is.
+him fill in a form'. It teaches one question at a time, a `choice` answered with one of its options exactly, one rule for the
+optional fields (never asked about once every required field holds something, but named in the sentence that says the form is
+ready), a Send button that the tutor mentions but never presses, and that the tutor never sends. Include it in the grind's
+instructions. The answer schema needs `form_values` (a list of `{ field, value }`, at most 8) and `form_ask` (a field name); they
+are the app's, as the rest of its answer schema is.

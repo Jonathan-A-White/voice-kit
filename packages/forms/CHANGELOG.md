@@ -2,6 +2,14 @@
 
 Newest first. Breaking changes come first in a release, each with its migration in one sentence.
 
+## 0.1.1 (2026-10-23)
+
+- Fixed (mw-63u3pr.1): `grind/helping-with-a-form.md` said two things about optional fields once the required ones were held ('then
+  optional ones' and 'leave `form_ask` out'), and a tutor given both asked about an optional field when the form was ready. It now
+  says one thing, in one bullet: an optional field is asked about (once at most) only while a required one is still empty and he has
+  answered past it; once every required field holds something the turn says the form is ready, leaves `form_ask` out, and may name
+  the empty optional fields in that same sentence. An app that copies the fragment takes the new text. No change to the code.
+
 ## 0.1.0 (2026-10-23, not yet tagged)
 
 - New (mw-o7cts8.1): `voice-kit/forms` (`@voice-kit/forms`), a form as the tutor sees it, lifted from Lampas's form helper with a
