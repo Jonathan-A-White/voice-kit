@@ -9,6 +9,15 @@ Each library keeps its own changelog; this one records the repo's releases and p
 - [@voice-kit/talks](packages/talks/CHANGELOG.md)
 - [@voice-kit/testing](packages/testing/CHANGELOG.md)
 
+## v0.10.0 (2026-10-23)
+
+- @voice-kit/talks 0.3.0 (mw-t3xu9a.1): the tutor client. `defineRegistry({ facts, commands, places })` and
+  `createTutorClient(...)`: each request carries the up-front facts and the catalogue under a byte budget; an answer's `asks` get a
+  follow-up round (two at most), its `do` runs commands (free, undoable, confirm), its `go` opens a place, and every ask-back and
+  miss is recorded per screen. The in-memory and Dexie stores keep the record and the up-front lists (`TutorStore`; the Dexie
+  database goes to version 2). The core still imports nothing. See [its changelog](packages/talks/CHANGELOG.md).
+- @voice-kit/testing 0.3.0 (mw-t3xu9a.1): the fake talk store is also a `TutorStore`. Additive.
+
 ## v0.9.0 (2026-10-22)
 
 - @voice-kit/talks 0.2.0 (mw-79en7t.31): talks kept on the device and shown on screen. `voice-kit/talks/dexie` (`createDexieStore`, a

@@ -2,6 +2,24 @@
 
 Newest first. Breaking changes come first in a release, each with its migration in one sentence.
 
+## 0.3.0 (2026-10-23, not yet tagged)
+
+- Changed: `createMemoryStore()` and `createDexieStore()` now return a `TalkStore & TutorStore`; the Dexie database goes to
+  version 2 (two new tables, the talks kept as they were). A store an app wrote itself still meets `TalkStore` as it is; it needs
+  the four `TutorStore` methods only to be given to the tutor client.
+- New (mw-t3xu9a.1): the tutor client. `defineRegistry({ facts, commands, places })` lists what an app lets the tutor know (a fact
+  `{ name, tell, read(), core? }`), do (a command `{ name, tell, args, kind: 'free' | 'undoable' | 'confirm', run(args) }`, its args
+  checked against a small JSON schema before it runs) and open (a place `{ name, tell, args?, open(args) }`); a name is used once,
+  and `catalogue()` lists them sorted. `createTutorClient({ store, send, registry, screen, budgetBytes?, buildRequest?, onGo? })`
+  drives a talk through it: each request carries `facts` (the core facts and the screen's up-front list) and `catalogue`, cut to
+  `budgetBytes` (non-core tell lines first, then the newest non-core facts; the app's fields never); an answer's `asks` are read
+  and sent back as `asked` in a follow-up round (two rounds a turn at most), `do` runs commands as their kind says (a confirm one
+  is handed to the app to confirm), `go` opens a place and tells the app (`onGo`), and `misses` are recorded. A refused call is a
+  miss, never thrown.
+- New (mw-t3xu9a.1): `TutorStore`: each screen's up-front list (`upFront`, `setUpFront`) and the record of every ask-back and
+  miss (`note`, `record(screen?)`, lines `{ at, screen, kind: 'ask' | 'miss', name, turn, why? }`), kept by the in-memory store, the
+  Dexie store and the fake of `@voice-kit/testing` 0.3.0, held to the same contract (`tests/storeContract.ts`).
+
 ## 0.2.0 (2026-10-22, not yet tagged)
 
 - New (mw-79en7t.31): `createDexieStore({ name?, newId?, now? })` from `voice-kit/talks/dexie`: a `TalkStore` kept on the device in

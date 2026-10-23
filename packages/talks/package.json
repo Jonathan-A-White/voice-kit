@@ -1,7 +1,7 @@
 {
   "name": "@voice-kit/talks",
-  "version": "0.2.0",
-  "description": "voice-kit: multi-turn conversations. A talk of turns with roles and times, the turn loop over a grind the app injects (send(request, files) answers), picture turns that are kept and sent only when asked, a store interface with an in-memory store, a Dexie store for the device (talks/dexie) and a searchable TalkList (talks/react). The core imports nothing: no React, no DOM.",
+  "version": "0.3.0",
+  "description": "voice-kit: multi-turn conversations. A talk of turns with roles and times, the turn loop over a grind the app injects (send(request, files) answers), picture turns that are kept and sent only when asked, a store interface with an in-memory store, a Dexie store for the device (talks/dexie), a searchable TalkList (talks/react), and the tutor client: a registry of named facts, commands and places the tutor can ask for, run and open. The core imports nothing: no React, no DOM.",
   "license": "MIT",
   "type": "module",
   "main": "./dist/index.js",

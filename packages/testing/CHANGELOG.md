@@ -2,6 +2,12 @@
 
 Newest first. Breaking changes come first in a release, each with its migration in one sentence.
 
+## 0.3.0 (2026-10-23, not yet tagged)
+
+- New (mw-t3xu9a.1): `createFakeTalkStore()` is also a `TutorStore` for the tutor client of `@voice-kit/talks` 0.3.0: each
+  screen's up-front list (`upFront`, `setUpFront`) and the tutor record (`note`, `record(screen?)`), with its calls recorded as the
+  others are. It passes the same store contract as the in-memory and Dexie stores. Additive.
+
 ## 0.2.0 (2026-10-22, not yet tagged)
 
 - New (mw-79en7t.31): `voice-kit/testing/talks`, also exported from the package index: `createFakeGrind(script)`, a grind for

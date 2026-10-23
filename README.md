@@ -142,7 +142,7 @@ In Playwright the same fakes go in as init scripts: `page.addInitScript(speechIn
 | `voice-kit/speech` | `speak`, `pause`, `resume`, `restart`, `stop`, ... | read aloud a sentence at a time, keeping the place; language and voice per utterance | `src/services/speech.ts` |
 | `voice-kit/speech/react` | `SpeakingBar`, `useSpeaking`, `useSpeech` | the one bar for anything read aloud, and the hook a speaker button reads (React) | `src/cockpit/`: `SpeakingBar.tsx`, `useSpeaking.ts` |
 | `voice-kit/speech/styles.css` | | the bar's default look | |
-| `voice-kit/talks` | `createTalks`, `createMemoryStore`, `searchTalks`, ... | multi-turn conversations over an injected grind; no React, no DOM | (new; carved from Lampas) |
+| `voice-kit/talks` | `createTalks`, `createMemoryStore`, `searchTalks`, `defineRegistry`, `createTutorClient`, ... | multi-turn conversations over an injected grind; no React, no DOM | (new; carved from Lampas) |
 | `voice-kit/talks/dexie` | `createDexieStore` | a `TalkStore` kept on the device in IndexedDB (needs `dexie`) | Lampas `src/data/repositories/talks.ts` |
 | `voice-kit/talks/react` | `TalkList` | a searchable list of the kept talks that opens one (React) | Lampas `src/Conversations.tsx` |
 | `voice-kit/talks/styles.css` | | the list's default look | |

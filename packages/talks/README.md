@@ -6,6 +6,8 @@ from the earlier turns, hands it to a **grind you inject** (`send(request, files
 and keeps both turns in order. A **store** keeps the talks; the one here is in memory, and the `TalkStore` interface is what any
 other (IndexedDB, a server) meets. Beside the core are two entry points that need something of the app's: a **Dexie store**
 that keeps talks on the device (`voice-kit/talks/dexie`) and a **TalkList** that shows them and opens one (`voice-kit/talks/react`).
+The **tutor client** drives a talk through the app's registry of facts, commands and places, so the tutor can ask the app for what it
+needs and do what he asks ([below](#the-tutor-client)).
 
 The core has no framework and no dependency: no React, no DOM, nothing from the other voice-kit libraries (a test says so). It reaches no
 network of its own: the grind you inject does that. The Composer's `useTalk` drives it as it is, with `onWords: (text) =>
@@ -116,6 +118,93 @@ A grind that throws, or a wrong input, keeps nothing and rejects the `ask`; the 
 for the one before, so turns asked at once are kept in the order asked. Times come from `now` (`Date.now` unless given): his turn is
 stamped when the ask starts, the answer's when it arrives.
 
+## The tutor client
+
+The tutor should be able to get from the app what it needs for its reply, and to do through the app what he asks for: read his
+plan, change a setting, open a screen. The app lists what it lets the tutor know, do and open in a **registry**, and the **tutor
+client** drives a talk through it. It knows no app: each app brings its own registry.
+
+```ts
+import { createMemoryStore, createTutorClient, defineRegistry } from 'voice-kit/talks';
+
+const registry = defineRegistry({
+  facts: [
+    { name: 'where', tell: 'the screen he is on', core: true, read: async () => currentScreen() },
+    { name: 'todaysDrill', tell: "today's drill: the words and how far he got", read: () => drills.today() },
+  ],
+  commands: [
+    { name: 'markDone', tell: "marks today's drill done", kind: 'free', run: async () => ({ said: 'Marked done.' }) },
+    {
+      name: 'setTheme',
+      tell: 'changes the theme',
+      kind: 'undoable',
+      args: { type: 'object', properties: { theme: { enum: ['dark', 'light'] } }, required: ['theme'] },
+      run: async (args) => {
+        const { theme } = args as { theme: 'dark' | 'light' }; // checked against `args` before run is called
+        const before = await settings.theme();
+        await settings.setTheme(theme);
+        return { said: `Theme: ${theme}`, undo: () => settings.setTheme(before) };
+      },
+    },
+    { name: 'resetProgress', tell: 'forgets all his progress', kind: 'confirm', offer: () => 'Reset all your progress?', run: resetProgress },
+  ],
+  places: [{ name: 'chapter', tell: 'opens a chapter', args: { type: 'object', properties: { book: { type: 'string' }, chapter: { type: 'integer' } }, required: ['book', 'chapter'] }, open: openChapter }],
+});
+
+const tutor = createTutorClient({
+  store: createMemoryStore(), // or the Dexie store: it keeps the record and the up-front lists too
+  send: (request, files) => callMyModel(request, files),
+  registry,
+  screen: () => currentScreen(),
+  budgetBytes: 24_000,
+  onGo: (went) => history.pushState({ went }, ''), // so Back returns to the talk
+});
+const talk = await tutor.start();
+const turn = await tutor.ask(talk.id, "what's on my drill today?");
+// turn.answer, turn.done ([{ name, kind, said, undo? }]), turn.pending ([{ name, said, confirm() }]), turn.went, turn.misses
+```
+
+**The registry.** `defineRegistry({ facts, commands, places })`; a name is used once across all three (a second throws).
+
+- A **fact** `{ name, tell, read(), core? }`: `tell` is one line for the tutor; a `core` fact is read for every request.
+- A **command** `{ name, tell, args?, kind, run(args), offer? }`: `args` is a small JSON schema (`type`, `properties`, `required`,
+  `additionalProperties`, `items`, `enum`, `minimum`/`maximum`, `minLength`/`maxLength`); without one it takes no args. `run`
+  resolves to `{ said, undo? }`. `kind` is `'free'` (runs at once), `'undoable'` (runs, and its `undo` is handed to the app) or
+  `'confirm'` (not run: the app gets `{ said, confirm() }`, `said` being `offer(args)` or the tell line, and calls `confirm()` when
+  he says yes).
+- A **place** `{ name, tell, args?, open(args) }`.
+
+`registry.catalogue()` lists every name as `{ name, is: 'fact' | 'command' | 'place', kind?, core?, tell, args? }`, sorted by name,
+the same every time. A call is checked before anything runs: `registry.run(name, args)` and `registry.open(name, args)` resolve to
+`{ ok: true, ... }` or `{ ok: false, why }` ('args.theme must be one of "dark", "light"'), and a refused call never runs.
+`checkArgs(schema, value)` is the check on its own.
+
+**The request** is the app's own fields (the default request, or what `buildRequest(input)` makes) with two more:
+
+- `facts`: `{ name: value }` for every core fact and every fact on the screen's **up-front list** (`store.upFront(screen)`, set
+  with `store.setUpFront(screen, names)`; empty means the core facts only). A fact whose read fails is left out and recorded as a miss.
+- `catalogue`: the registry's catalogue.
+
+Over `budgetBytes` the tell lines of the non-core entries are cut first (from the end of the catalogue), then the newest
+non-core facts are dropped (the last of the up-front list first; the name stays in the catalogue, so the tutor can ask for it).
+The app's fields and the core facts are never cut. `tutor.buildRequest(turn, fields)` builds one for an app that sends it itself.
+
+**The answer.** The client reads four fields; every other field is the app's.
+
+- `asks: string[]`: facts it wants before it answers. Each one the registry has is read and the request goes again, in the same
+  turn, with `asked: { name: value }`; a name it does not have is not sent back and is recorded as a miss. **Two rounds at
+  most**: the second answer is the one kept and returned, even if it asks again (those asks are recorded as misses).
+- `do: [{ name, args }]`: commands, run in order as their kind says.
+- `go: { name, args }`: a place, opened; then `onGo({ name, args })` tells the app.
+- `misses: [{ wanted, why }]`: what it wanted that the app has no fact, command or place for.
+
+An unknown name, refused args or a run that throws is a **miss**, never thrown. Only the answer that stands is carried out.
+`tutor.takeAnswer(answer, turn)` carries out `do`, `go` and `misses` of an answer the app got some other way.
+
+**The record.** Every ask-back and miss is noted in the store as `{ at, screen, kind: 'ask' | 'miss', name, turn, why? }` (`turn`
+is his turn's place in the talk) and read back with `store.record(screen?)`, oldest first: what the tutor needed on each screen,
+for tuning the up-front lists.
+
 ## On the device: the Dexie store
 
 `createDexieStore()` from `voice-kit/talks/dexie` is a `TalkStore` kept in IndexedDB through Dexie, so talks outlive the page. The
@@ -156,5 +245,7 @@ the top of `styles.css`.
 ## The store
 
 `TalkStore`: `create`, `get`, `list` (summaries, last added to first), `append`, `rename`, `setMemory`, `remove`. Every method is
-async and what comes out is a copy. `tests/storeContract.ts` holds a contract any store must keep; the in-memory store and the Dexie store pass it.
+async and what comes out is a copy. `TutorStore`, which the tutor client needs beside it: `upFront(screen)`, `setUpFront(screen,
+names)`, `note(records)`, `record(screen?)`. `tests/storeContract.ts` holds a contract any store must keep; the in-memory store, the
+Dexie store and the fake of `voice-kit/testing/talks` pass it, and all three are both.
 A talk's `memory` (`{ facts, summary }`) is kept with it (`setMemory`) and goes when it goes.
