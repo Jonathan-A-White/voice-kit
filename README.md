@@ -14,6 +14,9 @@ working code in [Postern](https://github.com/Jonathan-A-White/postern) by way of
 - `@voice-kit/talks`: multi-turn conversations: a talk of turns with roles and times, the turn loop over a grind the app
   injects, picture turns, memory and search, and a store interface with an in-memory store. The core has no React and no DOM;
   the Composer's `useTalk` drives it as it is. Beside it: a Dexie store for the device and a searchable `TalkList`. See [packages/talks](packages/talks/README.md).
+- `@voice-kit/forms`: a form as the tutor sees it (text, link, choice and pictures fields), the values an answer may fill, and
+  `formCommand(form)`, the command that sends it for the talks registry, so the Send button and the tutor call one path. See
+  [packages/forms](packages/forms/README.md).
 - `@voice-kit/testing`: honest fakes for an app's tests, in vitest and in Playwright: a speech synthesiser and a
   microphone (getUserMedia, MediaRecorder, SpeechRecognition) that behave like Android Chrome in time, and a scripted grind and a
   recording store for tests of a talk. See

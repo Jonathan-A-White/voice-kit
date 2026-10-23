@@ -1,0 +1,17 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true,
+    "types": [],
+    "declaration": true,
+    "rootDir": "src",
+    "outDir": "dist",
+    "tsBuildInfoFile": "dist/.tsbuildinfo",
+    "baseUrl": ".",
+    "paths": {
+      "voice-kit/talks": ["../talks/src/index.ts"]
+    }
+  },
+  "include": ["src"],
+  "references": [{ "path": "../talks/tsconfig.build.json" }]
+}

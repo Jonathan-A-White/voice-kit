@@ -1,0 +1,20 @@
+{
+  "name": "@voice-kit/forms",
+  "version": "0.1.0",
+  "description": "voice-kit: a form as the tutor sees it. A FormSpec (text, link, choice and pictures fields), the `form` fragment of a request, the values an answer may fill, requiredFilled and oneQuestion, and formCommand(form), a Command for @voice-kit/talks' registry whose args are built from the fields, so the form's own Send button and the tutor call one path. With the grind part 'Helping him fill in a form'. Imports only types from @voice-kit/talks: no React, no DOM.",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist/**",
+    "grind/**",
+    "!**/*.tsbuildinfo"
+  ]
+}
