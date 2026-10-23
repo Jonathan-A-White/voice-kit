@@ -20,8 +20,9 @@ export const MAX_HISTORY_TURNS = 10;
 export const PICTURE_ONLY_QUESTION = 'Read the picture and tell me about it.';
 
 /** A long answer in the history is cut to this many characters when the request is too big. */
-const CLIPPED_CHARS = 240;
-const CLIP_MARK = '…';
+export const CLIPPED_CHARS = 240;
+/** What a clipped text ends with. */
+export const CLIP_MARK = '…';
 
 /** Whether a file may be sent as a picture: its type is one of the allowed. */
 export const isTalkPicture = (file: { type: string }): boolean => TALK_PICTURE_MIMES.includes(file.type);
@@ -154,23 +155,64 @@ function defaultAnswerText(answer: unknown): string {
   throw new TypeError('The grind answered something that is not text: give createTalks an answerText.');
 }
 
-const sizeOf = (request: unknown): number => new TextEncoder().encode(JSON.stringify(request)).length;
+/** The weight of a value as it travels: the UTF-8 length of its JSON. */
+export const jsonBytes = (value: unknown): number => new TextEncoder().encode(JSON.stringify(value)).length;
+
+/** `text` cut to at most `max` characters, the last of them `mark` (the text as it is when it already fits). */
+export function clipText(text: string, max: number, mark: string = CLIP_MARK): string {
+  return text.length <= max ? text : text.slice(0, Math.max(0, max - mark.length)).trimEnd() + mark;
+}
+
+/** One step of fitting: the request with one thing less, or null when there is nothing more for this step to cut. */
+export type Cut<R> = (request: R) => R | null;
+
+export interface FitBudget<R> {
+  /** The most the request may weigh, with `extraBytes`. */
+  maxBytes: number;
+  /** What travels beside the request and weighs with it (a header, say); 0 unless given. */
+  extraBytes?: number;
+  /** The weight of a request; jsonBytes unless given. */
+  sizeOf?: (request: R) => number;
+}
+
+/**
+ * Cuts `request` to fit the budget. The steps run in the order given: while the request is over budget a step is taken again and
+ * again until it returns null, then the next step is tried; it stops as soon as the request fits. A request that fits is returned
+ * as given; when every step is spent the last request stands.
+ */
+export function fitRequest<R>(request: R, steps: readonly Cut<R>[], budget: FitBudget<R>): R {
+  const { maxBytes, extraBytes = 0, sizeOf = jsonBytes } = budget;
+  const tooBig = (r: R): boolean => sizeOf(r) + extraBytes > maxBytes;
+  let fitted = request;
+  for (const step of steps) {
+    while (tooBig(fitted)) {
+      const next = step(fitted);
+      if (next === null) break;
+      fitted = next;
+    }
+    if (!tooBig(fitted)) break;
+  }
+  return fitted;
+}
+
+/** The default request with its oldest long assistant answer clipped (CLIPPED_CHARS); null when no answer is long. */
+export const clipLongAnswers: Cut<TalkRequest> = (request) => {
+  const long = request.history.findIndex((t) => t.role === 'assistant' && t.text.length > CLIPPED_CHARS);
+  if (long < 0) return null;
+  const history = request.history.map((t, i) => (i === long ? { ...t, text: clipText(t.text, CLIPPED_CHARS) } : { ...t }));
+  return { ...request, history };
+};
+
+/** The default request without its oldest turn; null when the history is empty. */
+export const dropOldestTurn: Cut<TalkRequest> = (request) =>
+  request.history.length > 0 ? { ...request, history: request.history.slice(1) } : null;
 
 /**
  * Makes the default request fit `maxBytes`: while it is too big the oldest long answer in the history is cut short; when none is
- * left to cut the oldest turn is dropped. The message is never touched.
+ * left to cut the oldest turn is dropped. The message is never touched. (fitRequest over clipLongAnswers and dropOldestTurn.)
  */
 export function fitHistory(request: TalkRequest, maxBytes: number): TalkRequest {
-  let history = request.history.map((t) => ({ ...t }));
-  const fitted = (): TalkRequest => ({ ...request, history });
-  const tooBig = (): boolean => sizeOf(fitted()) > maxBytes;
-  for (;;) {
-    const long = history.findIndex((t) => t.role === 'assistant' && t.text.length > CLIPPED_CHARS);
-    if (!tooBig() || long < 0) break;
-    history[long] = { ...history[long], text: history[long].text.slice(0, CLIPPED_CHARS - CLIP_MARK.length).trimEnd() + CLIP_MARK };
-  }
-  while (history.length > 0 && tooBig()) history = history.slice(1);
-  return fitted();
+  return fitRequest(request, [clipLongAnswers, dropOldestTurn], { maxBytes });
 }
 
 export function createTalks<Answer = string>(options: TalksOptions<Answer>): Talks<Answer>;

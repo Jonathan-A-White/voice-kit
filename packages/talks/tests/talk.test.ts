@@ -1,13 +1,21 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+  CLIPPED_CHARS,
+  CLIP_MARK,
   PICTURE_ONLY_QUESTION,
   TALK_MAX_PICTURES,
   TalkInputError,
   createMemoryStore,
   createTalks,
+  clipLongAnswers,
+  clipText,
   dataUrlOf,
+  dropOldestTurn,
   fitHistory,
+  fitRequest,
   isTalkPicture,
+  jsonBytes,
+  type Cut,
   type OutgoingPicture,
   type TalkRequest,
 } from '../src/index.js';
@@ -225,5 +233,97 @@ describe('fitHistory', () => {
     const tight = fitHistory(r, 120);
     expect(tight.message).toBe('now');
     expect(tight.history.length).toBeLessThan(4);
+  });
+});
+
+describe('fitRequest', () => {
+  type Box = { items: string[]; notes: string[] };
+  const box = (items: string[], notes: string[] = []): Box => ({ items, notes });
+  const dropItem: Cut<Box> = (b) => (b.items.length > 0 ? { ...b, items: b.items.slice(1) } : null);
+  const dropNote: Cut<Box> = (b) => (b.notes.length > 0 ? { ...b, notes: b.notes.slice(1) } : null);
+
+  it('runs the steps in the order given, each until it has nothing left to cut', () => {
+    const calls: string[] = [];
+    const spy = (name: string, cut: Cut<Box>): Cut<Box> => (b) => {
+      const next = cut(b);
+      calls.push(`${name}:${next ? 'cut' : 'null'}`);
+      return next;
+    };
+    const fitted = fitRequest(box(['aaaa', 'bbbb'], ['n1', 'n2']), [spy('notes', dropNote), spy('items', dropItem)], { maxBytes: 20 });
+    expect(calls).toEqual(['notes:cut', 'notes:cut', 'notes:null', 'items:cut', 'items:cut', 'items:null']);
+    expect(fitted).toEqual(box([]));
+  });
+
+  it('stops as soon as the request fits, and does not try the later steps', () => {
+    const items = vi.fn(dropItem);
+    const fitted = fitRequest(box(['a', 'b'], ['n1', 'n2']), [dropNote, items], { maxBytes: jsonBytes(box(['a', 'b'])) });
+    expect(fitted).toEqual(box(['a', 'b']));
+    expect(items).not.toHaveBeenCalled();
+  });
+
+  it('returns a request under the budget as given and calls no step', () => {
+    const step = vi.fn(dropItem);
+    const given = box(['a']);
+    expect(fitRequest(given, [step], { maxBytes: 10_000 })).toBe(given);
+    expect(step).not.toHaveBeenCalled();
+  });
+
+  it('counts extraBytes toward the budget', () => {
+    const given = box(['aaaa', 'bbbb']);
+    const maxBytes = jsonBytes(given);
+    expect(fitRequest(given, [dropItem], { maxBytes })).toBe(given);
+    expect(fitRequest(given, [dropItem], { maxBytes, extraBytes: 4 }).items).toEqual(['bbbb']);
+  });
+
+  it('leaves the last request standing, and throws nothing, when every step is spent', () => {
+    const fitted = fitRequest(box(['a'], ['n']), [dropNote, dropItem], { maxBytes: 1 });
+    expect(fitted).toEqual(box([]));
+    expect(fitRequest(box(['a']), [], { maxBytes: 1 })).toEqual(box(['a']));
+  });
+
+  it('uses a custom sizeOf instead of jsonBytes', () => {
+    const count = (b: Box) => b.items.length;
+    expect(fitRequest(box(['a', 'b', 'c']), [dropItem], { maxBytes: 1, sizeOf: count }).items).toEqual(['c']);
+    expect(fitRequest(box(['a', 'b', 'c']), [dropItem], { maxBytes: 5, extraBytes: 1, sizeOf: count }).items).toEqual(['a', 'b', 'c']);
+  });
+
+  it('is what fitHistory is: clipLongAnswers, then dropOldestTurn', () => {
+    const long = 'x'.repeat(2000);
+    const history = Array.from({ length: 12 }, (_, i) => ({
+      role: (i % 2 === 0 ? 'user' : 'assistant') as 'user' | 'assistant',
+      text: i === 1 || i === 5 || i === 9 ? long : `turn ${i}`,
+    }));
+    const request: TalkRequest = { message: 'now', history };
+    for (const maxBytes of [10_000, 3000, 1500, 600, 200, 50]) {
+      expect(fitHistory(request, maxBytes)).toEqual(fitRequest(request, [clipLongAnswers, dropOldestTurn], { maxBytes }));
+    }
+  });
+
+  it('has the kit cuts: clip the oldest long answer, drop the oldest turn, and null when none is left', () => {
+    const long = 'y'.repeat(500);
+    const request: TalkRequest = {
+      message: 'now',
+      history: [
+        { role: 'user', text: long },
+        { role: 'assistant', text: long },
+        { role: 'assistant', text: long },
+      ],
+    };
+    const once = clipLongAnswers(request)!;
+    expect(once.history[0].text).toBe(long);
+    expect(once.history[1].text).toBe(clipText(long, CLIPPED_CHARS));
+    expect(once.history[1].text.endsWith(CLIP_MARK)).toBe(true);
+    expect(once.history[1].text.length).toBeLessThanOrEqual(CLIPPED_CHARS);
+    expect(request.history[1].text).toBe(long);
+    expect(clipLongAnswers(clipLongAnswers(once)!)).toBeNull();
+    expect(dropOldestTurn(request)!.history).toHaveLength(2);
+    expect(dropOldestTurn({ message: 'm', history: [] })).toBeNull();
+  });
+
+  it('measures bytes as UTF-8 JSON, and clips text to a length with a mark', () => {
+    expect(jsonBytes({ a: 'é' })).toBe(new TextEncoder().encode('{"a":"é"}').length);
+    expect(clipText('short', 10)).toBe('short');
+    expect(clipText('abcdefghij', 5)).toBe(`abcd${CLIP_MARK}`);
+    expect(clipText('abcdefghij', 6, '...')).toBe('abc...');
   });
 });
