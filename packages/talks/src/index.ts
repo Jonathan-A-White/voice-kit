@@ -12,6 +12,9 @@ export {
   type TalkMemory,
   type TalkStore,
   type TalkSummary,
+  type TutorRecord,
+  type TutorRecordKind,
+  type TutorStore,
   type Turn,
 } from './store.js';
 export {

@@ -1,5 +1,5 @@
 // talks.ts (mw-79en7t.31) — honest fakes for an app's tests of a talk: a grind that answers scripted turns, and a store that keeps
-// talks in memory and records every call. Like the rest of this package it imports nothing: the shapes below are structurally
+// talks (and, since mw-t3xu9a.1, the tutor client's record and up-front lists) in memory and records every call. Like the rest of this package it imports nothing: the shapes below are structurally
 // the ones @voice-kit/talks has (a `send(request, files)` grind, a TalkStore), so they plug into createTalks as they are.
 
 /** A file that goes with a request, as @voice-kit/talks sends it. */
@@ -75,7 +75,17 @@ export interface FakeTalkSummary {
   updatedAt: number;
 }
 
-export type FakeTalkStoreMethod = 'create' | 'get' | 'list' | 'append' | 'rename' | 'setMemory' | 'remove';
+/** A line of the tutor client's record, as @voice-kit/talks keeps it (TutorRecord). */
+export interface FakeTutorRecord {
+  at: number;
+  screen: string;
+  kind: 'ask' | 'miss';
+  name: string;
+  turn: number;
+  why?: string;
+}
+
+export type FakeTalkStoreMethod = 'create' | 'get' | 'list' | 'append' | 'rename' | 'setMemory' | 'remove' | 'upFront' | 'setUpFront' | 'note' | 'record';
 
 /** A call on the store: the method and the arguments it was given. */
 export interface TalkStoreCall {
@@ -98,6 +108,13 @@ export interface FakeTalkStore {
   rename(id: string, title: string): Promise<FakeTalk>;
   setMemory(id: string, memory: FakeTalkMemory): Promise<FakeTalk>;
   remove(id: string): Promise<void>;
+  /** The facts read up front on `screen`; empty until set. */
+  upFront(screen: string): Promise<string[]>;
+  setUpFront(screen: string, names: string[]): Promise<void>;
+  /** Adds lines at the end of the tutor record. */
+  note(records: FakeTutorRecord[]): Promise<void>;
+  /** The tutor record, oldest first: all of it, or one screen's. */
+  record(screen?: string): Promise<FakeTutorRecord[]>;
   /** Every call so far, in order, with its arguments. */
   calls: TalkStoreCall[];
 }
@@ -107,15 +124,18 @@ const cloneTurn = (t: FakeTurn): FakeTurn => ({ role: t.role, text: t.text, ...(
 const cloneTalk = (t: FakeTalk): FakeTalk => ({ ...t, turns: t.turns.map(cloneTurn), memory: { facts: [...t.memory.facts], summary: t.memory.summary } });
 
 /**
- * A TalkStore in memory that records every call (`calls`), for a test of an app that keeps talks. It behaves as the real stores
- * do: copies out, a talk that is not there rejects (except `get` and `remove`), the list newest activity first.
+ * A TalkStore (and TutorStore) in memory that records every call (`calls`), for a test of an app that keeps talks. It behaves as
+ * the real stores do (it passes their contract, @voice-kit/talks tests/storeContract.ts): copies out, a talk that is not there
+ * rejects (except `get` and `remove`), the list newest activity first, the tutor record oldest first.
  */
 export function createFakeTalkStore({ newId, now = Date.now }: FakeTalkStoreOptions = {}): FakeTalkStore {
   const talks = new Map<string, FakeTalk>();
   const calls: TalkStoreCall[] = [];
+  const kept: FakeTutorRecord[] = [];
+  const lists = new Map<string, string[]>();
   let made = 0;
   const idOf = newId ?? ((): string => `talk-${++made}`);
-  const record = (method: FakeTalkStoreMethod, ...args: unknown[]): void => {
+  const log = (method: FakeTalkStoreMethod, ...args: unknown[]): void => {
     calls.push({ method, args });
   };
   const need = (id: string): FakeTalk => {
@@ -126,19 +146,19 @@ export function createFakeTalkStore({ newId, now = Date.now }: FakeTalkStoreOpti
   return {
     calls,
     async create(init = {}) {
-      record('create', init);
+      log('create', init);
       const at = init.now ?? now();
       const talk: FakeTalk = { id: idOf(), title: init.title ?? '', turns: [], memory: { facts: [], summary: '' }, createdAt: at, updatedAt: at };
       talks.set(talk.id, talk);
       return cloneTalk(talk);
     },
     async get(id) {
-      record('get', id);
+      log('get', id);
       const talk = talks.get(id);
       return talk ? cloneTalk(talk) : undefined;
     },
     async list(options = {}) {
-      record('list', options);
+      log('list', options);
       const summaries = [...talks.values()]
         .map((t): FakeTalkSummary => ({
           id: t.id,
@@ -152,27 +172,43 @@ export function createFakeTalkStore({ newId, now = Date.now }: FakeTalkStoreOpti
       return options.limit === undefined ? summaries : summaries.slice(0, options.limit);
     },
     async append(id, turns) {
-      record('append', id, turns);
+      log('append', id, turns);
       const talk = need(id);
       talk.turns.push(...turns.map(cloneTurn));
       if (turns.length > 0) talk.updatedAt = Math.max(talk.updatedAt, ...turns.map((t) => t.at));
       return cloneTalk(talk);
     },
     async rename(id, title) {
-      record('rename', id, title);
+      log('rename', id, title);
       const talk = need(id);
       talk.title = title;
       return cloneTalk(talk);
     },
     async setMemory(id, memory) {
-      record('setMemory', id, memory);
+      log('setMemory', id, memory);
       const talk = need(id);
       talk.memory = { facts: [...memory.facts], summary: memory.summary };
       return cloneTalk(talk);
     },
     async remove(id) {
-      record('remove', id);
+      log('remove', id);
       talks.delete(id);
+    },
+    async upFront(screen) {
+      log('upFront', screen);
+      return [...(lists.get(screen) ?? [])];
+    },
+    async setUpFront(screen, names) {
+      log('setUpFront', screen, names);
+      lists.set(screen, [...names]);
+    },
+    async note(records) {
+      log('note', records);
+      kept.push(...records.map((r) => ({ ...r })));
+    },
+    async record(screen) {
+      log('record', screen);
+      return kept.filter((r) => screen === undefined || r.screen === screen).map((r) => ({ ...r }));
     },
   };
 }

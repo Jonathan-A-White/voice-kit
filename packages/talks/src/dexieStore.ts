@@ -1,10 +1,22 @@
 // dexieStore.ts (mw-79en7t.31) — a TalkStore kept on the device in IndexedDB through Dexie. Lampas kept a Bible talk's turns this
-// way (src/data/repositories/talks.ts); this is the part that is not about the Bible. It has its own database with two tables: one
-// row per talk (its title, memory, times, and the count and first words a list shows, so a list reads no turns) and one row per
-// turn. It is its own entry point (`voice-kit/talks/dexie`) so the core of @voice-kit/talks keeps importing nothing; the app
-// installs `dexie` (an optional peer). It passes the same contract as the in-memory store (tests/storeContract.ts).
+// way (src/data/repositories/talks.ts); this is the part that is not about the Bible. It has its own database: one row per talk
+// (its title, memory, times, and the count and first words a list shows, so a list reads no turns) and one row per turn; since
+// version 2 (mw-t3xu9a.1) also the tutor client's record and each screen's up-front list (TutorStore). It is its own entry point
+// (`voice-kit/talks/dexie`) so the core of @voice-kit/talks keeps importing nothing; the app installs `dexie` (an optional peer).
+// It passes the same contract as the in-memory store (tests/storeContract.ts).
 import { Dexie, type EntityTable } from 'dexie';
-import { TalkNotFoundError, type CreateTalk, type Picture, type Talk, type TalkMemory, type TalkStore, type TalkSummary, type Turn } from './store.js';
+import {
+  TalkNotFoundError,
+  type CreateTalk,
+  type Picture,
+  type Talk,
+  type TalkMemory,
+  type TalkStore,
+  type TalkSummary,
+  type TutorRecord,
+  type TutorStore,
+  type Turn,
+} from './store.js';
 
 interface TalkRow {
   id: string;
@@ -23,13 +35,27 @@ interface TurnRow extends Turn {
   talkId: string;
 }
 
+interface RecordRow extends TutorRecord {
+  /** the order the records were noted in */
+  seq?: number;
+}
+
+interface UpFrontRow {
+  screen: string;
+  names: string[];
+}
+
 class TalksDatabase extends Dexie {
   talks!: EntityTable<TalkRow, 'id'>;
   turns!: EntityTable<TurnRow, 'seq'>;
+  tutorRecord!: EntityTable<RecordRow, 'seq'>;
+  upFront!: EntityTable<UpFrontRow, 'screen'>;
 
   constructor(name: string, options?: { indexedDB?: IDBFactory; IDBKeyRange?: typeof IDBKeyRange }) {
     super(name, options);
     this.version(1).stores({ talks: 'id, updatedAt', turns: '++seq, talkId' });
+    // 2 (mw-t3xu9a.1): the tutor client's record and each screen's up-front list; the talks are kept as they were
+    this.version(2).stores({ tutorRecord: '++seq, screen', upFront: 'screen' });
   }
 }
 
@@ -45,7 +71,7 @@ export interface DexieStoreOptions {
   IDBKeyRange?: typeof IDBKeyRange;
 }
 
-export interface DexieTalkStore extends TalkStore {
+export interface DexieTalkStore extends TalkStore, TutorStore {
   /** Closes the database connection; the talks stay kept. Using the store again reopens it. */
   close(): void;
 }
@@ -57,6 +83,7 @@ const defaultId = (): string => globalThis.crypto?.randomUUID?.() ?? `talk-${Dat
 const keepPicture = (p: Picture): Picture => ({ bytes: p.bytes.slice(), mime: p.mime, name: p.name });
 const keepTurn = (t: Turn): Turn => ({ role: t.role, text: t.text, ...(t.pictures ? { pictures: t.pictures.map(keepPicture) } : {}), at: t.at });
 const turnOf = ({ role, text, pictures, at }: TurnRow): Turn => ({ role, text, ...(pictures ? { pictures } : {}), at });
+const recordOf = ({ at, screen, kind, name, turn, why }: RecordRow): TutorRecord => ({ at, screen, kind, name, turn, ...(why === undefined ? {} : { why }) });
 const talkOf = (row: TalkRow, turns: TurnRow[]): Talk => ({
   id: row.id,
   title: row.title,
@@ -128,6 +155,19 @@ export function createDexieStore({ name = 'voice-kit-talks', newId = defaultId, 
         await db.turns.where('talkId').equals(id).delete();
         await db.talks.delete(id);
       });
+    },
+    async upFront(screen) {
+      return [...((await db.upFront.get(screen))?.names ?? [])];
+    },
+    async setUpFront(screen, names) {
+      await db.upFront.put({ screen, names: [...names] });
+    },
+    async note(records) {
+      if (records.length > 0) await db.tutorRecord.bulkAdd(records.map(recordOf));
+    },
+    async record(screen) {
+      const rows = await (screen === undefined ? db.tutorRecord.orderBy('seq').toArray() : db.tutorRecord.where('screen').equals(screen).sortBy('seq'));
+      return rows.map(recordOf);
     },
   };
 }

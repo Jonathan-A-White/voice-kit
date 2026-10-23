@@ -1,3 +1,4 @@
+import { Dexie } from 'dexie';
 import { IDBKeyRange, indexedDB } from 'fake-indexeddb';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createDexieStore, type DexieTalkStore } from '../src/dexieStore.js';
@@ -32,6 +33,20 @@ describe('the Dexie store, beyond the contract', () => {
     expect(talk.turns).toHaveLength(1);
     expect(Array.from(talk.turns[0].pictures![0].bytes)).toEqual([7, 8]);
     expect(talk.memory).toEqual({ facts: ['a'], summary: 's' });
+  });
+
+  it('opens a version-1 database (before the tutor tables) and keeps its talks', async () => {
+    const old = new Dexie('talks-version-1', { indexedDB, IDBKeyRange });
+    old.version(1).stores({ talks: 'id, updatedAt', turns: '++seq, talkId' });
+    await old.table('talks').add({ id: 'kept', title: 'From before', memory: { facts: [], summary: '' }, createdAt: 1, updatedAt: 2, turnCount: 1, firstText: 'hello' });
+    await old.table('turns').add({ talkId: 'kept', role: 'user', text: 'hello', at: 2 });
+    old.close();
+    const store = createDexieStore({ name: 'talks-version-1', indexedDB, IDBKeyRange });
+    opened.push(store);
+    expect((await store.get('kept'))!.turns.map((t) => t.text)).toEqual(['hello']);
+    expect(await store.record()).toEqual([]);
+    await store.note([{ at: 3, screen: 'home', kind: 'ask', name: 'today', turn: 0 }]);
+    expect(await store.record('home')).toHaveLength(1);
   });
 
   it('remove takes the turns with the talk, and two talks do not share turns', async () => {

@@ -76,6 +76,36 @@ export interface TalkStore {
   remove(id: string): Promise<void>;
 }
 
+/** What the tutor client noted: a fact it asked back for and was given ('ask'), or something it wanted that the app did not have or would not do ('miss'). */
+export type TutorRecordKind = 'ask' | 'miss';
+
+/** One line of the tutor record: when, on which screen, what, and the talk turn (his turn's place in the talk) it belongs to. */
+export interface TutorRecord {
+  /** ms since the epoch */
+  at: number;
+  screen: string;
+  kind: TutorRecordKind;
+  /** the fact, command or place by name; for a miss the answer named, what it wanted */
+  name: string;
+  turn: number;
+  /** for a miss: why it was not had */
+  why?: string;
+}
+
+/**
+ * What the tutor client keeps beside the talks (tutorClient.ts): the record of what was asked back and missed, and each screen's
+ * up-front list, the facts read for every request made there besides the core ones. The stores here keep both.
+ */
+export interface TutorStore {
+  /** The names of the facts read up front on `screen`, in the order set (the newest last); empty until set. */
+  upFront(screen: string): Promise<string[]>;
+  setUpFront(screen: string, names: string[]): Promise<void>;
+  /** Adds records at the end of the record, in the order given. */
+  note(records: TutorRecord[]): Promise<void>;
+  /** The record, oldest first: all of it, or one screen's. */
+  record(screen?: string): Promise<TutorRecord[]>;
+}
+
 export class TalkNotFoundError extends Error {
   constructor(readonly id: string) {
     super(`There is no talk ${JSON.stringify(id)}.`);
@@ -87,6 +117,7 @@ const clonePicture = (p: Picture): Picture => ({ bytes: p.bytes.slice(), mime: p
 const cloneTurn = (t: Turn): Turn => ({ role: t.role, text: t.text, ...(t.pictures ? { pictures: t.pictures.map(clonePicture) } : {}), at: t.at });
 const cloneMemory = (m: TalkMemory): TalkMemory => ({ facts: [...m.facts], summary: m.summary });
 const cloneTalk = (t: Talk): Talk => ({ ...t, turns: t.turns.map(cloneTurn), memory: cloneMemory(t.memory) });
+const cloneRecord = (r: TutorRecord): TutorRecord => ({ ...r });
 
 export interface MemoryStoreOptions {
   /** Makes the id of a new talk: a random UUID unless given. */
@@ -98,9 +129,11 @@ export interface MemoryStoreOptions {
 let counter = 0;
 const defaultId = (): string => globalThis.crypto?.randomUUID?.() ?? `talk-${Date.now().toString(36)}-${(++counter).toString(36)}`;
 
-/** A TalkStore in memory: gone with the page. For tests, and for a talk that need not outlive the session. */
-export function createMemoryStore({ newId = defaultId, now = Date.now }: MemoryStoreOptions = {}): TalkStore {
+/** A TalkStore in memory, with the tutor client's record and up-front lists: gone with the page. For tests, and for a talk that need not outlive the session. */
+export function createMemoryStore({ newId = defaultId, now = Date.now }: MemoryStoreOptions = {}): TalkStore & TutorStore {
   const talks = new Map<string, Talk>();
+  const kept: TutorRecord[] = [];
+  const lists = new Map<string, string[]>();
   const need = (id: string): Talk => {
     const talk = talks.get(id);
     if (!talk) throw new TalkNotFoundError(id);
@@ -148,6 +181,18 @@ export function createMemoryStore({ newId = defaultId, now = Date.now }: MemoryS
     },
     async remove(id) {
       talks.delete(id);
+    },
+    async upFront(screen) {
+      return [...(lists.get(screen) ?? [])];
+    },
+    async setUpFront(screen, names) {
+      lists.set(screen, [...names]);
+    },
+    async note(records) {
+      kept.push(...records.map(cloneRecord));
+    },
+    async record(screen) {
+      return kept.filter((r) => screen === undefined || r.screen === screen).map(cloneRecord);
     },
   };
 }

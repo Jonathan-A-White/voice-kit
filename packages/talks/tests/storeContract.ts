@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import type { TalkStore } from '../src/index.js';
+import type { TalkStore, TutorRecord, TutorStore } from '../src/index.js';
 
-// One contract any TalkStore keeps; store.test.ts runs it over the in-memory store and dexieStore.test.ts over the Dexie one.
-export function storeContract(name: string, make: () => TalkStore) {
+// One contract any TalkStore keeps; store.test.ts runs it over the in-memory store and the fake of @voice-kit/testing, and
+// dexieStore.test.ts over the Dexie one. A store the tutor client uses keeps its record and up-front lists too (TutorStore).
+export function storeContract(name: string, make: () => TalkStore & TutorStore) {
   describe(`${name}: the TalkStore contract`, () => {
     it('creates a talk with an id, a title, no turns and an empty memory', async () => {
       const store = make();
@@ -57,6 +58,40 @@ export function storeContract(name: string, make: () => TalkStore) {
       expect(again.turns[0].text).toBe('a');
       expect(Array.from(again.turns[0].pictures![0].bytes)).toEqual([1, 2]);
       expect(again.memory.facts).toEqual([]);
+    });
+
+    it('keeps the tutor record, oldest first, all of it or one screen', async () => {
+      const store = make();
+      expect(await store.record()).toEqual([]);
+      const ask: TutorRecord = { at: 10, screen: 'drill', kind: 'ask', name: 'plan', turn: 0 };
+      const miss: TutorRecord = { at: 11, screen: 'drill', kind: 'miss', name: 'fly', turn: 0, why: 'there is no command called "fly"' };
+      const home: TutorRecord = { at: 12, screen: 'home', kind: 'ask', name: 'today', turn: 2 };
+      await store.note([ask, miss]);
+      await store.note([home]);
+      await store.note([]);
+      expect(await store.record()).toEqual([ask, miss, home]);
+      expect(await store.record('drill')).toEqual([ask, miss]);
+      expect(await store.record('home')).toEqual([home]);
+      expect(await store.record('settings')).toEqual([]);
+      const read = await store.record();
+      read[0].name = 'changed';
+      expect((await store.record())[0].name).toBe('plan');
+    });
+
+    it("keeps each screen's up-front list, empty until set", async () => {
+      const store = make();
+      expect(await store.upFront('drill')).toEqual([]);
+      await store.setUpFront('drill', ['plan', 'rusty']);
+      await store.setUpFront('home', ['today']);
+      expect(await store.upFront('drill')).toEqual(['plan', 'rusty']);
+      expect(await store.upFront('home')).toEqual(['today']);
+      await store.setUpFront('drill', ['rusty']);
+      const read = await store.upFront('drill');
+      expect(read).toEqual(['rusty']);
+      read.push('x');
+      expect(await store.upFront('drill')).toEqual(['rusty']);
+      await store.setUpFront('drill', []);
+      expect(await store.upFront('drill')).toEqual([]);
     });
   });
 }
