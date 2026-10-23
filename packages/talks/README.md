@@ -201,9 +201,47 @@ The app's fields and the core facts are never cut. `tutor.buildRequest(turn, fie
 An unknown name, refused args or a run that throws is a **miss**, never thrown. Only the answer that stands is carried out.
 `tutor.takeAnswer(answer, turn)` carries out `do`, `go` and `misses` of an answer the app got some other way.
 
-**The record.** Every ask-back and miss is noted in the store as `{ at, screen, kind: 'ask' | 'miss', name, turn, why? }` (`turn`
-is his turn's place in the talk) and read back with `store.record(screen?)`, oldest first: what the tutor needed on each screen,
-for tuning the up-front lists.
+**The record.** Every turn, ask-back and miss is noted in the store as `{ at, screen, kind: 'turn' | 'ask' | 'miss' | 'weights', name,
+turn, why?, names? }` (`turn` is his turn's place in the talk) and read back with `store.record(screen?)`, oldest first: what the
+tutor needed on each screen, for tuning the up-front lists. A `turn` line (no name) is written first for each turn of `ask()` and
+each `buildRequest()`, so ask-backs can be counted per turn; a `weights` line is an applied list (below).
+
+### What is carried up front, and how it learns
+
+Which facts to read for every request is a trade: too few and the tutor asks back (an extra round, a slower answer), too many and
+every request is heavy. The client does not guess. It **counts**, per screen, how often a fact was asked back, and carries up front
+the ones that were asked back often lately. No model is involved; the whole of it is counts over the record above.
+
+- **The list.** `tutor.upFront(screen)` is the core facts, then the facts asked back **at least N times in the last M turns on that
+  screen**, the most asked back first (a name that is not a fact, or is core, is never listed). The defaults are N = 2 and
+  M = 50 and are provisional: `createTutorClient({ ..., learn: { askBacks: 3, turns: 100 } })` moves either. Every request reads
+  this list.
+- **Applying a list.** `await tutor.applyWeights({ reader: ['todaysDrill'], home: [] }, 'grist' | 'app', at?)` sets the lists for
+  those screens (`at` is now unless given) and records each with its date and source in a `weights` line. From then on an applied
+  list stands over the counted one (an empty list means the core facts only). It returns, for each screen, what was applied and the
+  `ignored` names (not a fact, or core). Whoever sets lists by hand with `store.setUpFront` is read the same way when nothing was applied.
+- **Did it help?** `tutor.rate(screen, since, until?)` is the **ask-backs per 100 turns** on a screen from `since` (ms since the
+  epoch) to `until` (undefined when there were no turns in that time). `tutor.change(screen)` gives it for the latest applied list:
+  `{ at, source, before, after }`, `before` being the time under the list applied before it (else all of the record up to it). If
+  the lists help, `after` is lower than `before`.
+- **The statistics.** `tutor.stats(screen?)` is `{ screen: { turns, askBacks: { name: n }, misses: { wanted: n } } }` over all of the record.
+- **The nightly report.** `tutor.weightsReport(since)`, `since` being the time of the last run of whatever tunes the weights, is
+  what that run reads:
+
+  ```ts
+  const report = await tutor.weightsReport(lastRunAt);
+  if (report.changed) {
+    // report.screens.reader = { turns, windowTurns, counts: { todaysDrill: 3 }, upFront: ['where', 'todaysDrill'],
+    //   applied?: { at, source, names }, rate: { overall, before?, after? } }
+    // report.misses = [{ screen, name, count, why }]   (misses newer than lastRunAt)
+    await tutor.applyWeights(listsItChose, 'grist');
+  }
+  ```
+
+  `changed` is false when no ask-back, miss or applied list is newer than `since`: then the run has nothing to ask. (Turns alone do
+  not change it.) The counts are those of the window, the ones the counted list is made of.
+
+A record from before 0.4.0 has no `turn` lines, so its screens count all their ask-backs until they have turns of their own.
 
 ## On the device: the Dexie store
 

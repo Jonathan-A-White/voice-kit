@@ -2,6 +2,11 @@
 
 Newest first. Breaking changes come first in a release, each with its migration in one sentence.
 
+## 0.3.1 (2026-10-23, not yet tagged)
+
+- Changed (mw-t3xu9a.2): the fake talk store keeps the tutor record's new kinds, `'turn'` and `'weights'` (with `names`), for
+  `@voice-kit/talks` 0.4.0. Additive.
+
 ## 0.3.0 (2026-10-23, not yet tagged)
 
 - New (mw-t3xu9a.1): `createFakeTalkStore()` is also a `TutorStore` for the tutor client of `@voice-kit/talks` 0.3.0: each

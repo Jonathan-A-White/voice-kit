@@ -1,6 +1,6 @@
 {
   "name": "@voice-kit/testing",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "voice-kit: honest fakes for an app's tests, in vitest and Playwright: speech synthesis and a microphone (getUserMedia, MediaRecorder, SpeechRecognition) that behave like Android Chrome in time; and, for a talk, a grind that answers scripted turns and a store that records.",
   "license": "MIT",
   "type": "module",

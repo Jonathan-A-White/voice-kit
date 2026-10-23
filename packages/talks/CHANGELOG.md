@@ -2,6 +2,20 @@
 
 Newest first. Breaking changes come first in a release, each with its migration in one sentence.
 
+## 0.4.0 (2026-10-23, not yet tagged)
+
+- New (mw-t3xu9a.2): the tutor client learns what to carry up front, by counting. `tutor.upFront(screen)` is the core facts plus the
+  facts asked back at least N times in the last M turns on that screen (N = 2, M = 50, provisional; `createTutorClient({ learn: {
+  askBacks, turns } })`), and every request reads it. `applyWeights({ screen: names[] }, 'grist' | 'app', at?)` records each list
+  with its date and source and makes it stand over the counted one; `rate(screen, since, until?)` is ask-backs per 100 turns and
+  `change(screen)` the rate before and after the latest applied list; `stats(screen?)` counts turns, ask-backs and misses per
+  screen; `weightsReport(since)` is what the nightly grist reads: the counts, the misses newer than `since`, the current lists, the
+  rates, and `changed` (false when no ask-back, miss or applied list is newer than `since`). Also `createStats` and the types.
+- Changed: the tutor record has two new kinds, `'turn'` (a line for each turn of `ask()` and each `buildRequest()`, written first, so
+  ask-backs can be counted per turn) and `'weights'` (an applied list: the source in `name`, the list in the new `names`). A reader
+  of `store.record()` that took every line for an ask-back or a miss must now look at `kind`. The Dexie database keeps them in the same
+  table (no new version); a record from before has no turn lines.
+
 ## 0.3.0 (2026-10-23, not yet tagged)
 
 - Changed: `createMemoryStore()` and `createDexieStore()` now return a `TalkStore & TutorStore`; the Dexie database goes to

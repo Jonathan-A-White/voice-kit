@@ -9,6 +9,14 @@ Each library keeps its own changelog; this one records the repo's releases and p
 - [@voice-kit/talks](packages/talks/CHANGELOG.md)
 - [@voice-kit/testing](packages/testing/CHANGELOG.md)
 
+## v0.11.0 (2026-10-23)
+
+- @voice-kit/talks 0.4.0 (mw-t3xu9a.2): the tutor client learns what to carry up front, by counting. A screen's up-front list is the
+  core facts plus those asked back at least 2 times in its last 50 turns (settable), `applyWeights` records an applied list with its
+  date and source, `rate` / `change` give ask-backs per 100 turns before and after, and `weightsReport(since)` is what a nightly
+  run reads (with `changed`). The tutor record gains `turn` and `weights` lines. See [its changelog](packages/talks/CHANGELOG.md).
+- @voice-kit/testing 0.3.1 (mw-t3xu9a.2): the fake talk store keeps the new record lines. Additive.
+
 ## v0.10.0 (2026-10-23)
 
 - @voice-kit/talks 0.3.0 (mw-t3xu9a.1): the tutor client. `defineRegistry({ facts, commands, places })` and
