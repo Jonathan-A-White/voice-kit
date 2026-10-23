@@ -9,6 +9,12 @@ Each library keeps its own changelog; this one records the repo's releases and p
 - [@voice-kit/talks](packages/talks/CHANGELOG.md)
 - [@voice-kit/testing](packages/testing/CHANGELOG.md)
 
+## v0.13.0 (2026-10-23)
+
+- @voice-kit/composer 0.8.0 (mw-fu7dqf.3): `strictLang`, a hold that hears one language or nothing (never en-US, never the browser's
+  default), ending with a `'language-not-supported'` error that names the language; `failure` on the hold's state. Additive. See
+  [its changelog](packages/composer/CHANGELOG.md).
+
 ## v0.12.0 (2026-10-23)
 
 - @voice-kit/talks 0.5.0 (mw-t3xu9a.3): the grind side of the tutor client, `voice-kit/talks/grind`: the instructions part that teaches

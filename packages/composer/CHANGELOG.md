@@ -2,6 +2,16 @@
 
 Newest first. Breaking changes come first in a release, each with its migration in one sentence.
 
+## 0.8.0 (2026-10-23)
+
+- New (mw-fu7dqf.3): `strictLang` on `ListenOptions`, `useHold`, `useTalk` (and so `TalkBar`) and the `Transcriber`'s start options: a hold
+  that must hear one language (Greek) never walks on to en-US or to the browser's default language, where its speech would come out
+  as English words. Its routes are the language's own, on-device then cloud (`listenRoutes(lang, onDevice, strict)`), and when the phone
+  cannot hear the language the hold ends with a `'language-not-supported'` error whose message names the tag ('This phone cannot take
+  dictation in el-GR (tried: ...)'). The on-device pack asked for is then the language's, not en-US. Nothing changes for a hold without the flag.
+- New (mw-fu7dqf.3): `failure`, the `ListenError` the last hold failed with, on `useHold`, `useBarHold` and `useTalk` (its `kind` says
+  why; cleared by the next hold), beside the existing `notice` string. README section 'Hearing one language only'.
+
 ## 0.7.0 (2026-10-21)
 
 - Changed (breaking, mw-06ggew.14): `useTalk`'s `onWords` (and `TalkBar`'s) now gets the words of every hold, however it ended, as the

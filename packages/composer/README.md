@@ -85,6 +85,26 @@ const talk = useTalk({ talk: 'tap' }, { onWords: ask, transcriber });
 <TalkBar talk={talk} />
 ```
 
+### Hearing one language only (`strictLang`)
+
+By default a hold for a language the phone cannot hear walks on: on-device and cloud in that language, then en-US, then the browser's
+default language. That is right for a message box and wrong for a Greek hold, where en-US would return English words for Greek
+speech. `strictLang` keeps the hold to the language's own routes (on-device, then cloud) and never to en-US or the default:
+
+| Option       | Where                                                      | What it does |
+| ------------ | ---------------------------------------------------------- | ------------ |
+| `lang`       | `useTalk`, `TalkBar`, `useHold`, `startListening`          | The language to listen for (`'el-GR'`); the page's `<html lang>` when not given. |
+| `strictLang` | the same, and the `Transcriber`'s `start` options          | `true`: hear `lang` or nothing. When the phone cannot hear it the hold ends with the error kind `'language-not-supported'` and a message naming the tag ('This phone cannot take dictation in el-GR'). Default `false`: the walk as before. |
+
+```tsx
+const talk = useTalk({}, { lang: 'el-GR', strictLang: true, onWords });
+talk.failure?.kind === 'language-not-supported' // offer the keyboard instead
+```
+
+`talk.failure` (also on `useHold` and `useBarHold`) is the `ListenError` the last hold failed with, cleared by the next hold; `talk.notice`
+is its message. `listenRoutes(lang, onDevice, strict)` gives the routes. `transcribeRecording` ignores the flag: it records, and its own
+`transcribe` is the one that knows the language.
+
 ### Pausing what is read aloud while he talks
 
 The `Composer` and `useTalk` hold through the same hold (`useBarHold`), so both take the same pair: `onHoldStart` as listening begins,
