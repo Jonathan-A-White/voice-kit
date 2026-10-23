@@ -231,6 +231,11 @@ export interface TalkOptions {
   transcriber?: Transcriber;
   /** The language to listen for; `settings.lang`, else the page's own. */
   lang?: string;
+  /**
+   * Hear `lang` or nothing (mw-fu7dqf.3): the hold never walks on to en-US or the browser's default language. A phone that cannot
+   * hear `lang` ends the hold with `talk.failure.kind` 'language-not-supported' and a notice naming the language.
+   */
+  strictLang?: boolean;
   /** The app's name, for the messages that say how to allow the microphone. */
   appName?: string;
   /** How long a press waits before listening starts, in ms (talk 'hold'). Let go sooner, it is no hold. */
@@ -242,10 +247,10 @@ export interface TalkOptions {
 export type Talk = ReturnType<typeof useTalk>;
 
 export function useTalk(settings: Partial<ComposerSettings> | undefined, options: TalkOptions) {
-  const { onWords, onHoldStart, onHoldEnd, transcriber, lang, appName, holdDelayMs, dropOnSlideOff = true } = options;
+  const { onWords, onHoldStart, onHoldEnd, transcriber, lang, strictLang, appName, holdDelayMs, dropOnSlideOff = true } = options;
   const { lang: settingsLang } = resolveSettings({ settings });
   // the one hold (useBarHold), as the Composer's: whatever ends it, the words heard so far come to onWords
-  const hold = useBarHold({ transcriber, lang: lang ?? settingsLang, appName, onWords, onHoldStart, onHoldEnd });
+  const hold = useBarHold({ transcriber, lang: lang ?? settingsLang, strictLang, appName, onWords, onHoldStart, onHoldEnd });
   const { holding, press: begin, release, cancel } = hold;
   const onPress = useCallback(() => void begin(), [begin]);
 
@@ -272,6 +277,8 @@ export function useTalk(settings: Partial<ComposerSettings> | undefined, options
     /** Why a hold could not start or went wrong, worded for him; clear with `setNotice(undefined)`. */
     notice: hold.notice,
     setNotice: hold.setNotice,
+    /** The error the last hold failed with (`failure.kind`, say 'language-not-supported' or 'permission-denied'); cleared by the next hold. */
+    failure: hold.failure,
     /** 'starting' until the recogniser says the microphone is open. */
     mic: hold.mic,
     mode: hold.mode,

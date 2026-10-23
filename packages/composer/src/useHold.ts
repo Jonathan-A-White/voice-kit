@@ -15,7 +15,7 @@
 // a drop, a recogniser that fails or a page that is hidden while he holds gives them to the caller, and a
 // release the recogniser settles with no words gives back the words it showed as 'kept', not as heard.
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { ListenMode, ListenSession } from './listen.js';
+import type { ListenError, ListenMode, ListenSession } from './listen.js';
 import { canChooseInput, openBluetoothInput } from './micInput.js';
 import { canRecord, VoiceRecorder, type Recording } from './recorder.js';
 import { browserSpeech, type Transcriber } from './transcriber.js';
@@ -53,6 +53,11 @@ export interface HoldOptions {
   transcriber?: Transcriber;
   /** The language to listen for; the page's own (`<html lang>`) when not given. */
   lang?: string;
+  /**
+   * Hear `lang` or nothing: never walk on to en-US or the browser's default language, so a Greek hold cannot come out as English words.
+   * A phone that cannot hear `lang` ends the hold with `failure.kind` 'language-not-supported' and a notice naming the language (listen.ts, mw-fu7dqf.3).
+   */
+  strictLang?: boolean;
   /** The app's name, for the messages that say how to allow the microphone. */
   appName?: string;
   /** Record the voice along with the words. A recording that cannot be made leaves the words alone. */
@@ -68,9 +73,11 @@ export interface HoldOptions {
   onEnded?: (released: Released) => void;
 }
 
-export function useHold({ transcriber = browserSpeech, lang, appName, record = false, onFailed, onHidden, onEnded }: HoldOptions = {}) {
+export function useHold({ transcriber = browserSpeech, lang, strictLang, appName, record = false, onFailed, onHidden, onEnded }: HoldOptions = {}) {
   const [transcript, setTranscript] = useState('');
   const [notice, setNotice] = useState<string | undefined>();
+  // The error the last hold failed with (its kind says why: a language the phone cannot hear, a microphone not allowed); cleared by the next hold.
+  const [failure, setFailure] = useState<ListenError | undefined>();
   const [mode, setMode] = useState<ListenMode | undefined>();
   // 'starting' until the recogniser says the mic is open; 'fellBack' once on-device failed and the hold went on in cloud mode.
   const [mic, setMic] = useState<'starting' | 'ready'>('starting');
@@ -113,6 +120,7 @@ export function useHold({ transcriber = browserSpeech, lang, appName, record = f
   /** Starts listening. False when the hold could not start (the notice says why). */
   const begin = useCallback((): boolean => {
     setNotice(undefined);
+    setFailure(undefined);
     buzz(30);
     const thisHold = {};
     hold.current = thisHold;
@@ -131,6 +139,7 @@ export function useHold({ transcriber = browserSpeech, lang, appName, record = f
     const choosing = canChooseInput();
     const started = transcriber.start({
       lang: lang ?? (typeof document === 'undefined' ? undefined : document.documentElement.lang),
+      ...(strictLang ? { strictLang } : {}),
       appName,
       onInterim: (text) => {
         if (hold.current !== thisHold || !text.trim()) return;
@@ -171,6 +180,7 @@ export function useHold({ transcriber = browserSpeech, lang, appName, record = f
         listening.current = null;
         dropRecording();
         setNotice(error.message);
+        setFailure(error);
         failed.current?.(said.current.trim());
       },
       onEnd: () => {
@@ -181,6 +191,7 @@ export function useHold({ transcriber = browserSpeech, lang, appName, record = f
     if (!started.ok) {
       hold.current = null;
       setNotice(started.error.message);
+      setFailure(started.error);
       return false;
     }
     listening.current = started.session;
@@ -191,7 +202,7 @@ export function useHold({ transcriber = browserSpeech, lang, appName, record = f
     setTranscript('');
     if (recordHold && !choosing) startRecording();
     return true;
-  }, [transcriber, lang, appName, record, dropRecording]);
+  }, [transcriber, lang, strictLang, appName, record, dropRecording]);
 
   /** Lets go: waits for the recogniser's last words and hands back what was said. */
   const finish = useCallback(async (): Promise<Released> => {
@@ -213,6 +224,7 @@ export function useHold({ transcriber = browserSpeech, lang, appName, record = f
     // the recogniser settled with no words (a blank final), but the words it showed are his
     if (said.current.trim()) return { status: 'kept', text: said.current.trim(), recording: await voice };
     setNotice(result.ok ? 'No speech was heard.' : result.error.message);
+    if (!result.ok) setFailure(result.error);
     return { status: 'empty' };
   }, []);
   finishing.current = finish;
@@ -242,6 +254,7 @@ export function useHold({ transcriber = browserSpeech, lang, appName, record = f
     transcript,
     notice,
     setNotice,
+    failure,
     mode,
     mic,
     fellBack,
@@ -351,8 +364,8 @@ export function useBarHold({ onWords, onHoldStart, onHoldEnd, ...options }: BarH
   );
 
   // begin, finish and drop stay inside: a caller holds through press, release and cancel, so every end is handed on
-  const { transcript, notice, setNotice, mode, mic, fellBack, input, supported } = hold;
-  return { transcript, notice, setNotice, mode, mic, fellBack, input, supported, holding, press, release, cancel };
+  const { transcript, notice, setNotice, failure, mode, mic, fellBack, input, supported } = hold;
+  return { transcript, notice, setNotice, failure, mode, mic, fellBack, input, supported, holding, press, release, cancel };
 }
 
 async function stopRecording(held: HeldRecording): Promise<Recording | undefined> {

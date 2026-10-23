@@ -4,8 +4,8 @@
 // bar is a hold; holdDelayMs waits before listening starts; a slide off cancels and says so to onHoldEnd, its words handed on kept.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, renderHook, screen } from '@testing-library/react';
-import { LATCH_MS, TalkBar, useTalk } from '../src/index.js';
-import { clearInputs, fakeTranscriber, installRecognizer } from './support/fakes.js';
+import { browserSpeech, LATCH_MS, TalkBar, useTalk } from '../src/index.js';
+import { clearInputs, FakeRecognizer, fakeTranscriber, installRecognizer } from './support/fakes.js';
 
 const pass = (ms = 0) => act(() => vi.advanceTimersByTimeAsync(ms));
 
@@ -324,5 +324,70 @@ describe('useTalk, drawn by the caller', () => {
     expect(screen.getByTestId('words').textContent).toBe('live words');
     await up();
     expect(onWords.mock.calls[0]![0]).toBe('live words');
+  });
+});
+
+describe('useTalk, strictLang (mw-fu7dqf.3)', () => {
+  it('starts the transcriber with the language and the flag', async () => {
+    const transcriber = fakeTranscriber();
+    const { result } = renderHook(() => useTalk({}, { transcriber, lang: 'el-GR', strictLang: true, onWords: () => {} }));
+    await act(async () => {
+      result.current.bar.onPointerDown({ pointerId: 1, pointerType: 'touch', currentTarget: { setPointerCapture: () => {} } } as never);
+      await pass();
+    });
+    expect(transcriber.options).toEqual(expect.objectContaining({ lang: 'el-GR', strictLang: true }));
+  });
+
+  it('a hold given no strictLang starts the transcriber without it', async () => {
+    const transcriber = fakeTranscriber();
+    render(<TalkBar transcriber={transcriber} onWords={() => {}} />);
+    await down();
+    expect(transcriber.options?.strictLang).toBeFalsy();
+  });
+
+  it("the hold's failure carries the kind, and the notice names the language", async () => {
+    const transcriber = fakeTranscriber();
+    function Sheet() {
+      const talk = useTalk({}, { transcriber, lang: 'el-GR', strictLang: true, onWords: () => {} });
+      return (
+        <>
+          <p data-testid="kind">{talk.failure?.kind ?? 'none'}</p>
+          <p data-testid="notice">{talk.notice ?? ''}</p>
+          <TalkBar talk={talk} />
+        </>
+      );
+    }
+    render(<Sheet />);
+    expect(screen.getByTestId('kind').textContent).toBe('none');
+    await down();
+    act(() => transcriber.fails({ kind: 'language-not-supported', code: 'language-not-supported', message: 'This phone cannot take dictation in el-GR' }));
+    await pass();
+    expect(screen.getByTestId('kind').textContent).toBe('language-not-supported');
+    expect(screen.getByTestId('notice').textContent).toContain('el-GR');
+    // a fresh hold clears it
+    await down();
+    expect(screen.getByTestId('kind').textContent).toBe('none');
+  });
+
+  it('through the real browserSpeech, a phone with no el-GR ends the hold with the kind and never makes an en-US recogniser', async () => {
+    class NoGreek extends FakeRecognizer {
+      start(track?: { label: string }) {
+        super.start(track);
+        queueMicrotask(() => this.onerror?.({ error: 'language-not-supported' }));
+      }
+    }
+    vi.stubGlobal('SpeechRecognition', NoGreek);
+    const kinds: (string | undefined)[] = [];
+    function Sheet() {
+      const talk = useTalk({}, { transcriber: browserSpeech, lang: 'el-GR', strictLang: true, onWords: () => {} });
+      kinds.push(talk.failure?.kind);
+      return <TalkBar talk={talk} />;
+    }
+    render(<Sheet />);
+    await down();
+    await pass();
+    await pass();
+    expect(kinds.at(-1)).toBe('language-not-supported');
+    expect(FakeRecognizer.instances.map((r) => r.lang)).toEqual(['el-GR', 'el-GR']);
   });
 });

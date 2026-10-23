@@ -2,7 +2,7 @@
 // and a transcriber the test drives by hand. Lifted from Postern's features/steps/composer-hold-to-talk.steps.tsx
 // and tests/unit/useHold.test.ts.
 import { vi } from 'vitest';
-import type { ListenOptions, ListenResult, Transcriber } from '../../src/index.js';
+import type { ListenError, ListenOptions, ListenResult, Transcriber } from '../../src/index.js';
 
 /** The browser's speech recogniser: it opens its mic at once and hears what a test says. */
 export class FakeRecognizer {
@@ -124,6 +124,10 @@ export function fakeTranscriber() {
     aborted: boolean;
     /** Given, the release says a stretch of the hold could not be made out (the result's missed and missedNote). */
     missedNote?: string;
+    /** The options the last start was given. */
+    options?: ListenOptions;
+    /** The recogniser fails: the hold's onError. */
+    fails(error: ListenError): void;
   } = {
     started: 0,
     stopped: false,
@@ -131,6 +135,7 @@ export function fakeTranscriber() {
     supported: () => true,
     start(given) {
       options = given;
+      transcriber.options = given;
       text = '';
       transcriber.started += 1;
       transcriber.stopped = false;
@@ -152,6 +157,9 @@ export function fakeTranscriber() {
     },
     open() {
       options?.onStart?.();
+    },
+    fails(error: ListenError) {
+      options?.onError?.(error);
     },
     yields(words: string) {
       text = words;

@@ -17,7 +17,10 @@
 // widened to it). A language-not-supported walks the hold's routes, each once (listenRoutes): on-device
 // and cloud in the page's language, then on-device en-US (asking Chrome's SpeechRecognition.install for
 // the pack, for later holds; this hold does not wait for it) and cloud en-US, then the cloud with no
-// language set; only when the last route fails is it shown, naming the routes tried (mw-hgtlf5.1).
+// language set; only when the last route fails is it shown, naming the routes tried (mw-hgtlf5.1). With strictLang
+// (mw-fu7dqf.3) the walk is only the language's own routes, on-device then cloud, never en-US and never the browser's default:
+// a hold for Greek never hears English by itself, and when the phone cannot hear the language it ends with a
+// 'language-not-supported' error naming the tag.
 // On Android Chrome processLocally is offered but never honoured: an on-device start is answered
 // language-not-supported a moment later, opens no microphone and fires no end, so a hold let go before
 // that answer settles with nothing heard instead of showing a failure the next route would have recovered from.
@@ -117,6 +120,12 @@ export type ListenStart = { ok: true; session: ListenSession } | { ok: false; er
 
 export interface ListenOptions {
   lang?: string;
+  /**
+   * Hear `lang` or nothing (mw-fu7dqf.3). When the phone cannot hear the language the hold does not go on in en-US or in the
+   * browser's default language (where Greek would come out as English words): it ends with a 'language-not-supported' error
+   * that names the language. Only the language's own routes are tried, on-device then cloud. Without it the walk is as before.
+   */
+  strictLang?: boolean;
   /** The app's name, for the messages that say how to allow the microphone ('this app' when not given). */
   appName?: string;
   /** The text so far (settled parts and the part still being worked out), on every update. */
@@ -253,10 +262,16 @@ export const routeName = (route: ListenRoute): string => `${route.onDevice ? 'on
 
 /**
  * The routes a hold for `lang` tries on language-not-supported, in order, each once: on-device (when the browser offers
- * it) and cloud in the page's language, the same in en-US, then the cloud with no language set.
+ * it) and cloud in the page's language, the same in en-US, then the cloud with no language set. `strict`: only the
+ * language's own, on-device (when offered) then cloud, so a hold never hears another language than it was asked for.
  */
-export function listenRoutes(lang: string, onDevice: boolean): ListenRoute[] {
+export function listenRoutes(lang: string, onDevice: boolean, strict = false): ListenRoute[] {
   const routes: ListenRoute[] = [];
+  if (strict) {
+    if (onDevice) routes.push({ onDevice: true, lang });
+    routes.push({ onDevice: false, lang });
+    return routes;
+  }
   for (const tag of lang === DEFAULT_LANG ? [lang] : [lang, DEFAULT_LANG]) {
     if (onDevice) routes.push({ onDevice: true, lang: tag });
     routes.push({ onDevice: false, lang: tag });
@@ -376,7 +391,9 @@ export function startListening(options: ListenOptions = {}): ListenStart {
     return { ok: false, error: { kind: 'other', message: err instanceof Error ? err.message : 'Listening could not start.' } };
   }
   // The routes this hold can hear him by, each tried once; the first is the recogniser just made.
-  const routes = listenRoutes(lang, mode === 'on-device');
+  const strict = options.strictLang === true;
+  const asked = lang;
+  const routes = listenRoutes(lang, mode === 'on-device', strict);
   let routeIndex = 0;
   let packAsked = false;
 
@@ -501,12 +518,12 @@ export function startListening(options: ListenOptions = {}): ListenStart {
     }
   };
 
-  /** Asks the browser once for the on-device en-US pack (Chrome's SpeechRecognition.install), for later holds; this hold goes on without waiting. */
+  /** Asks the browser once for the on-device pack (Chrome's SpeechRecognition.install; the hold's own language when strict, else en-US), for later holds; this hold goes on without waiting. */
   const askForPack = () => {
     if (packAsked || typeof Ctor.install !== 'function') return;
     packAsked = true;
     try {
-      void Promise.resolve(Ctor.install({ langs: [DEFAULT_LANG], processLocally: true })).catch(() => undefined);
+      void Promise.resolve(Ctor.install({ langs: [strict ? asked : DEFAULT_LANG], processLocally: true })).catch(() => undefined);
     } catch {
       // not offered after all
     }
@@ -529,10 +546,11 @@ export function startListening(options: ListenOptions = {}): ListenStart {
     }
     return false;
   };
-  /** The error `code` as the hold reports it: a language-not-supported names the routes tried. */
+  /** The error `code` as the hold reports it: a language-not-supported names the routes tried (a strict hold, the language it could not hear). */
   const failure = (code: string): ListenError => {
     const made = listenError(code, app);
     if (code !== 'language-not-supported') return made;
+    if (strict) return { ...made, message: `This phone cannot take dictation in ${asked} (tried: ${routes.slice(0, routeIndex + 1).map(routeName).join(', ')}).` };
     return { ...made, message: `${made.message} (tried: ${routes.slice(0, routeIndex + 1).map(routeName).join(', ')})` };
   };
 

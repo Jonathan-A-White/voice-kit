@@ -4,7 +4,7 @@
 // again there, as before; the last describe gives the page a recorder: with throughPauses: false the rest of the hold is
 // recorded instead (mw-q6n8m0.5), and by default (throughPauses: true, mw-06ggew.1) the recogniser is started again all the same.
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { DEFAULT_LANG, isListenSupported, recognizerLang, startListening, IDLE_RESTART_WAIT_MS, INPUT_SILENT_MS, MAX_IDLE_RESTARTS, STOP_TIMEOUT_MS, type ListenOptions } from '../src/listen.js';
+import { DEFAULT_LANG, isListenSupported, listenRoutes, recognizerLang, startListening, IDLE_RESTART_WAIT_MS, INPUT_SILENT_MS, MAX_IDLE_RESTARTS, STOP_TIMEOUT_MS, type ListenOptions } from '../src/listen.js';
 import type { Recording } from '../src/recorder.js';
 
 interface FakeAlt {
@@ -1598,5 +1598,113 @@ describe("a pause while he holds, on a phone that can record, throughPauses: fal
       const outcome = await begun.session.stop();
       expect(outcome).toEqual({ ok: true, text: 'all clear', mode: 'on-device' });
     });
+  });
+});
+
+describe('strictLang: a hold that never hears a language it was not asked for (mw-fu7dqf.3)', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('listenRoutes: strict gives only the language\'s own routes, on-device first, with no en-US and no default', () => {
+    expect(listenRoutes('el-GR', true, true)).toEqual([
+      { onDevice: true, lang: 'el-GR' },
+      { onDevice: false, lang: 'el-GR' },
+    ]);
+    expect(listenRoutes('el-GR', false, true)).toEqual([{ onDevice: false, lang: 'el-GR' }]);
+    expect(listenRoutes('en-US', true, true)).toEqual([
+      { onDevice: true, lang: 'en-US' },
+      { onDevice: false, lang: 'en-US' },
+    ]);
+  });
+
+  it('listenRoutes: not strict is the walk as before', () => {
+    expect(listenRoutes('el-GR', true)).toEqual(listenRoutes('el-GR', true, false));
+    expect(listenRoutes('el-GR', true, false).map((r) => r.lang)).toEqual(['el-GR', 'el-GR', 'en-US', 'en-US', undefined]);
+  });
+
+  it('every route answers language-not-supported: the hold ends with that kind, naming el-GR, and no recogniser was made for en-US or no language', () => {
+    install();
+    const onError = vi.fn();
+    const begin = startListening({ lang: 'el-GR', strictLang: true, onError });
+    if (!begin.ok) throw new Error('expected listening to start');
+    FakeRecognizer.instances[0].onerror?.({ error: 'language-not-supported' });
+    FakeRecognizer.instances[1].onerror?.({ error: 'language-not-supported' });
+    expect(FakeRecognizer.instances.map((r) => [r.lang, r.processLocally])).toEqual([
+      ['el-GR', true],
+      ['el-GR', false],
+    ]);
+    expect(onError).toHaveBeenCalledTimes(1);
+    expect(onError.mock.calls[0][0]).toEqual({
+      kind: 'language-not-supported',
+      code: 'language-not-supported',
+      message: expect.stringContaining('This phone cannot take dictation in el-GR'),
+    });
+  });
+
+  it('the stop after it settles with that error', async () => {
+    install();
+    const begin = startListening({ lang: 'el-GR', strictLang: true });
+    if (!begin.ok) throw new Error('expected listening to start');
+    FakeRecognizer.instances[0].onerror?.({ error: 'language-not-supported' });
+    FakeRecognizer.instances[1].onerror?.({ error: 'language-not-supported' });
+    const outcome = await begin.session.stop();
+    expect(outcome.ok).toBe(false);
+    if (!outcome.ok) expect(outcome.error.kind).toBe('language-not-supported');
+  });
+
+  it('without on-device recognition the one cloud el-GR route fails and the hold ends there', () => {
+    install(CloudOnlyRecognizer);
+    const onError = vi.fn();
+    startListening({ lang: 'el-GR', strictLang: true, onError });
+    FakeRecognizer.instances[0].onerror?.({ error: 'language-not-supported' });
+    expect(FakeRecognizer.instances).toHaveLength(1);
+    expect(onError).toHaveBeenCalledTimes(1);
+    expect(onError.mock.calls[0][0]).toEqual(expect.objectContaining({ kind: 'language-not-supported', message: expect.stringContaining('el-GR') }));
+  });
+
+  it('on-device refused, cloud el-GR hears: the words arrive in el-GR and no error is shown', async () => {
+    install();
+    const onError = vi.fn();
+    const begin = startListening({ lang: 'el-GR', strictLang: true, onError });
+    if (!begin.ok) throw new Error('expected listening to start');
+    FakeRecognizer.instances[0].onerror?.({ error: 'language-not-supported' });
+    expect(FakeRecognizer.instances.map((r) => [r.lang, r.processLocally])).toEqual([
+      ['el-GR', true],
+      ['el-GR', false],
+    ]);
+    FakeRecognizer.instances[1].say([result('καλημέρα', false)]);
+    expect(await begin.session.stop()).toEqual({ ok: true, text: 'καλημέρα', mode: 'cloud' });
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it('the pack asked for on a refused on-device route is the language\'s own, not en-US', () => {
+    const installFn = vi.fn(() => Promise.resolve(false));
+    install(
+      class extends FakeRecognizer {
+        static install = installFn;
+      },
+    );
+    startListening({ lang: 'el-GR', strictLang: true });
+    FakeRecognizer.instances[0].onerror?.({ error: 'language-not-supported' });
+    expect(installFn).toHaveBeenCalledWith({ langs: ['el-GR'], processLocally: true });
+  });
+
+  it('a bare en is still widened to en-US, and its strict routes are en-US only', () => {
+    install();
+    startListening({ lang: 'en', strictLang: true });
+    expect(FakeRecognizer.instances[0].lang).toBe('en-US');
+    FakeRecognizer.instances[0].onerror?.({ error: 'language-not-supported' });
+    FakeRecognizer.instances[1].onerror?.({ error: 'language-not-supported' });
+    expect(FakeRecognizer.instances.map((r) => r.lang)).toEqual(['en-US', 'en-US']);
+  });
+
+  it('the flag off or absent: el-GR still walks on to en-US and the default (the existing walk)', () => {
+    for (const strictLang of [undefined, false]) {
+      install();
+      startListening({ lang: 'el-GR', strictLang });
+      for (let i = 0; i < 5; i++) FakeRecognizer.instances[i].onerror?.({ error: 'language-not-supported' });
+      expect(FakeRecognizer.instances.map((r) => r.lang)).toEqual(['el-GR', 'el-GR', 'en-US', 'en-US', '']);
+    }
   });
 });
