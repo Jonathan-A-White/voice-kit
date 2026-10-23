@@ -121,6 +121,41 @@ nothing. For a grind with another shape give `readMemory(answer) -> MemoryUpdate
 a custom `buildRequest` gets `memory` in its input. Deciding *what* is worth keeping, and keeping the summary short, is the
 grind's instruction, not this library's.
 
+## Notes an app keeps by name
+
+A talk's memory belongs to the talk. An app whose memory is **named notes** kept across every talk (a note for a book, one for a word,
+an index) keeps them in its own store and plugs them in with a `NoteStore`: `nameOf(raw)` says whether a name the grind wrote is one in
+the app's scheme (and what it is called there; `null` if not), and `append`, `replace` and `remove` write, each answering `'saved'` or
+the reason it did not.
+
+```ts
+import { applyNoteUpdates, readNoteUpdates, type NoteStore } from '@voice-kit/talks';
+
+const limits = { nameMax: 60, appendMax: 300, replaceMax: 2000 };
+const notes: NoteStore = {
+  nameOf: (raw) => (/^(topic|book):[\w-]+$/.test(raw) ? raw : null),
+  append: async (name, text, when) => ((await myNotes.append(name, text, when)) ? 'saved' : 'too-long'),
+  replace: async (name, text, when) => { await myNotes.set(name, text, when); return 'saved'; },
+  remove: async (name, when) => { await myNotes.delete(name, when); return 'saved'; },
+};
+
+// in the grind's answer: memory_update: [{ name: 'topic:grace', append: 'asked about it twice' }]
+const updates = readNoteUpdates(answer, limits); // undefined when any entry is malformed
+if (updates) {
+  const { applied, refused } = await applyNoteUpdates(updates, notes, { when: Date.now(), warn: console.warn });
+  // applied: ['Added to topic:grace']; refused: ['Did not change book:Romans: a replace or remove needs his words in this talk']
+}
+```
+
+A `NoteUpdate` is `{ name, append | replace | remove: true, directed?: true }`: exactly one action, and `directed` only with a replace
+or remove. **The directed rule:** an append always goes through (it only adds), but a replace or remove is applied only when the update
+says `directed`, meaning the user's own words in this talk asked for it; otherwise it is refused and the store is not called. Teach the
+grind to set `directed` only then. The lines are `Added to X`, `Replaced X`, `Removed X` and `Did not change X: why`, where `why` is
+`not a name in the scheme`, `a replace or remove needs his words in this talk`, the reason a write answered, or the message of a write
+that threw. Nothing is thrown, a refusal does not stop the next update, and each refused line also goes to `warn`. `isNoteUpdate`
+checks one update against the `NoteLimits` (no stray key, texts non-empty and within their limits). This sits beside the per-talk
+memory above, which is unchanged: an answer's `memory_update` may be read by either, according to the shape the app's grind gives it.
+
 ## Search
 
 `searchTalks(store, query)` (or `talks.search(query)`) finds the talks with every word of the query in their title or in one of

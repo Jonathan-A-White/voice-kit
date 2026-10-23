@@ -59,6 +59,17 @@ export {
   type MemoryLimits,
   type MemoryUpdate,
 } from './memory.js';
+export {
+  applyNoteUpdates,
+  isNoteUpdate,
+  readNoteUpdates,
+  type NoteLimits,
+  type NoteOptions,
+  type NoteStore,
+  type NotesChange,
+  type NoteUpdate,
+  type NoteWrite,
+} from './notes.js';
 export { SEARCH_MAX_MATCHES, searchTalks, type SearchMatch, type SearchOptions, type TalkHit } from './search.js';
 export {
   checkArgs,
