@@ -6,6 +6,7 @@
 //     SpeakingBar with the same React; packages/speech/dist and its styles.css are packed;
 //   - 'voice-kit/talks' keeps a talk through an injected grind, with a picture turn, in plain node (no React); packages/talks/dist is packed;
 //     'voice-kit/talks/dexie' keeps it in IndexedDB (fake-indexeddb) and 'voice-kit/talks/react' renders TalkList with the app's React;
+//   - 'voice-kit/talks/grind' gives the grind's instructions part and answer fragment in plain node, and the tutor client carries out its examples;
 //   - 'voice-kit/testing/talks' drives that loop with a scripted grind and a recording store;
 //   - 'voice-kit/testing/speech' and 'voice-kit/testing/mic' run in the vitest the app installs (fake timers), by import
 //     and by init script.
@@ -48,7 +49,7 @@ try {
 
   // The exports map names the entry points (and package.json), nothing else: no deep imports.
   const entries = Object.keys(JSON.parse(readFileSync(join(installed, 'package.json'), 'utf-8')).exports).sort();
-  const expected = ['./composer', './composer/styles.css', './package.json', './speech', './speech/react', './speech/styles.css', './talks', './talks/dexie', './talks/react', './talks/styles.css', './testing/mic', './testing/speech', './testing/talks'];
+  const expected = ['./composer', './composer/styles.css', './package.json', './speech', './speech/react', './speech/styles.css', './talks', './talks/dexie', './talks/grind', './talks/react', './talks/styles.css', './testing/mic', './testing/speech', './testing/talks'];
   if (JSON.stringify(entries) !== JSON.stringify(expected)) throw new Error('exports: ' + entries.join(', '));
   console.log('the exports map names the entry points');
 
@@ -157,6 +158,45 @@ console.log('voice-kit/talks keeps a talk');
 `,
   );
   console.log(run('node', ['talks.mjs'], app).trim());
+
+  // 4b2. 'voice-kit/talks/grind': the grind side of the tutor client, in plain node: the instructions part, the answer fragment and
+  // its examples, which the tutor client carries out as written; the plain files are packed beside dist.
+  for (const file of ['grind/instructions.md', 'grind/answer.fragment.json', 'dist/grind.js']) {
+    if (!existsSync(join(installed, 'packages/talks', file))) throw new Error(`packages/talks/${file} is not packed`);
+  }
+  standsAlone('packages/talks/dist/grind.js');
+  writeFileSync(
+    join(app, 'talks-grind.mjs'),
+    `
+import { readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
+import { checkArgs, createMemoryStore, createTutorClient, defineRegistry } from 'voice-kit/talks';
+import { answerExamples, answerFragment, instructionsPart } from 'voice-kit/talks/grind';
+
+if (new TextEncoder().encode(instructionsPart).length >= 6000) throw new Error('the instructions part is too big');
+for (const word of ['asks', 'do', 'go', 'misses', 'catalogue']) if (!new RegExp('\\\\b' + word + '\\\\b').test(instructionsPart)) throw new Error('the instructions part does not name ' + word);
+const plain = createRequire(import.meta.url).resolve('voice-kit/package.json').replace(/package\\.json$/, 'packages/talks/grind/');
+if (readFileSync(plain + 'instructions.md', 'utf-8') !== instructionsPart) throw new Error('grind/instructions.md differs');
+if (JSON.stringify(JSON.parse(readFileSync(plain + 'answer.fragment.json', 'utf-8'))) !== JSON.stringify(answerFragment)) throw new Error('grind/answer.fragment.json differs');
+for (const [name, example] of Object.entries(answerExamples)) {
+  const wrong = checkArgs(answerFragment, example);
+  if (wrong) throw new Error('example ' + name + ': ' + wrong);
+}
+if (!checkArgs(answerFragment, { do: [{ args: {} }] })) throw new Error('a do without a name was accepted');
+
+const ran = [];
+const registry = defineRegistry({
+  commands: [{ name: 'setTheme', tell: 'changes the theme', kind: 'free', args: { type: 'object', properties: { theme: { enum: ['dark', 'light'] } }, required: ['theme'] }, run: async (args) => (ran.push(args.theme), { said: 'ok' }) }],
+  places: [{ name: 'chapter', tell: 'opens a chapter', args: { type: 'object', properties: { book: { type: 'string' }, chapter: { type: 'integer' } }, required: ['book', 'chapter'] }, open: async (args) => void ran.push(args.book + ' ' + args.chapter) }],
+});
+const tutor = createTutorClient({ store: createMemoryStore(), send: async () => ({ answer: 'Done.', ...answerExamples.doAndGo }), registry, screen: () => 'home' });
+const talk = await tutor.start();
+const turn = await tutor.ask(talk.id, 'dark please, and John 3');
+if (ran.join('|') !== 'dark|John 3' || turn.misses.length !== 0 || turn.went?.name !== 'chapter') throw new Error('the example was not carried out: ' + JSON.stringify({ ran, misses: turn.misses }));
+console.log('voice-kit/talks/grind teaches the protocol');
+`,
+  );
+  console.log(run('node', ['talks-grind.mjs'], app).trim());
 
   // 4c. 'voice-kit/talks/dexie' (the app brings dexie) keeps the same talk in IndexedDB and reads it back after a reopen;
   // 'voice-kit/talks/react' renders TalkList with the app's React; the stylesheet is packed; neither reaches another voice-kit library.

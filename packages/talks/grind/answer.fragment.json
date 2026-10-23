@@ -1,0 +1,57 @@
+{
+  "description": "The tutor client's fields of an answer: merge these properties into the answer schema of the app's grind. Every one is optional.",
+  "type": "object",
+  "properties": {
+    "asks": {
+      "description": "Names of facts on the catalogue (is fact) that you need before you can answer well. The app reads them and sends the request again with them as asked; ask once, for everything you need.",
+      "type": "array",
+      "maxItems": 8,
+      "items": { "type": "string", "minLength": 1, "maxLength": 80 }
+    },
+    "do": {
+      "description": "Commands on the catalogue (is command) to run, in order, each with the args its entry describes. Only what he asked for.",
+      "type": "array",
+      "maxItems": 8,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name"],
+        "properties": {
+          "name": { "description": "The name of a command on the catalogue.", "type": "string", "minLength": 1, "maxLength": 80 },
+          "args": { "description": "The args as that command's entry describes them; leave out when it takes none.", "type": "object" }
+        }
+      }
+    },
+    "go": {
+      "description": "The place on the catalogue (is place) to open, with the args its entry describes. At most one.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name"],
+      "properties": {
+        "name": { "description": "The name of a place on the catalogue.", "type": "string", "minLength": 1, "maxLength": 80 },
+        "args": { "description": "The args as that place's entry describes them; leave out when it takes none.", "type": "object" }
+      }
+    },
+    "misses": {
+      "description": "What he wanted, or you needed, that the catalogue has no fact, command or place for.",
+      "type": "array",
+      "maxItems": 5,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["wanted", "why"],
+        "properties": {
+          "wanted": { "description": "In a few words, what was missing.", "type": "string", "minLength": 1, "maxLength": 200 },
+          "why": { "description": "What was in the way: which fact, command or place the catalogue lacks.", "type": "string", "minLength": 1, "maxLength": 300 }
+        }
+      }
+    },
+    "said": {
+      "description": "One plain sentence on what you did through the app, or what you asked of him. Leave it out when you did nothing through the app.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 300
+    }
+  },
+  "additionalProperties": false
+}

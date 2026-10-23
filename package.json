@@ -42,6 +42,10 @@
       "types": "./packages/talks/dist/TalkList.d.ts",
       "default": "./packages/talks/dist/TalkList.js"
     },
+    "./talks/grind": {
+      "types": "./packages/talks/dist/grind.d.ts",
+      "default": "./packages/talks/dist/grind.js"
+    },
     "./talks/styles.css": "./packages/talks/dist/styles.css",
     "./testing/speech": {
       "types": "./packages/testing/dist/speech.d.ts",
@@ -59,6 +63,7 @@
   },
   "files": [
     "packages/*/dist/**",
+    "packages/*/grind/**",
     "packages/*/package.json",
     "!**/*.tsbuildinfo"
   ],
