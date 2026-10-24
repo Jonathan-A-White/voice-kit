@@ -2,6 +2,16 @@
 
 Newest first. Breaking changes come first in a release, each with its migration in one sentence.
 
+## 0.1.2 (2026-10-23)
+
+- Fixed (mw-m45m0h.1): `grind/helping-with-a-form.md` still read two ways: 'screen order, required ones first' disagreed with
+  itself when an optional field came first on the screen, and 'ask about one ... only while a required field is still empty and he
+  has answered past it' left an optional ask allowed (a tutor asked the optional field first, about one run in three). It now says
+  each rule once: ask only about empty required fields, the first empty required field in screen order first, even when an optional
+  field comes before it on the screen; never ask about an optional field; once every required field holds something, say so in one
+  sentence, leave `form_ask` out, and the empty optional fields may be named in that sentence. An app that copies the fragment takes
+  the new text. No change to the code.
+
 ## 0.1.1 (2026-10-23)
 
 - Fixed (mw-63u3pr.1): `grind/helping-with-a-form.md` said two things about optional fields once the required ones were held ('then

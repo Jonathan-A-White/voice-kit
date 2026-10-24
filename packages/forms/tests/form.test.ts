@@ -122,17 +122,27 @@ describe('the grind fragment', () => {
     expect(new TextEncoder().encode(grind).length).toBeLessThan(3000);
   });
 
-  it('gives one rule for the optional fields: asked while a required one is empty, named in the ready sentence after', () => {
+  it('gives one rule for the optional fields: only empty required fields are asked about, the first in screen order, never an optional one', () => {
     expect(grind).not.toContain('then optional ones');
+    expect(grind).not.toContain('answered past');
+    expect(grind).not.toContain('required ones first');
     const bullets = grind.split('\n').filter((line) => line.startsWith('- '));
-    const ready = bullets.filter((line) => line.includes('leave `form_ask` out'));
-    expect(ready).toHaveLength(1);
-    expect(ready[0]).toContain('every required field holds something');
-    expect(ready[0]).toContain('optional');
-    // the order bullet no longer sends him on to optional fields once the required ones are held
+    // asked about: empty required fields only, the first in screen order, even when an optional field comes before it
     const order = bullets.filter((line) => line.includes('screen order'));
     expect(order).toHaveLength(1);
-    expect(order[0]).not.toContain('optional');
+    expect(order[0]).toContain('Ask only about empty required fields');
+    expect(order[0]).toContain('first empty required field in screen order');
+    expect(order[0]).toContain('even when an optional field comes before it on the screen');
+    // never an optional ask; the ready sentence leaves form_ask out and may name the empty optional ones
+    const optional = bullets.filter((line) => line.startsWith('- Optional fields'));
+    expect(optional).toHaveLength(1);
+    expect(optional[0]).toContain('never ask about an optional field');
+    const ready = bullets.filter((line) => line.includes('leave `form_ask` out'));
+    expect(ready).toEqual(optional);
+    expect(ready[0]).toContain('every required field holds something');
+    expect(ready[0]).toContain('may name');
+    // no line allows an optional ask
+    expect(bullets.filter((line) => /ask about (one|an optional)/.test(line.replace('never ask about an optional field', '')))).toEqual([]);
   });
 
   it('names the choice rule, the Send-button rule and that the tutor never sends', () => {

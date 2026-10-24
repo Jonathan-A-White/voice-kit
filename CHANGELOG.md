@@ -9,6 +9,13 @@ Each library keeps its own changelog; this one records the repo's releases and p
 - [@voice-kit/talks](packages/talks/CHANGELOG.md)
 - [@voice-kit/testing](packages/testing/CHANGELOG.md)
 
+## v0.18.4 (2026-10-23)
+
+- @voice-kit/forms 0.1.2 (mw-m45m0h.1): the grind fragment `helping-with-a-form.md` now says the tutor asks only about empty required
+  fields, the first of them in screen order even when an optional field comes before it on the screen, and never about an optional
+  field (it may name the empty optional ones in the sentence that says the form is ready). Text only. See
+  [its changelog](packages/forms/CHANGELOG.md).
+
 ## v0.18.3 (2026-10-23)
 
 - @voice-kit/composer 0.8.1 (mw-k4sekr.2): the recorder's duration, `useTalk`'s tap-or-hold and the listen's live stretch are measured on
