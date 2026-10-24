@@ -10,6 +10,7 @@
 //                (`onHoldStart`, `onHoldEnd`), and gets the bar's state and handlers back. TalkBar draws it.
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { KeyboardEvent, PointerEvent } from 'react';
+import { monotonicNow } from './clock.js';
 import { resolveSettings, type ComposerSettings, type ComposerTalk } from './settings.js';
 import type { Transcriber } from './transcriber.js';
 import { useBarHold, type HoldEnd, type HoldEnding, type HoldWords } from './useHold.js';
@@ -109,7 +110,7 @@ export function useBarPress({ settings, listening, onPress, onRelease, onAbort, 
   }
 
   function begin() {
-    pressedAt.current = Date.now();
+    pressedAt.current = monotonicNow();
     setPhase('held');
     latest.current.onPress();
   }
@@ -143,7 +144,7 @@ export function useBarPress({ settings, listening, onPress, onRelease, onAbort, 
       return;
     }
     // a quick press with talk 'tap' leaves the mic on, when there is a listen to leave on
-    if (tap && was === 'held' && Date.now() - pressedAt.current < LATCH_MS && listeningNow.current) {
+    if (tap && was === 'held' && monotonicNow() - pressedAt.current < LATCH_MS && listeningNow.current) {
       setPhase('latched');
       return;
     }

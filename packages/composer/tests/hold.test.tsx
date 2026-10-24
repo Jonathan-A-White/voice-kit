@@ -154,7 +154,7 @@ const ENDINGS: { ended: HoldEnding; how: string; end: () => Promise<void>; as: H
 ];
 
 beforeEach(() => {
-  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date', 'performance'] });
   installRecognizer();
   clearInputs();
   Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true });

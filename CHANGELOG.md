@@ -9,6 +9,12 @@ Each library keeps its own changelog; this one records the repo's releases and p
 - [@voice-kit/talks](packages/talks/CHANGELOG.md)
 - [@voice-kit/testing](packages/testing/CHANGELOG.md)
 
+## v0.18.3 (2026-10-23)
+
+- @voice-kit/composer 0.8.1 (mw-k4sekr.2): the recorder's duration, `useTalk`'s tap-or-hold and the listen's live stretch are measured on
+  `performance.now`, so a step back of the wall clock never shows a negative length, latches a long hold, or skips the idle reset. See
+  [its changelog](packages/composer/CHANGELOG.md).
+
 ## v0.18.2 (2026-10-23)
 
 - @voice-kit/testing 0.4.1 (mw-k4sekr.1): the fake speech's default clock is `performance.now`, as the fake mic's is, so a step back of the

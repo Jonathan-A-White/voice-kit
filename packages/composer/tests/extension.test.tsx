@@ -38,7 +38,7 @@ async function letGo() {
 }
 
 beforeEach(() => {
-  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date', 'performance'] });
   sent = [];
   onSend.mockClear();
   installRecognizer();

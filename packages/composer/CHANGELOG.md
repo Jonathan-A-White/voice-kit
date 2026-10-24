@@ -2,6 +2,15 @@
 
 Newest first. Breaking changes come first in a release, each with its migration in one sentence.
 
+## 0.8.1 (2026-10-23, not yet tagged)
+
+- Fixed (mw-k4sekr.2): the three lengths of time the composer takes are measured on `performance.now` (through a small `monotonicNow` in
+  `src/clock.ts`; `Date.now` only where there is no `performance`), not on the wall clock, which steps when the host's clock is corrected:
+  `VoiceRecorder`'s `durationMs` no longer comes out negative; `useTalk`'s (and `TalkBar`'s, the Composer's) talk 'tap' no longer reads a
+  long hold as a quick tap and latches it, or the reverse; and `startListening` no longer skips the reset of its count of quick ends after
+  a stretch that listened a while (so the hold would give up after a few pauses). A test that fakes the clock for these now fakes
+  `performance` too (`toFake: [..., 'Date', 'performance']`).
+
 ## 0.8.0 (2026-10-23)
 
 - New (mw-fu7dqf.3): `strictLang` on `ListenOptions`, `useHold`, `useTalk` (and so `TalkBar`) and the `Transcriber`'s start options: a hold

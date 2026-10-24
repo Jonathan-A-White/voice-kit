@@ -48,7 +48,7 @@ async function letGo(where = ON) {
 }
 
 beforeEach(() => {
-  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date', 'performance'] });
   sent = [];
   onSend.mockClear();
   installRecognizer();
@@ -269,7 +269,7 @@ describe("holding the bar on the browser's speech recogniser (Postern's scenario
     await press();
     await hear('first the build');
     for (const later of ['then the tests', 'then the landing']) {
-      vi.setSystemTime(Date.now() + 90_000);
+      await vi.advanceTimersByTimeAsync(90_000);
       await act(async () => FakeRecognizer.instances.at(-1)?.onend?.());
       await pass();
       expect(bar().textContent).toMatch(/Release to send|Starting the mic…/);

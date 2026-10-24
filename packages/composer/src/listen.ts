@@ -47,6 +47,7 @@
 // recording that could not be read) are said so (missed, missedNote), never dropped in silence. A session that settles by itself
 // while he still holds says so at once (onEnd, mw-06ggew.14), so the hold ends there and his words are kept, not cut off on release.
 
+import { monotonicNow } from './clock.js';
 import { canRecord, VoiceRecorder, type Recording } from './recorder.js';
 import { replayRecording } from './replay.js';
 
@@ -405,7 +406,7 @@ export function startListening(options: ListenOptions = {}): ListenStart {
   let transient = null as ListenError | null;
   let idleRestarts = 0;
   // When the recogniser was last started: how long it listened before it ended tells a pause from a failure.
-  let stretchStart = Date.now();
+  let stretchStart = monotonicNow();
   let error = null as ListenError | null;
   let outcome = null as ListenResult | null;
   let announced = false;
@@ -447,7 +448,7 @@ export function startListening(options: ListenOptions = {}): ListenStart {
   };
   /** Starts `recognizer` on the chosen input's track; a browser that refuses the track gets the default microphone instead. */
   const begin = (recognizer: Recognizer) => {
-    stretchStart = Date.now();
+    stretchStart = monotonicNow();
     if (input) {
       try {
         recognizer.start(input.track);
@@ -601,7 +602,7 @@ export function startListening(options: ListenOptions = {}): ListenStart {
       if (!stopping && !error) {
         // He is still holding: the recogniser ended by itself. What was heard is kept, and the hold goes on.
         // A stretch that listened for a while only met his silence: it is a pause, not a failure, so it does not count.
-        if (Date.now() - stretchStart >= MIN_LIVE_STRETCH_MS) idleRestarts = 0;
+        if (monotonicNow() - stretchStart >= MIN_LIVE_STRETCH_MS) idleRestarts = 0;
         // The chosen input gave nothing in a whole stretch: go on the phone's default microphone, and not that input again.
         if (input && !inputHeard) giveUpInput();
         carried = heard;

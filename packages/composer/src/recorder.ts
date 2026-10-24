@@ -4,6 +4,8 @@
 // transcribed on the desktop, never by a third party. Handed a track (the microphone a hold's
 // recogniser listens on), it records a copy of that track and opens no microphone of its own (mw-f7gmps.1).
 
+import { monotonicNow } from './clock.js';
+
 export interface Recording {
   blob: Blob;
   mime: string;
@@ -39,7 +41,7 @@ export class VoiceRecorder {
     this.recorder.ondataavailable = (event) => {
       if (event.data.size > 0) this.chunks.push(event.data);
     };
-    this.startedAt = Date.now();
+    this.startedAt = monotonicNow();
     this.recorder.start(1000);
   }
 
@@ -49,7 +51,7 @@ export class VoiceRecorder {
     return new Promise((resolve) => {
       recorder.onstop = () => {
         const mime = (recorder.mimeType || this.chunks[0]?.type || 'audio/webm').split(';')[0];
-        const recording = { blob: new Blob(this.chunks, { type: mime }), mime, durationMs: Date.now() - this.startedAt };
+        const recording = { blob: new Blob(this.chunks, { type: mime }), mime, durationMs: monotonicNow() - this.startedAt };
         this.release();
         resolve(recording);
       };

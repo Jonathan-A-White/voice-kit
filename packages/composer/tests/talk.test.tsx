@@ -30,7 +30,7 @@ async function press(ms: number) {
 }
 
 beforeEach(() => {
-  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date', 'performance'] });
   installRecognizer();
   clearInputs();
   Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true });
@@ -141,6 +141,21 @@ describe('talk tap, through useTalk', () => {
     act(() => transcriber.open());
     act(() => transcriber.yields('a long hold'));
     await pass(LATCH_MS);
+    await up();
+    expect(transcriber.stopped).toBe(true);
+    expect(onWords.mock.calls[0]![0]).toBe('a long hold');
+  });
+
+  it('reads a 1 s hold as a hold when the wall clock steps back during it (mw-k4sekr.2)', async () => {
+    const transcriber = fakeTranscriber();
+    const onWords = vi.fn();
+    render(<TalkBar settings={{ talk: 'tap' }} transcriber={transcriber} onWords={onWords} />);
+    await down();
+    act(() => transcriber.open());
+    act(() => transcriber.yields('a long hold'));
+    await pass(500);
+    vi.setSystemTime(Date.now() - 3_600_000); // the host's clock corrected an hour back
+    await pass(500);
     await up();
     expect(transcriber.stopped).toBe(true);
     expect(onWords.mock.calls[0]![0]).toBe('a long hold');

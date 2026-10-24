@@ -572,6 +572,24 @@ describe('listen', () => {
         expect(onFinal).toHaveBeenCalledWith('twenty Mississippi and the rest');
       });
 
+      it('a long stretch counts as a pause when the wall clock steps back during it (mw-k4sekr.2)', () => {
+        vi.useFakeTimers();
+        install();
+        const onError = vi.fn();
+        startListening({ onError });
+        const recognizer = FakeRecognizer.instances[0];
+        // Each stretch listens for 5 s while the host's clock is corrected an hour back; measured on the wall clock it would look
+        // negative, never reset the count of quick ends, and the hold would give up after MAX_IDLE_RESTARTS of them.
+        for (let i = 0; i < MAX_IDLE_RESTARTS * 3; i++) {
+          vi.advanceTimersByTime(5000);
+          vi.setSystemTime(Date.now() - 3_600_000);
+          recognizer.onerror?.({ error: 'no-speech' });
+          recognizer.onend?.();
+        }
+        expect(onError).not.toHaveBeenCalled();
+        expect(recognizer.startFn).toHaveBeenCalledTimes(MAX_IDLE_RESTARTS * 3 + 1);
+      });
+
       it('still gives up when the recogniser ends again at once, over and over, after silent stretches', () => {
         vi.useFakeTimers();
         install();
