@@ -161,6 +161,21 @@ describe('pause, resume and cancel', () => {
     expect(events.map((e) => e.split('@')[0])).toEqual(['start', 'boundary:0', 'pause', 'resume', 'boundary:6', 'boundary:12', 'end']);
   });
 
+  it('measures an utterance on a clock the wall clock cannot move: a step back of the wall clock mid-utterance neither lengthens it nor loses its end', async () => {
+    const events: string[] = [];
+    speak('Hello there world', events);
+    await vi.advanceTimersByTimeAsync(230); // start, boundaries at 150 and 210
+    vi.setSystemTime(Date.now() - 800);
+    await vi.advanceTimersByTimeAsync(20);
+    fake.synth.pause(); // 250 ms spoken, 80 to go
+    fake.synth.resume();
+    await vi.advanceTimersByTimeAsync(79);
+    expect(events.some((e) => e.startsWith('end'))).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(events.map((e) => e.split('@')[0])).toEqual(['start', 'boundary:0', 'boundary:6', 'pause', 'resume', 'boundary:12', 'end']);
+    expect(fake.log[0].endedAt).toBe(330);
+  });
+
   it('an utterance spoken while paused waits for resume', async () => {
     fake.synth.pause();
     const events: string[] = [];

@@ -26,7 +26,7 @@ export interface FakeVoice {
 }
 
 export interface SpeechOptions {
-  /** Defaults to the global timers and Date. Cannot go into an init script (the page's own clock is used there). */
+  /** Defaults to the global timers and performance.now (a monotonic clock: Date.now steps back when the host's clock is corrected, and an utterance would be cut short or lose its end). Cannot go into an init script (the page's own clock is used there). */
   clock?: Clock;
   /** Time an utterance takes for each word at rate 1. Default 60. */
   msPerWord?: number;
@@ -126,7 +126,7 @@ export function installSpeech(target: object = globalThis, options: SpeechOption
   type Obj = Record<string, unknown>;
   const host = target as Obj;
   const clock: Clock = options.clock ?? {
-    now: () => Date.now(),
+    now: () => (globalThis.performance ? globalThis.performance.now() : Date.now()),
     setTimeout: (fn, ms) => globalThis.setTimeout(fn, ms),
     clearTimeout: (handle) => globalThis.clearTimeout(handle as ReturnType<typeof setTimeout>),
   };

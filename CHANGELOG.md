@@ -9,6 +9,11 @@ Each library keeps its own changelog; this one records the repo's releases and p
 - [@voice-kit/talks](packages/talks/CHANGELOG.md)
 - [@voice-kit/testing](packages/testing/CHANGELOG.md)
 
+## v0.18.2 (2026-10-23)
+
+- @voice-kit/testing 0.4.1 (mw-k4sekr.1): the fake speech's default clock is `performance.now`, as the fake mic's is, so a step back of the
+  wall clock mid-utterance no longer makes it run on past its end. See [its changelog](packages/testing/CHANGELOG.md).
+
 ## v0.18.1 (2026-10-23)
 
 - @voice-kit/forms 0.1.1 (mw-63u3pr.1): the grind fragment `helping-with-a-form.md` gives one rule for optional fields: once every

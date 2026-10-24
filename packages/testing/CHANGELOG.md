@@ -2,6 +2,12 @@
 
 Newest first. Breaking changes come first in a release, each with its migration in one sentence.
 
+## 0.4.1 (2026-10-23, not yet tagged)
+
+- Fixed (mw-k4sekr.1): the fake speech's default clock is `performance.now` (`Date.now` only where there is no `performance`), as the fake mic's
+  is: when the host's wall clock stepped back during an utterance, pausing it measured a negative stretch, so it ran on far too long (its
+  `end` event never came in time) and the log's `endedAt` read negative.
+
 ## 0.4.0 (2026-10-23, not yet tagged)
 
 - New (mw-o480n1.3): the fake talk store keeps a turn's `fields` (what an app keeps with a turn) by copy, as the in-memory and Dexie
