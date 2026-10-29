@@ -6,6 +6,18 @@ fire every event the real ones fire, in order, after the time the real ones take
 
 It imports nothing from the other voice-kit libraries and needs no DOM library: you hand it the window to put the fakes on.
 
+<!-- toc -->
+
+- [Install](#install)
+- [In vitest](#in-vitest)
+- [In Playwright](#in-playwright)
+- [Honest speech](#honest-speech)
+- [Honest microphone](#honest-microphone)
+- [Credits](#credits)
+- [Talks](#talks)
+
+<!-- /toc -->
+
 ## Install
 
 By pinned commit (a devDependency for an app); the repo's [README](../../README.md#install) names the commit to pin and has the

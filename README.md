@@ -30,6 +30,17 @@ entry; testing needs none. React is an optional peer dependency, so an app that 
 fakes installs no React for them. [examples/composer-demo](examples/composer-demo/README.md) shows the composer on a
 phone-sized page (`npm run demo` serves it).
 
+<!-- toc -->
+
+- [Install](#install)
+  - [Moving from bsv-kit](#moving-from-bsv-kit)
+- [Examples](#examples)
+- [Modules](#modules)
+- [Credits](#credits)
+- [Develop](#develop)
+
+<!-- /toc -->
+
 ## Install
 
 From GitHub, by full commit SHA (there is no registry and no tag yet); `prepare` builds the libraries on install. An app

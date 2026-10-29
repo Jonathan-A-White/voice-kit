@@ -4,6 +4,16 @@ voice-kit is three small TypeScript libraries for speaking and listening in the 
 [Postern](https://github.com/Jonathan-A-White/postern) by way of [bsv-kit](https://github.com/Jonathan-A-White/bsv-kit). It
 is MIT licensed. A change is welcome when it is small, has its test, and leaves the gate green.
 
+<!-- toc -->
+
+- [Build and test](#build-and-test)
+- [Layout](#layout)
+- [Proposing a change](#proposing-a-change)
+- [What a change must bring](#what-a-change-must-bring)
+- [Releases](#releases)
+
+<!-- /toc -->
+
 ## Build and test
 
 Node 20 or later. From a clone:

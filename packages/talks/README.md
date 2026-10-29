@@ -13,6 +13,30 @@ The core has no framework and no dependency: no React, no DOM, nothing from the 
 network of its own: the grind you inject does that. The Composer's `useTalk` drives it as it is, with `onWords: (text) =>
 talks.ask(id, text)`.
 
+<!-- toc -->
+
+- [Install](#install)
+- [Use](#use)
+  - [With the Composer's hold-to-talk](#with-the-composers-hold-to-talk)
+- [The request](#the-request)
+  - [Fitting a request to a budget](#fitting-a-request-to-a-budget)
+- [Memory](#memory)
+- [Notes an app keeps by name](#notes-an-app-keeps-by-name)
+- [Search](#search)
+- [Pictures](#pictures)
+- [Failures and order](#failures-and-order)
+- [The tutor client](#the-tutor-client)
+  - [What is carried up front, and how it learns](#what-is-carried-up-front-and-how-it-learns)
+- [The grind side](#the-grind-side)
+- [On the device: the Dexie store](#on-the-device-the-dexie-store)
+- [On screen: TalkList](#on-screen-talklist)
+  - [Your own rows](#your-own-rows)
+- [The store](#the-store)
+  - [App fields on a turn](#app-fields-on-a-turn)
+  - [TalkReader](#talkreader)
+
+<!-- /toc -->
+
 ## Install
 
 By pinned commit (there is no registry); the repo's [README](../../README.md#install) names the commit to pin and has the npm 11

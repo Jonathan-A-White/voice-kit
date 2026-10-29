@@ -6,6 +6,21 @@ below the bar, with 'Type a message' to type instead. An app can open it speak-f
 (the text box and Send, with a small mic). It needs React 18 or later (`react` and `react-dom`, peer
 dependencies) and imports nothing from the other voice-kit libraries.
 
+<!-- toc -->
+
+- [Install](#install)
+- [Use](#use)
+- [Settings](#settings)
+  - [Hearing one language only (`strictLang`)](#hearing-one-language-only-strictlang)
+  - [Pausing what is read aloud while he talks](#pausing-what-is-read-aloud-while-he-talks)
+- [What the app passes](#what-the-app-passes)
+- [Plugging in an app's own features](#plugging-in-an-apps-own-features)
+- [The look](#the-look)
+- [The parts](#the-parts)
+- [Where it came from](#where-it-came-from)
+
+<!-- /toc -->
+
 ## Install
 
 By pinned commit (there is no registry); the repo's [README](../../README.md#install) names the commit to pin and has the npm 11

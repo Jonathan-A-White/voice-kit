@@ -11,6 +11,17 @@ It is two entries. `voice-kit/speech` is the engine, with no framework. `voice-k
 imports nothing from the other voice-kit libraries. It keeps no storage and reaches no network: the text is spoken locally by the
 phone's own `speechSynthesis`.
 
+<!-- toc -->
+
+- [Install](#install)
+- [Use](#use)
+- [The engine (`voice-kit/speech`)](#the-engine-voice-kitspeech)
+- [The bar and the hook (`voice-kit/speech/react`)](#the-bar-and-the-hook-voice-kitspeechreact)
+- [The look](#the-look)
+- [Testing an app that speaks](#testing-an-app-that-speaks)
+
+<!-- /toc -->
+
 ## Install
 
 By pinned commit (there is no registry); the repo's [README](../../README.md#install) names the commit to pin and has the npm 11
