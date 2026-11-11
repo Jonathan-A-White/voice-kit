@@ -48,6 +48,8 @@ function tableAfter(text, start) {
 }
 
 const loaded = () => loadModel(JSON.parse(readFileSync(MODEL, 'utf8')));
+// Scoring 30 s of audio takes about a second, but many times that on a host under heavy load: the default 5 s is too short.
+const SCORING_TIMEOUT = 60_000;
 
 // ---- the document ----
 
@@ -179,7 +181,7 @@ test('licences.json lists every file and dataset with its source URL, licence, i
   }
 });
 
-test("the committed model hears 'Hey Lampas' in a voice it never trained on exactly once", () => {
+test("the committed model hears 'Hey Lampas' in a voice it never trained on exactly once", { timeout: SCORING_TIMEOUT }, () => {
   const net = loaded();
   const wav = readWav(FIXTURE);
   assert.equal(wav.rate, 16000);
@@ -189,7 +191,7 @@ test("the committed model hears 'Hey Lampas' in a voice it never trained on exac
   assert.equal(heard.length, 1, `heard ${heard.length} times`);
 });
 
-test('the committed model does not hear packages/testing/clips/english.wav, nor 30 s of silence', () => {
+test('the committed model does not hear packages/testing/clips/english.wav, nor 30 s of silence', { timeout: SCORING_TIMEOUT }, () => {
   const net = loaded();
   const wav = readWav(ENGLISH);
   assert.equal(wav.rate, 16000);
@@ -198,7 +200,7 @@ test('the committed model does not hear packages/testing/clips/english.wav, nor 
   assert.deepEqual(listen(net, silence), []);
 });
 
-test('the listener gives the same scores fed in chunks as fed at once, and windowEnd says when each window is complete', () => {
+test('the listener gives the same scores fed in chunks as fed at once, and windowEnd says when each window is complete', { timeout: SCORING_TIMEOUT }, () => {
   const net = loaded();
   const wav = readWav(FIXTURE);
   const samples = new Float32Array(wav.samples.length + 32000);
