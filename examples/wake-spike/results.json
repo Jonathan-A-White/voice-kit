@@ -1,7 +1,7 @@
 {
   "date": "2026-11-11",
-  "commit": "3299a550bd393b8a341290dcf80854902f367932",
-  "uncommittedChanges": true,
+  "commit": "5f8b35d01ba9a75780622a17ca279d98be8c6935",
+  "uncommittedChanges": false,
   "note": "Written by scripts/measure.mjs, headless on the laptop. The bar is the Governor's (question 6, mw-6ww.165). Battery is not measured headless.",
   "model": {
     "trained": "2026-11-11",
@@ -36,7 +36,8 @@
     "falseWakesPerHour": 0.9670509457380494,
     "wakes": [
       {
-        "atSeconds": 3767,
+        "atSeconds": 2128.3,
+        "secondsIntoFile": 489.6,
         "score": 0.972,
         "file": "MSB_43_Jhn_006_D.mp3"
       }
@@ -164,28 +165,28 @@
   "compute": {
     "unit": "milliseconds of compute per second of audio",
     "node": {
-      "msPerSecond": 49.50581813333362,
-      "counterMsPerSecond": 49.468731366670305,
+      "msPerSecond": 32.64966620000002,
+      "counterMsPerSecond": 32.63347676666162,
       "audioSeconds": 30
     },
     "node48k": {
-      "msPerSecond": 43.01189510636487,
-      "counterMsPerSecond": 42.963719069734054,
+      "msPerSecond": 37.6455528207821,
+      "counterMsPerSecond": 37.61539528866964,
       "audioSeconds": 29.9994375
     },
     "nodeSoak": {
-      "msPerSecond": 60.398969615276506,
+      "msPerSecond": 46.03706508889161,
       "audioSeconds": 3722.6580625
     },
     "chromium": {
       "unthrottled": {
-        "msPerSecond": 53.16766356035843,
-        "counterMsPerSecond": 53.117662638735716,
+        "msPerSecond": 63.82453005280857,
+        "counterMsPerSecond": 63.7578621679082,
         "audioSeconds": 29.9994375
       },
       "throttled4x": {
-        "msPerSecond": 346.3598275769215,
-        "counterMsPerSecond": 345.96315343764667,
+        "msPerSecond": 189.5768878936235,
+        "counterMsPerSecond": 189.31021625865284,
         "audioSeconds": 29.9994375
       },
       "version": "153.0.8010.12"
@@ -256,19 +257,19 @@
     },
     {
       "measure": "Compute in Node",
-      "result": "49.51 ms per second of audio (16 kHz in); 43.01 with 48 kHz in",
+      "result": "32.65 ms per second of audio (16 kHz in); 37.65 with 48 kHz in",
       "target": "-",
       "met": "-"
     },
     {
       "measure": "Compute in Chromium",
-      "result": "53.17 ms per second of audio (48 kHz in, page main thread)",
+      "result": "63.82 ms per second of audio (48 kHz in, page main thread)",
       "target": "-",
       "met": "-"
     },
     {
       "measure": "Compute in Chromium, CPU throttled 4x",
-      "result": "346.36 ms per second of audio (a phone proxy)",
+      "result": "189.58 ms per second of audio (a phone proxy)",
       "target": "-",
       "met": "-"
     },

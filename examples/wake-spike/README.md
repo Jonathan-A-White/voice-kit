@@ -71,6 +71,42 @@ nice -n 10 npm run measure --workspace wake-spike            # about 5 min; writ
   the model files and their gzip; and times the detector in Node and in headless Chromium with the CPU throttled 4x (CDP
   `Emulation.setCPUThrottlingRate`, a phone proxy). Battery is not measured headless.
 
+## Results
+
+Measured 2026-11-11 at commit `5f8b35d`, headless on the laptop, by `npm run measure --workspace wake-spike`
+(4 min 0 s; the numbers are in `results.json`). The targets are the Governor's bar (question 6, mw-6ww.165), not provisional:
+at most 1 false wake an hour while the Bible plays, at most 2 misses in 20.
+
+| Measure | Result | Target (the Governor's bar (question 6, mw-6ww.165)) | Met |
+|---|---|---|---|
+| Bible audio played | 62.0 min of John (10 chapters, recorded voice) | at least 60 min | met |
+| False wakes | 1 in 62.0 min | - | - |
+| False wakes an hour | 0.97 | at most 1 | met |
+| Misses, clean | 0 in 20 | at most 2 in 20 | met |
+| Misses, under Bible audio at 10 dB | 0 in 20 | at most 2 in 20 | met |
+| Misses, under Bible audio at 0 dB | 0 in 20 | at most 2 in 20 | met |
+| Misses, under brown noise (a road proxy) at 5 dB | 0 in 20 | at most 2 in 20 | met |
+| Delay from the phrase end to the wake, median | 62 ms (80 tries that woke) | - | - |
+| Delay, worst | 115 ms | - | - |
+| Model size | 469,057 bytes, 346,866 gzipped (hey-lampas.json) | - | - |
+| Compute in Node | 32.65 ms per second of audio (16 kHz in); 37.65 with 48 kHz in | - | - |
+| Compute in Chromium | 63.82 ms per second of audio (48 kHz in, page main thread) | - | - |
+| Compute in Chromium, CPU throttled 4x | 189.58 ms per second of audio (a phone proxy) | - | - |
+| Battery | not measured: it needs a phone, not a headless run | - | - |
+
+**What the numbers say.** On this test the bar is met, but the false-wake line is met by a hair: one false wake in 62.0
+minutes of John is 0.97 an hour against a limit of 1, so a second one anywhere in the hour would have missed it, and 62 minutes
+of one reader's voice is a small sample, not a guarantee. The misses are 0 in every set of 20, but those tries are espeak-ng
+voices, synthetic and in the same family as voices the model was trained on in other variants; no human voice, microphone or
+car has been tried, so the 20 tries panel on a phone is the real test of the misses. The delay is small (a wake about 62 ms
+after the phrase ends, 115 ms at worst). The model is 469,057 bytes (346,866 gzipped), a one-time fetch the page can cache,
+and no server, runtime or extra library is needed: a browser-only wake word is possible at this size. The cost that
+stands out is compute: 33 to 50 ms of CPU per second of audio in Node over three runs (a few percent of one core), 50 to 64
+in desktop Chromium, and 189 to 346 ms per second with the CPU throttled 4x, which is a fifth to a third of a core spent for
+as long as the page listens. The runs differ that much from one another because the laptop was shared, and the throttled
+number is a proxy for a phone, not a phone. Battery is not measured: it needs a phone, and that fraction of a core is where
+to look first. The detector is plain, unoptimised JavaScript (a float FFT and convolutions), so the compute has room to fall.
+
 ## Where it is published
 
 <https://jonathan-a-white.github.io/voice-kit/>
