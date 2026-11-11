@@ -29,8 +29,10 @@ BANDS = 40
 STEP = 2  # network frames between windows when listening: 40 ms
 MINE_STEP = 3  # network frames between the windows scored when mining: 60 ms (neighbours are near copies)
 SCALE = 5.0
-EPOCHS = 24
-MINE_AT = (8, 13, 18)
+EPOCHS = 30
+MINE_AT = (8, 15, 22)
+CHANNELS = 64  # each convolution's outputs
+HIDDEN = 48  # the dense layer's units
 RANDOM_PER_EPOCH = 100_000
 HARD_PER_ROUND = 25_000
 
@@ -40,12 +42,12 @@ class Net(nn.Module):
 
     def __init__(self):
         super().__init__()
-        self.c1 = nn.Conv1d(BANDS, 48, 5, stride=2)  # 80 -> 38
-        self.c2 = nn.Conv1d(48, 48, 3, stride=2)  # 38 -> 18
-        self.c3 = nn.Conv1d(48, 48, 3)  # 18 -> 16
+        self.c1 = nn.Conv1d(BANDS, CHANNELS, 5, stride=2)  # 80 -> 38
+        self.c2 = nn.Conv1d(CHANNELS, CHANNELS, 3, stride=2)  # 38 -> 18
+        self.c3 = nn.Conv1d(CHANNELS, CHANNELS, 3)  # 18 -> 16
         length = ((WINDOW - 5) // 2 + 1 - 3) // 2 + 1 - 2
-        self.d1 = nn.Linear(48 * length, 32)
-        self.d2 = nn.Linear(32, 1)
+        self.d1 = nn.Linear(CHANNELS * length, HIDDEN)
+        self.d2 = nn.Linear(HIDDEN, 1)
         self.drop = nn.Dropout(0.2)
 
     def forward(self, x):
