@@ -74,9 +74,9 @@ From the repo root, one step at a time, at low priority. Each step is one proces
 
 ```sh
 nice -n 10 node scripts/wake-probe/probe.mjs prepare     # about 40 min the first time
-nice -n 10 node scripts/wake-probe/probe.mjs train       # about 20 min
-nice -n 10 node scripts/wake-probe/probe.mjs calibrate   # about 12 min; writes the committed model
-node scripts/wake-probe/probe.mjs measure                # about 12 min; reads only the committed model
+nice -n 10 node scripts/wake-probe/probe.mjs train       # about 15 min
+nice -n 10 node scripts/wake-probe/probe.mjs calibrate   # about 20 min; writes the committed model
+node scripts/wake-probe/probe.mjs measure                # about 20 min; reads only the committed model
 ```
 
 1. `prepare` makes the audio, then turns it into the network's features with `detector.mjs`:

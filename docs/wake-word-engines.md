@@ -2,7 +2,9 @@
 
 Three of the four routes judged here are CLEAN: (a) as narrowed below, (c) and (d). Route (b) is NOT CLEAN. The probe
 runs route (d). It heard espeak-ng sayings of 'Hey Lampas' and did not hear the test clip. But it also woke about 50
-times an hour on speech it never heard. The Recommendation at the end names what is the Governor's to decide.
+times an hour on speech it never heard. The model trained after it (see Trained model) meets the Governor's bar on
+audio kept apart: 0.19 false wakes an hour, at most 1 miss in 20. The Recommendation at the end names what is the
+Governor's to decide.
 
 This document answers one question for the wake-word spike: can 'Hey Lampas' be heard in a browser with files whose
 every licence is permissive, read at its source? It was written for story mw-rdpwdp1.5, after mw-rdpwdp1.1 stopped
@@ -29,6 +31,7 @@ its text read. Repositories were read at the commit named, or at their default b
   - [Route (c): Vosk in the browser with a small grammar](#route-c-vosk-in-the-browser-with-a-small-grammar)
   - [Route (d): our own small classifier trained from scratch](#route-d-our-own-small-classifier-trained-from-scratch)
 - [The probe](#the-probe)
+- [Trained model](#trained-model)
 - [Recommendation](#recommendation)
 
 <!-- /toc -->
@@ -212,6 +215,83 @@ What this proves, and what it does not:
 - It says nothing yet about a human voice, a car or a phone microphone. Every positive was espeak-ng. The epic's story
   w3 measures that.
 
+## Trained model
+
+Story mw-rdpwdp1.1 trained route (d) properly and committed it: `examples/wake-spike/public/models/hey-lampas.json`
+(the weights, the front end's numbers, the threshold, the date and the commit that trained it). It is scored by
+`scripts/wake-probe/detector.mjs`, plain JavaScript with no import. `examples/wake-spike/public/models/licences.json`
+lists every file, dataset and tool the training used, each read at its source. `node scripts/wake-probe/probe.mjs
+measure` made the table below, headless on the laptop, from the committed model, on 2026-11-11.
+
+The measuring set was not looked at before this one run:
+
+- speech: all of LibriSpeech test-clean;
+- sayings of 'Hey Lampas': 42 by 21 VCTK VITS speakers and 18 by espeak-ng voices (en-029, and the m4, f4 and klatt4
+  variants), none trained on, each in four conditions.
+
+The threshold was set without it, on LibriSpeech dev-clean and 80 sayings by 20 other VCTK VITS speakers and other
+espeak-ng voices. The training speech was LibriSpeech train-clean-100. LibriSpeech's parts share no speaker.
+
+| Measure | Result | The Governor's bar | Met |
+|---|---|---|---|
+| Measuring speech | 324.2 min: LibriSpeech test-clean, 40 speakers, none trained on or used to set the threshold | at least 60 min | met |
+| False wakes | 1 in 324.2 min | - | - |
+| False wakes per hour | 0.19 | at most 1 | met |
+| Misses, clean | 0, 0, 0 in 3 sets of 20 | at most 2 in 20 | met |
+| Misses, under speech at 10 dB | 0, 0, 0 in 3 sets of 20 | at most 2 in 20 | met |
+| Misses, under speech at 0 dB | 1, 0, 1 in 3 sets of 20 | at most 2 in 20 | met |
+| Misses, under road-like noise at 5 dB | 0, 0, 0 in 3 sets of 20 | at most 2 in 20 | met |
+| Delay, median | 19 ms from the phrase's end to the wake | - | - |
+| Delay, worst | 447 ms | - | - |
+| Model bytes | 469,057 (hey-lampas.json, 86,817 weights as base64 float32) | - | - |
+
+The bar is the Governor's: at most 1 false wake an hour while speech plays, and at most 2 misses in 20. Each saying sat
+2 s into 5 s of the condition's background. It counts as heard when a wake comes between its start and 1 s after its
+last sound. The delay runs from that last sound to the moment the window that woke it was complete. The table's last
+row is the whole JSON file; the weights alone are 347,268 bytes as float32.
+
+**What was tried.** Three training runs, each under 20 minutes on 4 CPU threads, and one one-minute smoke run on a
+slice of the data to check the path. Before them, the Piper voice the story named was left out: its card says it
+was "Fine-tuned from English lessac medium", whose data is licensed for research only (see the table). Coqui's VCTK
+VITS voice (Apache-2.0, trained on VCTK, CC BY 4.0) took its place.
+
+All three runs shared the same data and network shape:
+
+- data: 50 hours of train-clean-100 speech from 251 speakers, in 20 s stretches left as they were, in a room's echo,
+  under road-like noise, or both (both made by the probe, from no recording);
+- positives: sayings by 66 VCTK VITS speakers and 96 espeak-ng voices;
+- negatives: near words ('Hey Lamp', 'Hey Pampas', 'Okay, Lampas' and 45 more), sentences, and heads of the phrase;
+- hard-negative mining: three times, the training speech's windows the network took for the phrase were added as
+  negatives;
+- network: three 1-D convolutions and two dense layers, on 1.6 s of 40 log-mel bands.
+
+The runs, scored on the threshold set:
+
+| Run | What changed | Threshold set: false wakes an hour | Threshold set: misses in sets of 20 (clean; speech 10 dB; speech 0 dB; road 5 dB) |
+|---|---|---|---|
+| 1 | 48 channels, 24 epochs, backgrounds at 0 to 20 dB | 0.37 | 0,0,0,0; 1,0,1,0; 5,3,3,4; 0,0,0,0 |
+| 2 | backgrounds at -5 to 20 dB, more at the hard end; 6 windows a saying; 12,000 two-talker negatives | 0.37 | 0,0,0,0; 0,0,1,0; 3,3,2,3; 0,0,1,1 |
+| 3 (committed) | 64 channels and 48 hidden units, 30 epochs | 0.19 | 0,0,0,0; 0,0,1,1; 1,3,2,1; 0,0,1,0 |
+
+Run 3 was kept because it did best on the threshold set; only then was it measured. Its rule is a score of 0.463 or
+more in 3 windows in a row (windows every 40 ms), then no wake for 2 s. The earlier probe, a one-layer network on
+espeak-ng sayings and 1.8 hours of speech, woke about 50 times an hour.
+
+**Is route (d) good enough to build on?** Yes: route (d) is good enough to build on. On audio it never trained on, it
+met the bar in every row. It woke once in 5.4 hours of read speech, and missed at most 1 in 20 sayings even with
+another voice as loud as the phrase. It does this in plain JavaScript, with a 0.5 MB model trained in under 20
+minutes on this laptop. Read the numbers for what they are:
+
+- One false wake in 5.4 hours is a small count. The bar's 1 an hour is about the upper end of what one wake in that
+  time can honestly rule out.
+- Every saying was synthetic: VCTK VITS and espeak-ng voices, not a person in a car.
+- The speech it must not wake on was audiobooks, not the publisher's Bible recordings.
+
+So the next cheapest step is measuring, not training: story mw-rdpwdp1.3 runs this detector on the page against the
+Bible audio and the Governor's own voice in the car. If his voice is missed there, the cheapest cure is a few dozen
+of his own sayings added to the training (minutes on this laptop). Route (a) stays the fallback, at the cost of a
+Kaggle account.
+
 ## Recommendation
 
 **Route (d): our own small classifier, trained from scratch.** Of the CLEAN routes it is the only one where every byte
@@ -228,7 +308,8 @@ engine: it is a whole recogniser running all the time. It is the natural candida
 **The next story** (mw-rdpwdp1.1 re-pathed: train and run in the browser), estimated at size M:
 
 - Add the Piper en_US-libritts_r-medium voice (904 speakers, CC BY 4.0 data, MIT code) beside espeak-ng, so the
-  sayings sound human. That is a Python venv of about 1 GB and about 30 minutes of synthesis on 4 threads
+  sayings sound human. (Story mw-rdpwdp1.1 then found it NOT CLEAN, fine-tuned from research-only data, and used
+  Coqui's VCTK VITS voice instead: see Trained model.) That is a Python venv of about 1 GB and about 30 minutes of synthesis on 4 threads
   (estimated).
 - Add room echo and road-like noise to the mix, and more LibriSpeech (train-clean-100, 6.3 GB) as negatives.
 - Set the threshold on audio kept apart from both training and measuring.

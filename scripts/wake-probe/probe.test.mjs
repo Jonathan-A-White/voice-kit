@@ -201,9 +201,11 @@ test('the committed model does not hear packages/testing/clips/english.wav, nor 
 test('the listener gives the same scores fed in chunks as fed at once, and windowEnd says when each window is complete', () => {
   const net = loaded();
   const wav = readWav(FIXTURE);
-  const whole = scoreClip(net, wav.samples);
+  const samples = new Float32Array(wav.samples.length + 32000);
+  samples.set(wav.samples, 16000);
+  const whole = scoreClip(net, samples);
   const listener = createListener(net, { keepScores: true });
-  for (let at = 0; at < wav.samples.length; at += 1234) listener.push(wav.samples.subarray(at, at + 1234));
+  for (let at = 0; at < samples.length; at += 1234) listener.push(samples.subarray(at, at + 1234));
   assert.deepEqual(listener.scores, whole);
   assert.ok(whole.length > 0);
   assert.ok(Math.abs(windowEnd(net, 0) - (FRONT_END.win + FRONT_END.hop * (net.window * FRONT_END.pool - 1)) / FRONT_END.rate) < 1e-9);
