@@ -20,16 +20,18 @@ The rules it follows:
 All reads were made on 2026-11-11. Where a page needed JavaScript (Kaggle), it was rendered in a headless Chromium and
 its text read. Repositories were read at the commit named, or at their default branch that day.
 
-## Contents
+<!-- toc -->
 
 - [The table](#the-table)
 - [Verdicts](#verdicts)
-  - [Route (a)](#route-a-googles-own-speech_embedding-and-hey-buddys-trainer)
-  - [Route (b)](#route-b-sherpa-onnx-keyword-spotting)
-  - [Route (c)](#route-c-vosk-in-the-browser-with-a-small-grammar)
-  - [Route (d)](#route-d-our-own-small-classifier-trained-from-scratch)
+  - [Route (a): Google's own speech_embedding and Hey Buddy's trainer](#route-a-googles-own-speech_embedding-and-hey-buddys-trainer)
+  - [Route (b): sherpa-onnx keyword spotting](#route-b-sherpa-onnx-keyword-spotting)
+  - [Route (c): Vosk in the browser with a small grammar](#route-c-vosk-in-the-browser-with-a-small-grammar)
+  - [Route (d): our own small classifier trained from scratch](#route-d-our-own-small-classifier-trained-from-scratch)
 - [The probe](#the-probe)
 - [Recommendation](#recommendation)
+
+<!-- /toc -->
 
 ## The table
 

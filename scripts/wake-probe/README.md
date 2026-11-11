@@ -8,6 +8,15 @@
 
 It is a spike, not a library. Nothing in it is exported, and no package imports it.
 
+<!-- toc -->
+
+- [What it needs](#what-it-needs)
+- [Where it keeps things](#where-it-keeps-things)
+- [How to run it](#how-to-run-it)
+- [Tests](#tests)
+
+<!-- /toc -->
+
 ## What it needs
 
 - Node 20 or later. The script has no npm dependency, and nothing is added to the repo's `package.json`.
