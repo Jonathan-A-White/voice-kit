@@ -485,6 +485,20 @@ async function prepareStream(opt) {
  * One training window (WINDOW_SAMPLES long): the clip laid so its last sound ends `end` seconds before the window's
  * end, roughened, over a background of pool speech, road noise or near-quiet. A head keeps only the clip's first part.
  */
+function poolSegment(random, pool, n) {
+  const speech = pick(random, pool);
+  const at = Math.floor(random() * (speech.length - n));
+  return speech.subarray(at, at + n);
+}
+
+/** A negative window of two talkers at once, the second -5 to 10 dB under the first. */
+function babbleWindow(random, pool) {
+  const out = Float32Array.from(poolSegment(random, pool, WINDOW_SAMPLES));
+  const other = poolSegment(random, pool, WINDOW_SAMPLES);
+  addAt(out, other, (rms(out) || 1e-3) / (rms(other) || 1e-3) / 10 ** (between(random, -5, 10) / 20));
+  return random() < 0.3 ? reverb(random, out).subarray(0, WINDOW_SAMPLES) : out;
+}
+
 export function trainingWindow(random, clip, pool, how) {
   let c = clip;
   let soundEnd = clip.length - PAD;
@@ -503,13 +517,12 @@ export function trainingWindow(random, clip, pool, how) {
   addAt(out, c, gain, start);
   const level = gain * rms(c);
   const r = random();
-  if (r < 0.45) {
-    const speech = pick(random, pool);
-    const at = Math.floor(random() * (speech.length - out.length));
-    const seg = speech.subarray(at, at + out.length);
-    addAt(out, seg, level / (rms(seg) || 1e-3) / 10 ** (between(random, 0, 20) / 20));
-  } else if (r < 0.7) {
-    addAt(out, roadNoise(random, out.length), level / 10 ** (between(random, 0, 20) / 20));
+  const snr = -5 + 25 * random() ** 1.5; // -5 to 20 dB, more of it at the hard end
+  if (r < 0.5) {
+    const seg = poolSegment(random, pool, out.length);
+    addAt(out, seg, level / (rms(seg) || 1e-3) / 10 ** (snr / 20));
+  } else if (r < 0.75) {
+    addAt(out, roadNoise(random, out.length), level / 10 ** (snr / 20));
   }
   addAt(out, Float32Array.from({ length: out.length }, () => random() - 0.5), level * 10 ** (between(random, -70, -40) / 20));
   return out;
@@ -534,7 +547,7 @@ async function prepareWindows(opt, stream) {
     counts[key]++;
   };
   for (const clip of fits) {
-    for (let k = 0; k < 4; k++) put(posFd, 'pos', trainingWindow(random, clip, pool, 'whole'));
+    for (let k = 0; k < 6; k++) put(posFd, 'pos', trainingWindow(random, clip, pool, 'whole'));
     put(negFd, 'neg', trainingWindow(random, clip, pool, 'head'));
   }
   const negatives = [...loadClips(join(dir, 'neg-espeak')).clips, ...loadClips(join(dir, 'neg-vits')).clips];
@@ -542,11 +555,12 @@ async function prepareWindows(opt, stream) {
     put(negFd, 'neg', trainingWindow(random, clip, pool, 'whole'));
     put(negFd, 'neg', trainingWindow(random, clip, pool, 'any'));
   }
+  for (let k = 0; k < 12000; k++) put(negFd, 'neg', babbleWindow(random, pool));
   closeSync(posFd);
   closeSync(negFd);
   const summary = {
-    positives: `${fits.length} sayings of the phrase (${positives.length - fits.length} longer than the window left out), 4 windows each: espeak-ng and VCTK VITS training voices`,
-    negatives: `${negatives.length} sayings of near words and sentences, 2 windows each; ${fits.length} heads of the phrase`,
+    positives: `${fits.length} sayings of the phrase (${positives.length - fits.length} longer than the window left out), 6 windows each, under speech or road-like noise at -5 to 20 dB in 3 of 4: espeak-ng and VCTK VITS training voices`,
+    negatives: `${negatives.length} sayings of near words and sentences, 2 windows each; ${fits.length} heads of the phrase; 12000 windows of two talkers at once`,
     stream: `${stream.speechHours.toFixed(1)} h of LibriSpeech train-clean-100 speech from ${stream.speakers} speakers, roughened, and ${stream.noiseMinutes} min of road-like noise and ${stream.quietMinutes} min of near-quiet`,
   };
   writeFileSync(join(feat, 'meta.json'), JSON.stringify({ window: WINDOW, bands: D.FRONT_END.bands, counts, summary }));
