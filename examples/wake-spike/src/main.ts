@@ -31,6 +31,7 @@ try {
   storage = undefined;
 }
 const log = createLog(storage);
+byId<HTMLElement>('hint').textContent = 'Input names show once the microphone is allowed: tap "Show input names".';
 const media = navigator.mediaDevices as MediaDevices | undefined;
 
 function showLog(): void {
@@ -143,12 +144,12 @@ listenButton.addEventListener('click', () => {
       });
       input.track.addEventListener('unmute', () => {
         log.add('track-unmuted', { label: input.label });
-        status.textContent = 'Listening.';
+        status.textContent = 'Listening. Tap "Stop listening" when done.';
       });
       stopMeter = startMeter(input.stream, (value) => {
         level.value = value;
       });
-      status.textContent = 'Listening.';
+      status.textContent = 'Listening. Tap "Stop listening" when done.';
       await refreshInputs();
     } catch (err) {
       log.add('listen-failed', { error: message(err) });
