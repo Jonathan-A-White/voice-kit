@@ -1,0 +1,39 @@
+name: Wake spike on Pages
+
+# Builds examples/wake-spike and publishes it with GitHub's own Pages actions, only when a push to main touches it.
+# The repository's Settings > Pages > Source must be "GitHub Actions" for the deploy step to be accepted.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'examples/wake-spike/**'
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: npm run build --workspace wake-spike
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: examples/wake-spike/dist
+      - id: deployment
+        uses: actions/deploy-pages@v4
