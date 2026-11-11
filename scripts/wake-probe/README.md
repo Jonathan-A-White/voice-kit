@@ -1,10 +1,17 @@
 # Wake-word probe
 
-`probe.mjs` is the headless proof for route (d) of [docs/wake-word-engines.md](../../docs/wake-word-engines.md):
+Route (d) of [docs/wake-word-engines.md](../../docs/wake-word-engines.md): our own small network that hears
+'Hey Lampas', trained from scratch on the laptop from files that are ours or permissive at their source.
 
-- a small classifier, trained from scratch on the laptop, to hear 'Hey Lampas';
-- over a plain log-mel front end written in the script;
-- from files that are ours or permissive at their source.
+- `detector.mjs` is the scoring code: the log-mel front end, the network and the rule that turns scores into one wake.
+  It is plain JavaScript with no import, so the page can run it as it is (story mw-rdpwdp1.3).
+- `probe.mjs` makes the audio, sets the threshold and measures. Everything it scores goes through `detector.mjs`.
+- `train.py` trains the network (PyTorch, on the CPU) on features `probe.mjs` made with `detector.mjs`.
+- `vits_say.py` speaks sayings with Coqui's VITS voice trained on VCTK (109 speakers).
+
+The trained model is committed as `examples/wake-spike/public/models/hey-lampas.json`. Beside it,
+`examples/wake-spike/public/models/licences.json` lists every file, dataset and tool the training used. The model holds
+the weights, the front end's numbers, the threshold, the date, and the commit that trained it.
 
 It is a spike, not a library. Nothing in it is exported, and no package imports it.
 
@@ -13,74 +20,114 @@ It is a spike, not a library. Nothing in it is exported, and no package imports 
 - [What it needs](#what-it-needs)
 - [Where it keeps things](#where-it-keeps-things)
 - [How to run it](#how-to-run-it)
+- [The three sets](#the-three-sets)
 - [Tests](#tests)
 
 <!-- /toc -->
 
 ## What it needs
 
-- Node 20 or later. The script has no npm dependency, and nothing is added to the repo's `package.json`.
-- `espeak-ng` and `ffmpeg` on the PATH. To use other copies, set `ESPEAK_NG` and `FFMPEG` to their paths.
-- LibriSpeech dev-clean (CC BY 4.0, 337,926,286 bytes), unpacked into the scratch folder:
+To measure the committed model (`measure`): Node 20 or later, `ffmpeg` on the PATH (or `FFMPEG`), and LibriSpeech
+test-clean in the scratch folder. To make it again (`prepare`, `train`, `calibrate`), also:
 
-  ```sh
-  mkdir -p ~/.cache/voice-kit-wake-spike/probe/dl/librispeech
-  cd ~/.cache/voice-kit-wake-spike/probe/dl/librispeech
-  curl -LO https://www.openslr.org/resources/12/dev-clean.tar.gz
-  tar xzf dev-clean.tar.gz      # makes LibriSpeech/dev-clean
-  ```
+- `espeak-ng` on the PATH (or `ESPEAK_NG`);
+- LibriSpeech train-clean-100 and dev-clean (CC BY 4.0) beside test-clean;
+- Coqui's VCTK VITS voice;
+- a Python 3.11 venv with PyTorch for the CPU and coqui-tts.
+
+Each is fetched once, into the scratch root (`~/.cache/voice-kit-wake-spike`):
+
+```sh
+R=~/.cache/voice-kit-wake-spike
+mkdir -p $R/dl/librispeech $R/dl/coqui
+cd $R/dl/librispeech
+for f in train-clean-100 dev-clean test-clean; do
+  curl -LO https://openslr.elda.org/resources/12/$f.tar.gz && tar xzf $f.tar.gz   # makes LibriSpeech/<part>
+done
+cd $R/dl/coqui
+curl -LO https://github.com/coqui-ai/TTS/releases/download/v0.6.1_models/tts_models--en--vctk--vits.zip
+python3 -c "import zipfile; zipfile.ZipFile('tts_models--en--vctk--vits.zip').extractall('.')"
+cd $R
+uv venv --python 3.11 venv
+uv pip install --python venv/bin/python --index-url https://download.pytorch.org/whl/cpu torch==2.8.0+cpu torchaudio==2.8.0+cpu
+uv pip install --python venv/bin/python --extra-index-url https://download.pytorch.org/whl/cpu --index-strategy unsafe-best-match coqui-tts six numpy
+```
+
+The VITS checkpoint is a downloaded PyTorch file. `vits_say.py` reads it only with PyTorch's `weights_only` loader,
+which reads tensors and runs no code from the file, and it runs as `python -I`.
 
 ## Where it keeps things
 
-The probe keeps everything it makes in a scratch folder outside the repo:
+Everything the probe makes stays in `~/.cache/voice-kit-wake-spike/route-d`, outside the repo:
 
-- the sayings;
-- the decoded speech;
-- `model.json`, the weights.
+- the sayings (`sayings/`, `vits/`);
+- the features of the training audio (`feat/`, about 2 GB);
+- `model-trained.json`, the network before its threshold is set.
 
-The scratch folder is `~/.cache/voice-kit-wake-spike/probe` by default. To use another, pass `--scratch DIR` or set
-`WAKE_PROBE_SCRATCH`.
-
-The LibriSpeech folder defaults to `<scratch>/dl/librispeech/LibriSpeech/dev-clean`. To use another, pass
-`--librispeech DIR` or set `WAKE_PROBE_LIBRISPEECH`.
-
-You may delete the scratch folder at any time. Nothing in it is committed.
+To use another scratch root, pass `--root DIR` or set `WAKE_PROBE_ROOT`. To use another Python, set
+`WAKE_PROBE_PYTHON`. You may delete the scratch folder at any time. Nothing in it is committed. To make one part
+again, delete its file: `sayings/<name>.json`, `feat/stream.json` or `feat/meta.json`.
 
 ## How to run it
 
-From the repo root, run it as one process, at low priority:
+From the repo root, one step at a time, at low priority. Each step is one process, with at most 4 threads.
 
 ```sh
-nice -n 10 node scripts/wake-probe/probe.mjs all
+nice -n 10 node scripts/wake-probe/probe.mjs prepare     # about 40 min the first time
+nice -n 10 node scripts/wake-probe/probe.mjs train       # about 20 min
+nice -n 10 node scripts/wake-probe/probe.mjs calibrate   # about 12 min; writes the committed model
+node scripts/wake-probe/probe.mjs measure                # about 12 min; reads only the committed model
 ```
 
-`all` runs three steps in turn. Each can also be run on its own: `prepare`, `train` or `test`.
+1. `prepare` makes the audio, then turns it into the network's features with `detector.mjs`:
+   - sayings of 'Hey Lampas' by espeak-ng voices and by the VCTK VITS voice's training speakers;
+   - their sayings of near words and sentences;
+   - 50 hours of LibriSpeech train-clean-100 speech, cut into 20 s stretches. Each stretch is left as it is, put in a
+     room's echo, put under road-like noise, or both;
+   - 20 minutes of road-like noise alone and 5 minutes of near-quiet;
+   - the held-out sayings of the threshold and measuring sets;
+   - the test's fixture saying (`fixtures/hey-lampas.wav`).
 
-1. `prepare` makes the training audio:
-   - 1,152 espeak-ng sayings of 'Hey Lampas';
-   - 840 sayings of near words and sentences;
-   - 107 minutes of LibriSpeech speech from 30 speakers, and 22 minutes from 10 other speakers, held out.
-
-   The sayings are kept once made. To make them again, delete `<scratch>/data`.
-2. `train` trains the classifier and writes `<scratch>/model.json`.
-3. `test` tests the model:
-   - it says 'Hey Lampas' in four espeak-ng voices the model never trained on, and each must be heard;
-   - it plays `packages/testing/clips/english.wav` ('Please read me the first chapter'), which must not be heard;
-   - for information only, it counts false wakes over the held-out LibriSpeech speech.
-
-   To also try clips of your own that must not wake it, add `--clips a.wav,b.wav`.
+   The road-like noise and the room's echo are made by `probe.mjs` itself, from no recording.
+2. `train` runs `train.py`. It trains a network of three 1-D convolutions and two dense layers on 1.6 s windows. Each
+   epoch adds 100,000 fresh windows of the training speech. Three times it mines the training speech for the windows
+   the network takes for the phrase, and adds the worst as negatives (hard-negative mining).
+3. `calibrate` sets the rule on the threshold set: the lowest threshold, for 2 or 3 windows in a row, that keeps false
+   wakes at or under 0.5 an hour on the threshold speech. Of those, it keeps the one with the fewer threshold misses.
+   It writes `examples/wake-spike/public/models/hey-lampas.json`.
+4. `measure` runs the committed model on the measuring set and prints a table with the Governor's bar beside each
+   number, met or not met. Add `--markdown` for the table as markdown. It reports:
+   - false wakes, and false wakes an hour, over all of test-clean;
+   - misses in sets of 20 held-out sayings: clean, under speech at 10 dB and at 0 dB, and under road-like noise at 5 dB;
+   - the delay from the phrase's end to the wake, median and worst;
+   - the model's bytes.
 
 The exit code:
 
-- 0 when every check passes;
-- 1 when one fails;
-- 2 on an error, for example a missing tool or folder.
+- `measure`: 0 when the bar is met, 1 when it is not;
+- every step: 2 on an error, for example a missing tool or folder.
+
+## The three sets
+
+The sets are kept apart by speaker and by voice:
+
+| Set | Speech (false wakes) | Sayings of 'Hey Lampas' |
+|---|---|---|
+| Train | LibriSpeech train-clean-100, 251 speakers | 66 VCTK VITS speakers; espeak-ng en-gb, en-us, en-gb-scotland, en-gb-x-gbclan, en-gb-x-rp, en-gb-x-gbcwmd with 16 variants |
+| Threshold | LibriSpeech dev-clean, 40 speakers | 20 other VCTK VITS speakers, 3 sayings each; espeak-ng en-us-nyc, and the m8, klatt5, Andy and Annie variants |
+| Measure | LibriSpeech test-clean, 40 speakers | 21 other VCTK VITS speakers, 2 sayings each; espeak-ng en-029, and the m4, f4 and klatt4 variants |
+
+LibriSpeech's parts share no speaker. One more VCTK speaker spoke the test's fixture saying and is in no set.
+`probe.mjs` picks the VCTK speakers with a fixed seed, and writes them to `route-d/sets.json`.
 
 ## Tests
 
-```sh
-node --test scripts/wake-probe/probe.test.mjs
-```
+`probe.test.mjs` runs in the root `npm test`, or alone with `npx vitest run scripts/wake-probe`. It needs no network,
+no tool and no scratch folder, and takes seconds. It checks:
 
-These check the front end and the classifier's pieces, and the document's table, verdicts and Recommendation. They
-need no network and no model. The root `npm test` does not run them: its vitest include stops at `scripts/*.test.mjs`.
+- the front end and the rule;
+- that `detector.mjs` imports nothing;
+- that the committed model and `licences.json` say what they must;
+- that the committed model hears the fixture saying (a VCTK speaker it never trained on) exactly once;
+- that it does not hear `packages/testing/clips/english.wav`, nor 30 s of silence;
+- the document's tables.

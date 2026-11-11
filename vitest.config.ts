@@ -17,6 +17,6 @@ export default defineConfig({
   oxc: { jsx: { runtime: 'automatic' } },
   test: {
     environment: 'node',
-    include: ['packages/*/tests/**/*.test.{ts,tsx}', 'examples/*/tests/**/*.test.ts', 'scripts/*.test.mjs'],
+    include: ['packages/*/tests/**/*.test.{ts,tsx}', 'examples/*/tests/**/*.test.ts', 'scripts/*.test.mjs', 'scripts/wake-probe/*.test.mjs'],
   },
 });

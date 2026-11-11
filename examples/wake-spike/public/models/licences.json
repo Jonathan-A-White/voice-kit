@@ -1,0 +1,122 @@
+{
+  "model": "hey-lampas.json",
+  "about": "Every file, dataset and tool the training of hey-lampas.json used, with its source, its licence and the licence's own words, read at the source on the date given (story mw-rdpwdp1.1). The model's weights are ours (MIT), made by scripts/wake-probe from the data below. The road-like noise and the room echo are made by scripts/wake-probe/probe.mjs itself, from no recording. Nothing below ships except the model.",
+  "entries": [
+    {
+      "name": "scripts/wake-probe (probe.mjs, detector.mjs, train.py, vits_say.py)",
+      "use": "makes the training audio, trains the network, sets the threshold, measures; detector.mjs is the scoring code",
+      "url": "https://github.com/Jonathan-A-White/voice-kit",
+      "where": "LICENSE",
+      "licence": "MIT",
+      "words": "Permission is hereby granted, free of charge, to any person obtaining a copy of this software",
+      "readOn": "2026-11-11"
+    },
+    {
+      "name": "LibriSpeech train-clean-100",
+      "use": "training: negative speech, the first 12 minutes of each of its 251 speakers, and 20 s of each behind the positive sayings",
+      "url": "https://www.openslr.org/12/",
+      "where": "LICENSE.TXT in the archive",
+      "licence": "CC-BY-4.0",
+      "words": "LibriSpeech ASR corpus is licensed under a Creative Commons Attribution 4.0 International License.",
+      "readOn": "2026-11-11"
+    },
+    {
+      "name": "LibriSpeech dev-clean",
+      "use": "the threshold set: the speech the threshold is set on (40 speakers), and the speech behind its sayings; never trained on",
+      "url": "https://www.openslr.org/12/",
+      "where": "LICENSE.TXT in the archive",
+      "licence": "CC-BY-4.0",
+      "words": "LibriSpeech ASR corpus is licensed under a Creative Commons Attribution 4.0 International License.",
+      "readOn": "2026-11-11"
+    },
+    {
+      "name": "LibriSpeech test-clean",
+      "use": "the measuring set: the speech false wakes are counted on (40 speakers), and the speech behind its sayings; never trained on, never used to set the threshold",
+      "url": "https://www.openslr.org/12/",
+      "where": "LICENSE.TXT in the archive",
+      "licence": "CC-BY-4.0",
+      "words": "LibriSpeech ASR corpus is licensed under a Creative Commons Attribution 4.0 International License.",
+      "readOn": "2026-11-11"
+    },
+    {
+      "name": "VCTK corpus 0.92",
+      "use": "the data the VCTK VITS voice was trained on (109 speakers); not downloaded",
+      "url": "https://datashare.ed.ac.uk/handle/10283/3443",
+      "where": "license_text.txt and README.txt on the item page",
+      "licence": "CC-BY-4.0",
+      "words": "This corpus is licensed under the Creative Commons License: Attribution 4.0 International",
+      "readOn": "2026-11-11"
+    },
+    {
+      "name": "Coqui TTS model tts_models/en/vctk/vits (model_file.pth, config.json, speaker_ids.json)",
+      "use": "speaks 'Hey Lampas', near words and sentences in the voices of 108 VCTK speakers at training time, and the test's fixture saying; never shipped. Its checkpoint is read only with PyTorch's weights_only loader",
+      "url": "https://github.com/coqui-ai/TTS/blob/dev/TTS/.models.json",
+      "where": "the maker's model list; the files from https://github.com/coqui-ai/TTS/releases/download/v0.6.1_models/tts_models--en--vctk--vits.zip",
+      "licence": "Apache-2.0",
+      "words": "\"description\": \"VITS End2End TTS model trained on VCTK dataset with 109 different speakers with EN accent.\" ... \"license\": \"apache 2.0\"",
+      "readOn": "2026-11-11"
+    },
+    {
+      "name": "coqui-tts 0.28.0 (Idiap's continuation of Coqui TTS)",
+      "use": "runs the VCTK VITS voice at training time; never shipped",
+      "url": "https://github.com/idiap/coqui-ai-TTS",
+      "where": "LICENSE.txt",
+      "licence": "MPL-2.0",
+      "words": "Mozilla Public License Version 2.0",
+      "readOn": "2026-11-11"
+    },
+    {
+      "name": "PyTorch 2.8.0 (CPU build)",
+      "use": "trains the network (train.py) and runs the VITS voice; never shipped",
+      "url": "https://github.com/pytorch/pytorch",
+      "where": "LICENSE",
+      "licence": "BSD-3-Clause",
+      "words": "Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met",
+      "readOn": "2026-11-11"
+    },
+    {
+      "name": "torchaudio 2.8.0 (CPU build)",
+      "use": "needed by coqui-tts to load; never shipped",
+      "url": "https://github.com/pytorch/audio",
+      "where": "LICENSE",
+      "licence": "BSD-2-Clause",
+      "words": "BSD 2-Clause License ... Redistribution and use in source and binary forms, with or without modification, are permitted",
+      "readOn": "2026-11-11"
+    },
+    {
+      "name": "NumPy",
+      "use": "reads the features in train.py; never shipped",
+      "url": "https://github.com/numpy/numpy",
+      "where": "LICENSE.txt",
+      "licence": "BSD-3-Clause",
+      "words": "Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met",
+      "readOn": "2026-11-11"
+    },
+    {
+      "name": "espeak-ng 1.51 and its voices",
+      "use": "speaks sayings of the phrase and near words at training time, and turns text to phonemes for the VITS voice; run as a tool, never shipped",
+      "url": "https://github.com/espeak-ng/espeak-ng",
+      "where": "README 'License Information' and COPYING",
+      "licence": "GPL-3.0-or-later",
+      "words": "eSpeak NG Text-to-Speech is released under the GPL version 3 or later license.",
+      "readOn": "2026-11-11"
+    },
+    {
+      "name": "FFmpeg",
+      "use": "decodes LibriSpeech and resamples the sayings to 16 kHz; run as a tool, never shipped",
+      "url": "https://github.com/FFmpeg/FFmpeg",
+      "where": "LICENSE.md",
+      "licence": "LGPL-2.1-or-later",
+      "words": "Most files in FFmpeg are under the GNU Lesser General Public License version 2.1 or later (LGPL v2.1+).",
+      "readOn": "2026-11-11"
+    }
+  ],
+  "notUsed": [
+    {
+      "name": "Piper en_US-libritts_r-medium",
+      "why": "The story named it, and docs/wake-word-engines.md had it as permissive from its data (LibriTTS-R, CC BY 4.0). But its own card says \"Fine-tuned from English lessac medium on train-clean-360\", and the lessac medium card names its data as the Blizzard 2013 Lessac recordings, whose licence is for \"Research Purposes\" only and \"excludes ... using the Materials for any commercial purpose, including the development, marketing, commercialisation, sale or licencing of voice synthesis or speech recognition products or services\". So its weights are NOT CLEAN under this story's rules, and the VCTK VITS voice took its place.",
+      "url": "https://huggingface.co/rhasspy/piper-voices/raw/main/en/en_US/libritts_r/medium/MODEL_CARD",
+      "readOn": "2026-11-11"
+    }
+  ]
+}

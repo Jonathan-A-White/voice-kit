@@ -206,6 +206,28 @@ Data bundled with `@voice-kit/testing`:
   shipped. Licence: [GPL-3.0-or-later](https://github.com/espeak-ng/espeak-ng/blob/master/COPYING). We use its output as it came, resampled to 16 kHz.
   Kind: data.
 
+Data and tools behind the wake-word spike's model (`scripts/wake-probe`; every file and its licence's own words are in
+`examples/wake-spike/public/models/licences.json`):
+
+- [LibriSpeech](https://www.openslr.org/12/): read English speech. Its train-clean-100 part is the speech the model
+  `examples/wake-spike/public/models/hey-lampas.json` was trained not to wake on; dev-clean set its threshold and test-clean
+  measured it. Licence: [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Used as published, mixed with noise and
+  echo for training; none of it ships. Kind: data.
+- [VCTK](https://datashare.ed.ac.uk/handle/10283/3443): the recordings of 109 speakers that the VCTK VITS voice below was
+  trained on, so the sayings of 'Hey Lampas' the model `examples/wake-spike/public/models/hey-lampas.json` learned from are in
+  their voices. Licence: [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Not downloaded. Kind: data.
+- [Coqui TTS VCTK VITS voice](https://github.com/coqui-ai/TTS): `tts_models/en/vctk/vits`, which spoke the training, threshold
+  and measuring sayings and the test's saying `scripts/wake-probe/fixtures/hey-lampas.wav`. Licence:
+  [Apache-2.0](https://github.com/coqui-ai/TTS/blob/dev/TTS/.models.json) (the maker's model list). We use its output as it
+  came, resampled to 16 kHz; the voice is not shipped. Kind: data.
+- [coqui-tts](https://github.com/idiap/coqui-ai-TTS): runs that voice at training time. Licence:
+  [MPL-2.0](https://github.com/idiap/coqui-ai-TTS/blob/dev/LICENSE.txt). Used as published. Kind: tool.
+- [PyTorch](https://pytorch.org): trains the model's network (`scripts/wake-probe/train.py`). Licence:
+  [BSD-3-Clause](https://github.com/pytorch/pytorch/blob/main/LICENSE). Used as published. Kind: tool.
+- [eSpeak NG](https://github.com/espeak-ng/espeak-ng): also spoke sayings of 'Hey Lampas' and near words for training, and
+  turns text to phonemes for the VITS voice; run as a tool, never shipped. Licence:
+  [GPL-3.0-or-later](https://github.com/espeak-ng/espeak-ng/blob/master/COPYING). Kind: tool.
+
 Projects and ideas we took:
 
 - [Postern](https://github.com/Jonathan-A-White/postern): the composer and the speech engine and bar are lifted from Postern's working
@@ -214,7 +236,7 @@ Projects and ideas we took:
 - [bsv-kit](https://github.com/Jonathan-A-White/bsv-kit): these three libraries, their tests and this repo's tooling lived there first and were
   moved here at one commit, named in each package's changelog. Licence: [MIT](https://github.com/Jonathan-A-White/bsv-kit/blob/main/LICENSE).
   Kind: idea.
-- [FFmpeg](https://ffmpeg.org): resampled and trimmed the test clips of `@voice-kit/testing` once, to make them. Licence:
+- [FFmpeg](https://ffmpeg.org): resampled and trimmed the test clips of `@voice-kit/testing` once, to make them, and decodes and resamples the wake-word spike's training audio. Licence:
   [LGPL-2.1-or-later](https://ffmpeg.org/legal.html). Used as published. Kind: tool.
 - [Beads](https://github.com/steveyegge/beads): Steve Yegge's issue tracker for AI agents; the work on this repo is tracked in it.
   Licence: [MIT](https://github.com/steveyegge/beads/blob/main/LICENSE). Used as published. Kind: tool.
