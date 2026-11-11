@@ -31,6 +31,16 @@ convolutional network, a rule that turns scores into one wake with a 2 s cooldow
 node and that to the output, because some browsers do not run a worklet that nothing pulls; it adds no sound. The page opens
 the microphone with the browser's own settings (echo cancellation and noise suppression as the browser defaults them).
 
+<!-- toc -->
+
+- [The check, in the car](#the-check-in-the-car)
+- [Run it locally](#run-it-locally)
+- [Measure it](#measure-it)
+- [Results](#results)
+- [Where it is published](#where-it-is-published)
+
+<!-- /toc -->
+
 ## The check, in the car
 
 Parked for the whole check, Bluetooth connected: open the page and tap **Play**; the car plays John 1. Then for
