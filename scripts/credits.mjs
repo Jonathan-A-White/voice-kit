@@ -3,18 +3,24 @@
 // runtime dependency in a package.json is credited; a "Kind: package." credit names a package that is still
 // a dependency, by npm name in any letter case (a removed library loses its credit in the same commit); and every bundled font or data file
 // is named by a font or data credit. Run through npm test (scripts/credits.test.mjs).
-import { readdirSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { pathToFileURL } from 'node:url';
 
 export const KINDS = ['package', 'tool', 'service', 'idea', 'font', 'data'];
 
 const ROOT = new URL('../', import.meta.url);
 
-/** Names of every dependency (of the given kinds) in the root package.json, packages/*\/package.json and examples/*\/package.json. */
-function dependencyNames(fields) {
-  const manifests = [new URL('package.json', ROOT)];
+/**
+ * Names of every dependency (of the given kinds) in the root package.json, packages/*\/package.json and
+ * examples/*\/package.json. A folder with no package.json (an example whose manifest is not on main yet) is skipped.
+ */
+function dependencyNames(fields, where = ROOT) {
+  const root = where instanceof URL ? where : pathToFileURL(where.replace(/\/?$/, '/'));
+  const manifests = [new URL('package.json', root)];
   for (const group of ['packages', 'examples']) {
-    for (const dir of readdirSync(new URL(`${group}/`, ROOT), { withFileTypes: true })) {
-      if (dir.isDirectory()) manifests.push(new URL(`${group}/${dir.name}/package.json`, ROOT));
+    for (const dir of readdirSync(new URL(`${group}/`, root), { withFileTypes: true })) {
+      const manifest = new URL(`${group}/${dir.name}/package.json`, root);
+      if (dir.isDirectory() && existsSync(manifest)) manifests.push(manifest);
     }
   }
   const names = new Set();
@@ -26,16 +32,20 @@ function dependencyNames(fields) {
 }
 
 /** Names of every runtime dependency. */
-export function runtimeDependencies() {
-  return dependencyNames(['dependencies']);
+export function runtimeDependencies(root = ROOT) {
+  return dependencyNames(['dependencies'], root);
 }
 
 /** Names of every dependency and devDependency: what a "Kind: package." credit may name. */
-export function allDependencies() {
-  return dependencyNames(['dependencies', 'devDependencies']);
+export function allDependencies(root = ROOT) {
+  return dependencyNames(['dependencies', 'devDependencies'], root);
 }
 
-const FONT_OR_DATA = /\.(woff2?|ttf|otf|eot|csv|tsv|sqlite3?|db|wav)$/i;
+// Fonts, data and bundled models. Models: .onnx, .safetensors, .bin (weights), .npy (arrays) and .wasm (a compiled
+// engine the repo itself ships; a dependency's own .wasm sits in node_modules, which is skipped, and is credited as
+// that package). Not listed on purpose: .json, .txt and .js (code or config, not a model; a data set in them is
+// named by its folder's credit), .map and .d.ts (build output).
+const FONT_OR_DATA = /\.(woff2?|ttf|otf|eot|csv|tsv|sqlite3?|db|wav|onnx|bin|safetensors|npy|wasm)$/i;
 const SKIPPED_DIRS = new Set(['node_modules', 'dist', '.git', 'coverage']);
 
 /** Repo-relative paths of the font and data files the repo bundles (not node_modules, dist or tests/fixtures), sorted. */

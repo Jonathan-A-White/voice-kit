@@ -105,6 +105,21 @@ describe('README Credits', () => {
   it('reads dependencies and devDependencies from this repo', () => {
     expect(allDependencies()).toEqual(expect.arrayContaining(['react', 'vitest', 'vite']));
   });
+
+  it('skips a folder under examples/ or packages/ that has no package.json', () => {
+    const root = mkdtempSync(join(tmpdir(), 'credits-deps-'));
+    const write = (file, text) => {
+      mkdirSync(join(root, file, '..'), { recursive: true });
+      writeFileSync(join(root, file), text);
+    };
+    write('package.json', JSON.stringify({ devDependencies: { vitest: '1' } }));
+    write('packages/a/package.json', JSON.stringify({ dependencies: { alpha: '1' } }));
+    write('examples/wake-spike/model.txt', 'no manifest yet');
+    write('examples/demo/package.json', JSON.stringify({ dependencies: { beta: '1' } }));
+    mkdirSync(join(root, 'packages/empty'), { recursive: true });
+    expect(runtimeDependencies(root)).toEqual(['alpha', 'beta']);
+    expect(allDependencies(root)).toEqual(['alpha', 'beta', 'vitest']);
+  });
 });
 
 describe('fonts and data files', () => {
@@ -143,6 +158,33 @@ describe('fonts and data files', () => {
   it('does not let a credit of another kind cover a file', () => {
     const idea = [{ name: 'Idea', kind: 'idea', text: '- [Idea](https://example.org): `public/fonts/Lora.woff2`. Kind: idea.' }];
     expect(problemsWithAssets(['public/fonts/Lora.woff2'], idea)).toHaveLength(1);
+  });
+
+  it('finds every kind of bundled model and data file, and fails one with no data credit', () => {
+    const root = mkdtempSync(join(tmpdir(), 'credits-models-'));
+    const files = [
+      'examples/wake-spike/public/model.onnx',
+      'examples/wake-spike/public/weights.bin',
+      'examples/wake-spike/public/weights.safetensors',
+      'examples/wake-spike/public/features.npy',
+      'examples/wake-spike/public/engine.wasm',
+      'node_modules/dep/dep.wasm',
+    ];
+    for (const file of files) {
+      mkdirSync(join(root, file, '..'), { recursive: true });
+      writeFileSync(join(root, file), 'x');
+    }
+    expect(shippedAssets(root)).toEqual(files.slice(0, 5).sort());
+    expect(problemsWithAssets(['examples/wake-spike/public/model.onnx'], credits)).toEqual([
+      'bundled file examples/wake-spike/public/model.onnx is not credited (add a font or data credit that names it or its folder in backticks)',
+    ]);
+  });
+
+  it('passes a bundled .onnx model that a data credit names, by file or by folder', () => {
+    const byFile = [{ name: 'Model', kind: 'data', text: '- [Model](https://example.org/m): `examples/wake-spike/public/model.onnx`. Kind: data.' }];
+    const byFolder = [{ name: 'Model', kind: 'data', text: '- [Model](https://example.org/m): the models in `examples/wake-spike/public`. Kind: data.' }];
+    expect(problemsWithAssets(['examples/wake-spike/public/model.onnx'], byFile)).toEqual([]);
+    expect(problemsWithAssets(['examples/wake-spike/public/model.onnx'], byFolder)).toEqual([]);
   });
 
   it('holds for this repo: it bundles no font or data files, and any it gets must be credited', () => {
