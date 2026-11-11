@@ -7,7 +7,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -p tsconfig.json --noEmit && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "measure": "node scripts/measure.mjs --markdown"
   },
   "devDependencies": {
     "vite": "^7.0.0"

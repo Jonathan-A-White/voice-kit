@@ -1,0 +1,282 @@
+{
+  "date": "2026-11-11",
+  "commit": "3299a550bd393b8a341290dcf80854902f367932",
+  "uncommittedChanges": true,
+  "note": "Written by scripts/measure.mjs, headless on the laptop. The bar is the Governor's (question 6, mw-6ww.165). Battery is not measured headless.",
+  "model": {
+    "trained": "2026-11-11",
+    "trainedCommit": "aa510960ae98d43e1f990c213bf3a8ead7b3cab6",
+    "rule": {
+      "threshold": 0.46257,
+      "consecutive": 3,
+      "refractory": 2
+    },
+    "parameters": 86817,
+    "files": [
+      {
+        "name": "hey-lampas.json",
+        "bytes": 469057,
+        "gzipBytes": 346866
+      }
+    ],
+    "bytes": 469057,
+    "gzipBytes": 346866
+  },
+  "bar": {
+    "label": "the Governor's bar (question 6, mw-6ww.165)",
+    "falseWakesPerHour": 1,
+    "missesIn20": 2,
+    "bibleMinutes": 60,
+    "met": true
+  },
+  "bible": {
+    "minutes": 62.04430104166667,
+    "files": 10,
+    "falseWakes": 1,
+    "falseWakesPerHour": 0.9670509457380494,
+    "wakes": [
+      {
+        "atSeconds": 3767,
+        "score": 0.972,
+        "file": "MSB_43_Jhn_006_D.mp3"
+      }
+    ]
+  },
+  "tries": {
+    "sets": [
+      {
+        "key": "clean",
+        "name": "clean",
+        "tries": 20,
+        "misses": 0,
+        "delaysMs": [
+          20,
+          62,
+          87,
+          35,
+          90,
+          39,
+          2,
+          83,
+          28,
+          47,
+          87,
+          9,
+          12,
+          7,
+          35,
+          5,
+          14,
+          70,
+          40,
+          67
+        ]
+      },
+      {
+        "key": "bible10",
+        "name": "under Bible audio at 10 dB",
+        "tries": 20,
+        "misses": 0,
+        "delaysMs": [
+          60,
+          62,
+          87,
+          75,
+          90,
+          39,
+          42,
+          83,
+          28,
+          87,
+          87,
+          9,
+          92,
+          7,
+          75,
+          5,
+          14,
+          70,
+          80,
+          67
+        ]
+      },
+      {
+        "key": "bible0",
+        "name": "under Bible audio at 0 dB",
+        "tries": 20,
+        "misses": 0,
+        "delaysMs": [
+          60,
+          62,
+          87,
+          115,
+          90,
+          79,
+          42,
+          83,
+          68,
+          87,
+          87,
+          9,
+          92,
+          7,
+          35,
+          5,
+          14,
+          70,
+          80,
+          67
+        ]
+      },
+      {
+        "key": "brown5",
+        "name": "under brown noise (a road proxy) at 5 dB",
+        "tries": 20,
+        "misses": 0,
+        "delaysMs": [
+          20,
+          62,
+          87,
+          35,
+          90,
+          39,
+          2,
+          83,
+          28,
+          87,
+          87,
+          9,
+          52,
+          -33,
+          35,
+          45,
+          14,
+          70,
+          80,
+          67
+        ]
+      }
+    ],
+    "heard": 80,
+    "delayMedianMs": 62,
+    "delayWorstMs": 115
+  },
+  "compute": {
+    "unit": "milliseconds of compute per second of audio",
+    "node": {
+      "msPerSecond": 49.50581813333362,
+      "counterMsPerSecond": 49.468731366670305,
+      "audioSeconds": 30
+    },
+    "node48k": {
+      "msPerSecond": 43.01189510636487,
+      "counterMsPerSecond": 42.963719069734054,
+      "audioSeconds": 29.9994375
+    },
+    "nodeSoak": {
+      "msPerSecond": 60.398969615276506,
+      "audioSeconds": 3722.6580625
+    },
+    "chromium": {
+      "unthrottled": {
+        "msPerSecond": 53.16766356035843,
+        "counterMsPerSecond": 53.117662638735716,
+        "audioSeconds": 29.9994375
+      },
+      "throttled4x": {
+        "msPerSecond": 346.3598275769215,
+        "counterMsPerSecond": 345.96315343764667,
+        "audioSeconds": 29.9994375
+      },
+      "version": "153.0.8010.12"
+    },
+    "note": "Wall time around the push loop, after 5 s of warm-up, on 30 s of Bible speech, in chunks of 4096 samples. Chromium runs the detector on the page's main thread; throttling is CDP Emulation.setCPUThrottlingRate 4."
+  },
+  "battery": "not measured: needs a phone",
+  "table": [
+    {
+      "measure": "Bible audio played",
+      "result": "62.0 min of John (10 chapters, recorded voice)",
+      "target": "at least 60 min",
+      "met": "met"
+    },
+    {
+      "measure": "False wakes",
+      "result": "1 in 62.0 min",
+      "target": "-",
+      "met": "-"
+    },
+    {
+      "measure": "False wakes an hour",
+      "result": "0.97",
+      "target": "at most 1",
+      "met": "met"
+    },
+    {
+      "measure": "Misses, clean",
+      "result": "0 in 20",
+      "target": "at most 2 in 20",
+      "met": "met"
+    },
+    {
+      "measure": "Misses, under Bible audio at 10 dB",
+      "result": "0 in 20",
+      "target": "at most 2 in 20",
+      "met": "met"
+    },
+    {
+      "measure": "Misses, under Bible audio at 0 dB",
+      "result": "0 in 20",
+      "target": "at most 2 in 20",
+      "met": "met"
+    },
+    {
+      "measure": "Misses, under brown noise (a road proxy) at 5 dB",
+      "result": "0 in 20",
+      "target": "at most 2 in 20",
+      "met": "met"
+    },
+    {
+      "measure": "Delay from the phrase end to the wake, median",
+      "result": "62 ms (80 tries that woke)",
+      "target": "-",
+      "met": "-"
+    },
+    {
+      "measure": "Delay, worst",
+      "result": "115 ms",
+      "target": "-",
+      "met": "-"
+    },
+    {
+      "measure": "Model size",
+      "result": "469,057 bytes, 346,866 gzipped (hey-lampas.json)",
+      "target": "-",
+      "met": "-"
+    },
+    {
+      "measure": "Compute in Node",
+      "result": "49.51 ms per second of audio (16 kHz in); 43.01 with 48 kHz in",
+      "target": "-",
+      "met": "-"
+    },
+    {
+      "measure": "Compute in Chromium",
+      "result": "53.17 ms per second of audio (48 kHz in, page main thread)",
+      "target": "-",
+      "met": "-"
+    },
+    {
+      "measure": "Compute in Chromium, CPU throttled 4x",
+      "result": "346.36 ms per second of audio (a phone proxy)",
+      "target": "-",
+      "met": "-"
+    },
+    {
+      "measure": "Battery",
+      "result": "not measured: it needs a phone, not a headless run",
+      "target": "-",
+      "met": "-"
+    }
+  ]
+}

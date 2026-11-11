@@ -40,7 +40,7 @@ const TRAIN_VARIANTS = ['', '+m1', '+m2', '+m3', '+m5', '+m6', '+m7', '+f1', '+f
 const HELD_OUT_VARIANTS = ['+m4', '+f4', '+klatt4'];
 export const VOICES = [
   ...TRAIN_VOICES.flatMap((voice) => HELD_OUT_VARIANTS.map((variant) => voice + variant)),
-  ...['', ...TRAIN_VARIANTS, ...HELD_OUT_VARIANTS].map((variant) => 'en-029' + variant),
+  ...[...new Set(['', ...TRAIN_VARIANTS, ...HELD_OUT_VARIANTS])].map((variant) => 'en-029' + variant),
 ];
 const PHRASES = ['Hey Lampas', 'Hey, Lampas', 'Hey Lampas.', 'Hey Lampas!', 'hey lampas'];
 const SPEEDS = [120, 145, 170, 195];

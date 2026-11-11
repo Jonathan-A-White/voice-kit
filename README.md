@@ -225,7 +225,9 @@ Data and tools behind the wake-word spike's model (`scripts/wake-probe`; every f
 - [PyTorch](https://pytorch.org): trains the model's network (`scripts/wake-probe/train.py`). Licence:
   [BSD-3-Clause](https://github.com/pytorch/pytorch/blob/main/LICENSE). Used as published. Kind: tool.
 - [eSpeak NG](https://github.com/espeak-ng/espeak-ng): also spoke sayings of 'Hey Lampas' and near words for training, and
-  turns text to phonemes for the VITS voice; run as a tool, never shipped. Licence:
+  turns text to phonemes for the VITS voice; it spoke the wake spike's test saying
+  `examples/wake-spike/tests/fixtures/hey-lampas-espeak.wav` (kept as data) and makes its sets of 20 tries; run as a tool,
+  never shipped. Licence:
   [GPL-3.0-or-later](https://github.com/espeak-ng/espeak-ng/blob/master/COPYING). Kind: tool.
 
 Projects and ideas we took:

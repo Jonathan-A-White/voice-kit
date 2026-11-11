@@ -294,6 +294,9 @@ describe('the wake spike page with the saying as the microphone', () => {
     await page.waitForFunction(() => Number(document.querySelector('[data-testid="compute"]')?.textContent) > 0);
     await page.waitForFunction(() => Number(document.querySelector('[data-testid="tries-minutes"]')?.textContent) > 0);
 
+    // the headless numbers (results.json, bundled when the page was built) are on the page
+    expect(await page.getByTestId('headless').textContent()).toMatch(/Measured \d{4}-\d\d-\d\d[\s\S]*False wakes an hour/);
+
     // the next saying (the file loops) is another wake; Stop listening ends the count
     await page.waitForFunction(() => Number(document.querySelector('[data-testid="tries-wakes"]')?.textContent) >= 2, undefined, { timeout: 15_000 });
     await page.getByRole('button', { name: 'Stop listening' }).click();
