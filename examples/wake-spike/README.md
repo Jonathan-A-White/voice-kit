@@ -74,7 +74,7 @@ nice -n 10 npm run measure --workspace wake-spike            # about 5 min; writ
 ## Results
 
 Measured 2026-11-11 at commit `5f8b35d`, headless on the laptop, by `npm run measure --workspace wake-spike`
-(4 min 0 s; the numbers are in `results.json`). The targets are the Governor's bar (question 6, mw-6ww.165), not provisional:
+(3 min 55 s; the numbers are in `results.json`). The targets are the Governor's bar (question 6, mw-6ww.165), not provisional:
 at most 1 false wake an hour while the Bible plays, at most 2 misses in 20.
 
 | Measure | Result | Target (the Governor's bar (question 6, mw-6ww.165)) | Met |
@@ -102,7 +102,7 @@ car has been tried, so the 20 tries panel on a phone is the real test of the mis
 after the phrase ends, 115 ms at worst). The model is 469,057 bytes (346,866 gzipped), a one-time fetch the page can cache,
 and no server, runtime or extra library is needed: a browser-only wake word is possible at this size. The cost that
 stands out is compute: 33 to 50 ms of CPU per second of audio in Node over three runs (a few percent of one core), 50 to 64
-in desktop Chromium, and 189 to 346 ms per second with the CPU throttled 4x, which is a fifth to a third of a core spent for
+in desktop Chromium, and 190 to 346 ms per second with the CPU throttled 4x, which is a fifth to a third of a core spent for
 as long as the page listens. The runs differ that much from one another because the laptop was shared, and the throttled
 number is a proxy for a phone, not a phone. Battery is not measured: it needs a phone, and that fraction of a core is where
 to look first. The detector is plain, unoptimised JavaScript (a float FFT and convolutions), so the compute has room to fall.
