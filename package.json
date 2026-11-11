@@ -75,7 +75,7 @@
     "build": "tsc -b packages/composer/tsconfig.build.json packages/speech/tsconfig.build.json packages/talks/tsconfig.build.json packages/forms/tsconfig.build.json packages/testing/tsconfig.build.json && node -e \"for (const p of ['composer', 'speech', 'talks']) require('node:fs').copyFileSync('packages/' + p + '/src/styles.css', 'packages/' + p + '/dist/styles.css')\"",
     "prepare": "npm run build",
     "lint": "eslint .",
-    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p packages/composer/tsconfig.json --noEmit && tsc -p packages/speech/tsconfig.json --noEmit && tsc -p packages/talks/tsconfig.json --noEmit && tsc -p packages/forms/tsconfig.json --noEmit && tsc -p examples/composer-demo/tsconfig.json --noEmit",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p packages/composer/tsconfig.json --noEmit && tsc -p packages/speech/tsconfig.json --noEmit && tsc -p packages/talks/tsconfig.json --noEmit && tsc -p packages/forms/tsconfig.json --noEmit && tsc -p examples/composer-demo/tsconfig.json --noEmit && tsc -p examples/wake-spike/tsconfig.json --noEmit",
     "test": "npm run check:personal && vitest run",
     "check:personal": "node scripts/check-personal.mjs",
     "smoke": "node scripts/consumer-smoke.mjs",

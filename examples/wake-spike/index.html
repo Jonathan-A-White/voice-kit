@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Wake spike: does the microphone drop the car's sound?</title>
+    <style>
+      body { font: 16px/1.4 system-ui, sans-serif; margin: 0; padding: 12px; max-width: 32rem; }
+      h1 { font-size: 1.2rem; margin: 0 0 8px; }
+      section { border-top: 1px solid #ccc; padding: 10px 0; }
+      h2 { font-size: 1rem; margin: 0 0 6px; }
+      button, select { font: inherit; min-height: 48px; padding: 0 14px; margin: 4px 4px 4px 0; }
+      select { max-width: 100%; }
+      label { display: block; }
+      audio { width: 100%; }
+      meter { width: 100%; height: 28px; }
+      pre { white-space: pre-wrap; word-break: break-word; font-size: 12px; background: #f4f4f4; padding: 6px; margin: 6px 0; }
+      #log { max-height: 16rem; overflow: auto; }
+      p { margin: 4px 0; }
+    </style>
+  </head>
+  <body>
+    <h1>Wake spike</h1>
+    <p>Park first. Every step here is a tap.</p>
+
+    <section>
+      <h2>1. Play</h2>
+      <audio id="player" controls preload="none"></audio>
+      <div>
+        <button id="play" type="button">Play</button>
+        <button id="pause" type="button">Pause</button>
+      </div>
+    </section>
+
+    <section>
+      <h2>2. Listen</h2>
+      <button id="names" type="button">Show input names</button>
+      <label for="input">Input</label>
+      <select id="input"></select>
+      <div>
+        <button id="listen" type="button">Listen</button>
+        <button id="stop" type="button" disabled>Stop listening</button>
+      </div>
+      <meter id="level" aria-label="Input level" min="0" max="1" value="0"></meter>
+      <p id="status" role="status">Not listening.</p>
+      <p>Opened input: <span id="track-label" data-testid="track-label">none</span></p>
+      <pre id="track-settings" data-testid="track-settings">no settings yet</pre>
+    </section>
+
+    <section>
+      <h2>3. Log</h2>
+      <div>
+        <button id="copy" type="button">Copy results</button>
+        <button id="clear" type="button">Clear log</button>
+      </div>
+      <p id="copied" role="status"></p>
+      <pre id="log" data-testid="log"></pre>
+    </section>
+    <script type="module" src="./src/main.ts"></script>
+  </body>
+</html>

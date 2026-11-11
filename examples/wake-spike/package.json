@@ -1,0 +1,15 @@
+{
+  "name": "wake-spike",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "A spike page for the car: plays Bible audio and opens a chosen microphone with a level meter, to show whether the microphone drops Bluetooth audio to call quality. Not part of voice-kit's npm pack.",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -p tsconfig.json --noEmit && vite build",
+    "preview": "vite preview"
+  },
+  "devDependencies": {
+    "vite": "^7.0.0"
+  }
+}
