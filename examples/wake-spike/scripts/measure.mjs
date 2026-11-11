@@ -73,7 +73,8 @@ async function soak(D, net, files) {
   const t0 = Date.now();
   for (const file of files) {
     const audio = await decode(file);
-    for (const w of pushAll(detector, audio)) wakes.push({ at: seconds + w.time, score: w.score, file: file.split('/').pop() });
+    // w.time is already seconds from the start of the whole stream; `seconds` here is where this chapter began in it
+    for (const w of pushAll(detector, audio)) wakes.push({ at: w.time, inFile: w.time - seconds, score: w.score, file: file.split('/').pop() });
     seconds += audio.length / 16000;
   }
   return { minutes: seconds / 60, wakes, files: files.length, stats: detector.stats(), wallSeconds: (Date.now() - t0) / 1000 };
@@ -249,7 +250,7 @@ export async function measure({ markdown = false } = {}) {
         files: bible.files,
         falseWakes: bible.wakes.length,
         falseWakesPerHour: bible.wakes.length / hours,
-        wakes: bible.wakes.map((w) => ({ atSeconds: Math.round(w.at * 10) / 10, score: Math.round(w.score * 1000) / 1000, file: w.file })),
+        wakes: bible.wakes.map((w) => ({ atSeconds: Math.round(w.at * 10) / 10, secondsIntoFile: Math.round(w.inFile * 10) / 10, score: Math.round(w.score * 1000) / 1000, file: w.file })),
       },
       tries: {
         sets,
