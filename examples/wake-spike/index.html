@@ -49,7 +49,18 @@
     </section>
 
     <section>
-      <h2>3. Log</h2>
+      <h2>3. Hey Lampas</h2>
+      <p id="heard" role="status" data-testid="heard">Not heard yet. Listen, then say "Hey Lampas".</p>
+      <p>20 tries: <span id="tries-text" data-testid="tries-text">no wakes yet</span></p>
+      <p>Wakes <span data-testid="tries-wakes">0</span>, minutes listened <span data-testid="tries-minutes">0.0</span></p>
+      <button id="reset-tries" type="button">Reset tries</button>
+      <p>Compute: <span data-testid="compute">0</span> ms per second of audio</p>
+      <p>Model fetched: <span data-testid="model-bytes">not yet</span> bytes</p>
+      <pre id="headless" data-testid="headless">No headless numbers yet.</pre>
+    </section>
+
+    <section>
+      <h2>4. Log</h2>
       <div>
         <button id="copy" type="button">Copy results</button>
         <button id="clear" type="button">Clear log</button>

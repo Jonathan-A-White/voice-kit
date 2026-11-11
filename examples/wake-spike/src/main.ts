@@ -1,9 +1,17 @@
 // The spike page: Play streams John 1 through whatever output the phone uses (the car's Bluetooth included); Listen opens
 // the chosen input and shows its track label, settings and a level meter; the log keeps what happened and Copy results
-// puts it on the clipboard. No wake word here: the question is whether opening a microphone drops the car's sound to call quality.
+// puts it on the clipboard. The first question is whether opening a microphone drops the car's sound to call quality; the
+// second is whether a small model can hear 'Hey Lampas' on the page: Listen also feeds the input to the wake detector
+// (a worklet and a Web Worker, capture.ts) and shows what it hears, what it costs and the headless numbers.
+import { startCapture } from './capture.js';
+import type { Capture } from './capture.js';
+import type { DetectorStats, Wake, WakeModel } from './detector.js';
 import { listInputs, openInput, startMeter } from './inputs.js';
 import type { OpenedInput } from './inputs.js';
 import { createLog } from './log.js';
+import { summarize } from './results.js';
+import type { Results } from './results.js';
+import { describeTries, readTries, saveTries } from './tries.js';
 
 const JOHN_1 = 'https://openbible.com/audio/msb/MSB_43_Jhn_001_D.mp3';
 
@@ -23,6 +31,19 @@ const copyButton = byId<HTMLButtonElement>('copy');
 const clearButton = byId<HTMLButtonElement>('clear');
 const copied = byId<HTMLElement>('copied');
 const logView = byId<HTMLElement>('log');
+const heard = byId<HTMLElement>('heard');
+const triesText = byId<HTMLElement>('tries-text');
+const triesWakes = document.querySelector<HTMLElement>('[data-testid="tries-wakes"]') as HTMLElement;
+const triesMinutes = document.querySelector<HTMLElement>('[data-testid="tries-minutes"]') as HTMLElement;
+const resetTries = byId<HTMLButtonElement>('reset-tries');
+const compute = document.querySelector<HTMLElement>('[data-testid="compute"]') as HTMLElement;
+const modelBytes = document.querySelector<HTMLElement>('[data-testid="model-bytes"]') as HTMLElement;
+const headless = byId<HTMLElement>('headless');
+
+// The model file, next to the page (public/models). The headless numbers are bundled if scripts/measure.mjs has written them.
+const MODEL_URL = 'models/hey-lampas.json';
+const bundled = import.meta.glob<Results>('../results.json', { eager: true, import: 'default' });
+headless.textContent = summarize(Object.values(bundled)[0]);
 
 let storage: Storage | undefined;
 try {
@@ -31,6 +52,20 @@ try {
   storage = undefined;
 }
 const log = createLog(storage);
+let tries = readTries(storage);
+function showTries(): void {
+  triesText.textContent = describeTries(tries);
+  triesWakes.textContent = String(tries.wakes);
+  triesMinutes.textContent = (tries.seconds / 60).toFixed(2);
+  saveTries(storage, tries);
+}
+showTries();
+resetTries.addEventListener('click', () => {
+  tries = { wakes: 0, seconds: 0 };
+  heardSeconds = 0;
+  showTries();
+  log.add('tries-reset');
+});
 byId<HTMLElement>('hint').textContent = 'Input names show once the microphone is allowed: tap "Show input names".';
 const media = navigator.mediaDevices as MediaDevices | undefined;
 
@@ -99,6 +134,36 @@ media?.addEventListener('devicechange', () => {
 // Listen
 let opened: OpenedInput | undefined;
 let stopMeter: (() => void) | undefined;
+let capture: Capture | undefined;
+let heardSeconds = 0; // audio the detector has reported in this listen, so tries.seconds grows by the difference
+let model: { value: WakeModel; bytes: number } | undefined;
+
+/** The model, fetched once per page: its JSON and the bytes it came as. */
+async function fetchModel(): Promise<{ value: WakeModel; bytes: number }> {
+  if (model) return model;
+  const response = await fetch(MODEL_URL);
+  if (!response.ok) throw new Error(`the model did not load: ${response.status}`);
+  const buffer = await response.arrayBuffer();
+  model = { value: JSON.parse(new TextDecoder().decode(buffer)) as WakeModel, bytes: buffer.byteLength };
+  modelBytes.textContent = model.bytes.toLocaleString('en-GB');
+  log.add('model-fetched', { url: MODEL_URL, bytes: model.bytes });
+  return model;
+}
+
+function onWake(wake: Wake): void {
+  const clock = new Date().toTimeString().slice(0, 8);
+  heard.textContent = `Heard Hey Lampas at ${clock} (${wake.time.toFixed(1)} s of listening, score ${wake.score.toFixed(3)})`;
+  tries = { ...tries, wakes: tries.wakes + 1 };
+  showTries();
+  log.add('wake', { at: Number(wake.time.toFixed(3)), score: Number(wake.score.toFixed(4)) });
+}
+
+function onStats(stats: DetectorStats): void {
+  compute.textContent = stats.msPerSecond.toFixed(2);
+  tries = { ...tries, seconds: tries.seconds + (stats.audioSeconds - heardSeconds) };
+  heardSeconds = stats.audioSeconds;
+  showTries();
+}
 
 function setListening(on: boolean): void {
   listenButton.disabled = on;
@@ -107,6 +172,8 @@ function setListening(on: boolean): void {
 }
 
 function endListening(): void {
+  capture?.stop();
+  capture = undefined;
   stopMeter?.();
   stopMeter = undefined;
   opened?.close();
@@ -126,6 +193,9 @@ listenButton.addEventListener('click', () => {
   log.add('listen', { input: choice, deviceId: deviceId || null });
   setListening(true);
   status.textContent = 'Opening…';
+  heardSeconds = 0;
+  const modelReady = fetchModel();
+  modelReady.catch(() => undefined); // reported below, once the input is open
   void (async () => {
     try {
       const input = await openInput(media, deviceId);
@@ -151,6 +221,19 @@ listenButton.addEventListener('click', () => {
       });
       status.textContent = 'Listening. Tap "Stop listening" when done.';
       await refreshInputs();
+      // The detector is the second question: if it cannot start, the input stays open and the first question is still answered.
+      try {
+        const loaded = await modelReady;
+        const started = await startCapture(input.stream, loaded.value, { onWake, onStats, onError: (error) => log.add('wake-error', { error }) });
+        if (opened === input) {
+          capture = started;
+          log.add('detector-started', { inputRate: started.inputRate, bytes: loaded.bytes });
+          heard.textContent = 'Listening for "Hey Lampas".';
+        } else started.stop();
+      } catch (err) {
+        log.add('detector-failed', { error: message(err) });
+        heard.textContent = `The wake detector could not start: ${message(err)}`;
+      }
     } catch (err) {
       log.add('listen-failed', { error: message(err) });
       status.textContent = `Could not open the input: ${message(err)}`;
