@@ -1,13 +1,13 @@
 {
-  "date": "2026-11-11",
-  "commit": "5f8b35d01ba9a75780622a17ca279d98be8c6935",
-  "uncommittedChanges": false,
+  "date": "2026-11-12",
+  "commit": "6925864ff255aa5a964015c2d46881a15ed16221",
+  "uncommittedChanges": true,
   "note": "Written by scripts/measure.mjs, headless on the laptop. The bar is the Governor's (question 6, mw-6ww.165). Battery is not measured headless.",
   "model": {
     "trained": "2026-11-11",
-    "trainedCommit": "aa510960ae98d43e1f990c213bf3a8ead7b3cab6",
+    "trainedCommit": "d0272bcd73dd89e30c28aa52405af5f35c02a4ce",
     "rule": {
-      "threshold": 0.46257,
+      "threshold": 0.92414,
       "consecutive": 3,
       "refractory": 2
     },
@@ -15,33 +15,48 @@
     "files": [
       {
         "name": "hey-lampas.json",
-        "bytes": 469057,
-        "gzipBytes": 346866
+        "bytes": 469912,
+        "gzipBytes": 347179
       }
     ],
-    "bytes": 469057,
-    "gzipBytes": 346866
+    "bytes": 469912,
+    "gzipBytes": 347179
   },
   "bar": {
     "label": "the Governor's bar (question 6, mw-6ww.165)",
     "falseWakesPerHour": 1,
     "missesIn20": 2,
     "bibleMinutes": 60,
-    "met": true
+    "met": false
   },
   "bible": {
     "minutes": 62.04430104166667,
     "files": 10,
-    "falseWakes": 1,
-    "falseWakesPerHour": 0.9670509457380494,
-    "wakes": [
-      {
-        "atSeconds": 2128.3,
-        "secondsIntoFile": 489.6,
-        "score": 0.972,
-        "file": "MSB_43_Jhn_006_D.mp3"
+    "falseWakes": 0,
+    "falseWakesPerHour": 0,
+    "wakes": [],
+    "throughTheCar": {
+      "narrowband": {
+        "minutes": 62.04430104166667,
+        "falseWakes": 1,
+        "falseWakesPerHour": 0.9670509457380494,
+        "wakes": [
+          {
+            "atSeconds": 1831.3,
+            "secondsIntoFile": 192.6,
+            "score": 0.996,
+            "file": "MSB_43_Jhn_006_D.mp3"
+          }
+        ]
+      },
+      "wideband": {
+        "minutes": 62.04430104166667,
+        "falseWakes": 0,
+        "falseWakesPerHour": 0,
+        "wakes": []
       }
-    ]
+    },
+    "throughTheCarNote": "The same chapters as the soak above with nobody talking: each is the Bible leaking from the car's speakers to its microphone, with road (brown) noise 10, 5 and 0 dB under it in three of every four minutes, through the car's noise suppressor and gain and a narrowband (8 kHz, 300-3400 Hz, CVSD) or wideband (16 kHz, mSBC) link. scripts/wake-probe/handsfree.mjs."
   },
   "tries": {
     "sets": [
@@ -51,24 +66,24 @@
         "tries": 20,
         "misses": 0,
         "delaysMs": [
-          20,
+          60,
           62,
           87,
-          35,
+          75,
           90,
           39,
-          2,
+          42,
           83,
           28,
-          47,
           87,
-          9,
-          12,
+          87,
+          89,
+          92,
           7,
-          35,
+          75,
           5,
-          14,
-          70,
+          94,
+          110,
           40,
           67
         ]
@@ -82,12 +97,12 @@
           60,
           62,
           87,
-          75,
+          115,
           90,
           39,
           42,
           83,
-          28,
+          108,
           87,
           87,
           9,
@@ -97,7 +112,7 @@
           5,
           14,
           70,
-          80,
+          40,
           67
         ]
       },
@@ -108,24 +123,24 @@
         "misses": 0,
         "delaysMs": [
           60,
-          62,
+          102,
           87,
           115,
           90,
           79,
           42,
           83,
-          68,
-          87,
+          188,
+          127,
           87,
           9,
           92,
           7,
-          35,
+          75,
           5,
           14,
           70,
-          80,
+          120,
           67
         ]
       },
@@ -135,13 +150,13 @@
         "tries": 20,
         "misses": 0,
         "delaysMs": [
-          20,
+          60,
           62,
           87,
-          35,
-          90,
+          75,
+          130,
           39,
-          2,
+          42,
           83,
           28,
           87,
@@ -150,43 +165,351 @@
           52,
           -33,
           35,
+          -35,
+          54,
+          70,
+          40,
+          67
+        ]
+      },
+      {
+        "key": "nb-clean",
+        "name": "narrowband hands-free, clean",
+        "tries": 20,
+        "misses": 0,
+        "delaysMs": [
+          60,
+          102,
+          87,
+          35,
+          130,
+          39,
+          42,
+          83,
+          68,
+          127,
+          247,
+          49,
+          92,
+          7,
+          155,
+          5,
+          134,
+          110,
+          40,
+          107
+        ]
+      },
+      {
+        "key": "nb-road10",
+        "name": "narrowband hands-free, road noise at 10 dB",
+        "tries": 20,
+        "misses": 0,
+        "delaysMs": [
+          60,
+          62,
+          87,
+          35,
+          170,
+          159,
+          42,
+          43,
+          28,
+          127,
+          127,
+          9,
+          92,
+          7,
+          75,
+          5,
+          14,
+          110,
+          80,
+          107
+        ]
+      },
+      {
+        "key": "nb-road0",
+        "name": "narrowband hands-free, road noise at 0 dB",
+        "tries": 20,
+        "misses": 0,
+        "delaysMs": [
+          140,
+          22,
+          87,
+          75,
+          170,
+          159,
+          42,
+          83,
+          28,
+          127,
+          87,
+          49,
+          92,
+          7,
+          75,
+          5,
+          94,
+          110,
+          80,
+          107
+        ]
+      },
+      {
+        "key": "nb-bible0",
+        "name": "narrowband hands-free, Bible leaking at 0 dB",
+        "tries": 20,
+        "misses": 4,
+        "delaysMs": [
+          100,
+          142,
+          115,
+          39,
+          82,
+          83,
+          68,
+          87,
+          129,
+          92,
+          7,
+          5,
+          174,
+          230,
+          120,
+          228
+        ]
+      },
+      {
+        "key": "nb-bible-10",
+        "name": "narrowband hands-free, Bible leaking at -10 dB",
+        "tries": 20,
+        "misses": 8,
+        "delaysMs": [
+          140,
+          182,
+          75,
+          159,
+          82,
+          83,
+          148,
+          327,
+          129,
+          92,
+          47,
+          45
+        ]
+      },
+      {
+        "key": "nb-both",
+        "name": "narrowband hands-free, road noise at 5 dB and Bible leaking at -5 dB",
+        "tries": 20,
+        "misses": 6,
+        "delaysMs": [
+          60,
+          302,
+          75,
+          159,
+          162,
+          83,
+          28,
+          127,
+          247,
+          289,
+          92,
+          47,
+          -35,
+          268
+        ]
+      },
+      {
+        "key": "wb-clean",
+        "name": "wideband hands-free, clean",
+        "tries": 20,
+        "misses": 0,
+        "delaysMs": [
+          60,
+          62,
+          87,
+          75,
+          130,
+          39,
+          42,
+          83,
+          28,
+          87,
+          87,
+          89,
+          92,
+          7,
+          75,
+          5,
+          14,
+          110,
+          40,
+          107
+        ]
+      },
+      {
+        "key": "wb-road10",
+        "name": "wideband hands-free, road noise at 10 dB",
+        "tries": 20,
+        "misses": 0,
+        "delaysMs": [
+          60,
+          62,
+          87,
+          75,
+          130,
+          39,
+          42,
+          83,
+          28,
+          47,
+          87,
+          9,
+          52,
+          7,
+          35,
           45,
           14,
           70,
-          80,
+          0,
           67
+        ]
+      },
+      {
+        "key": "wb-road0",
+        "name": "wideband hands-free, road noise at 0 dB",
+        "tries": 20,
+        "misses": 0,
+        "delaysMs": [
+          60,
+          62,
+          87,
+          35,
+          90,
+          39,
+          42,
+          83,
+          28,
+          87,
+          87,
+          9,
+          52,
+          -33,
+          35,
+          -35,
+          94,
+          70,
+          40,
+          107
+        ]
+      },
+      {
+        "key": "wb-bible0",
+        "name": "wideband hands-free, Bible leaking at 0 dB",
+        "tries": 20,
+        "misses": 1,
+        "delaysMs": [
+          60,
+          102,
+          127,
+          75,
+          79,
+          82,
+          83,
+          28,
+          87,
+          127,
+          49,
+          92,
+          87,
+          195,
+          45,
+          174,
+          110,
+          120,
+          147
+        ]
+      },
+      {
+        "key": "wb-bible-10",
+        "name": "wideband hands-free, Bible leaking at -10 dB",
+        "tries": 20,
+        "misses": 9,
+        "delaysMs": [
+          182,
+          122,
+          123,
+          68,
+          87,
+          207,
+          89,
+          92,
+          167,
+          45,
+          254
+        ]
+      },
+      {
+        "key": "wb-both",
+        "name": "wideband hands-free, road noise at 5 dB and Bible leaking at -5 dB",
+        "tries": 20,
+        "misses": 0,
+        "delaysMs": [
+          140,
+          182,
+          207,
+          235,
+          130,
+          239,
+          162,
+          123,
+          28,
+          87,
+          127,
+          89,
+          52,
+          167,
+          155,
+          45,
+          174,
+          270,
+          80,
+          147
         ]
       }
     ],
-    "heard": 80,
-    "delayMedianMs": 62,
-    "delayWorstMs": 115
+    "heard": 292,
+    "delayMedianMs": 83,
+    "delayWorstMs": 327
   },
   "compute": {
     "unit": "milliseconds of compute per second of audio",
     "node": {
-      "msPerSecond": 32.64966620000002,
-      "counterMsPerSecond": 32.63347676666162,
+      "msPerSecond": 80.9354554666672,
+      "counterMsPerSecond": 80.8988779333653,
       "audioSeconds": 30
     },
     "node48k": {
-      "msPerSecond": 37.6455528207821,
-      "counterMsPerSecond": 37.61539528866964,
+      "msPerSecond": 84.67531439548037,
+      "counterMsPerSecond": 84.4797171946667,
       "audioSeconds": 29.9994375
     },
     "nodeSoak": {
-      "msPerSecond": 46.03706508889161,
+      "msPerSecond": 65.52364307996362,
       "audioSeconds": 3722.6580625
     },
     "chromium": {
       "unthrottled": {
-        "msPerSecond": 63.82453005280857,
-        "counterMsPerSecond": 63.7578621679082,
+        "msPerSecond": 109.6987235209116,
+        "counterMsPerSecond": 109.55538749366993,
         "audioSeconds": 29.9994375
       },
       "throttled4x": {
-        "msPerSecond": 189.5768878936235,
-        "counterMsPerSecond": 189.31021625865284,
+        "msPerSecond": 431.6547601965993,
+        "counterMsPerSecond": 431.1880847956634,
         "audioSeconds": 29.9994375
       },
       "version": "153.0.8010.12"
@@ -203,13 +526,25 @@
     },
     {
       "measure": "False wakes",
-      "result": "1 in 62.0 min",
+      "result": "0 in 62.0 min",
       "target": "-",
       "met": "-"
     },
     {
       "measure": "False wakes an hour",
-      "result": "0.97",
+      "result": "0.00",
+      "target": "at most 1",
+      "met": "met"
+    },
+    {
+      "measure": "False wakes an hour, Bible through the car, narrowband",
+      "result": "0.97 (1 in 62.0 min)",
+      "target": "at most 1",
+      "met": "met"
+    },
+    {
+      "measure": "False wakes an hour, Bible through the car, wideband",
+      "result": "0.00 (0 in 62.0 min)",
       "target": "at most 1",
       "met": "met"
     },
@@ -238,38 +573,110 @@
       "met": "met"
     },
     {
+      "measure": "Misses, narrowband hands-free, clean",
+      "result": "0 in 20",
+      "target": "at most 2 in 20",
+      "met": "met"
+    },
+    {
+      "measure": "Misses, narrowband hands-free, road noise at 10 dB",
+      "result": "0 in 20",
+      "target": "at most 2 in 20",
+      "met": "met"
+    },
+    {
+      "measure": "Misses, narrowband hands-free, road noise at 0 dB",
+      "result": "0 in 20",
+      "target": "at most 2 in 20",
+      "met": "met"
+    },
+    {
+      "measure": "Misses, narrowband hands-free, Bible leaking at 0 dB",
+      "result": "4 in 20",
+      "target": "at most 2 in 20",
+      "met": "not met"
+    },
+    {
+      "measure": "Misses, narrowband hands-free, Bible leaking at -10 dB",
+      "result": "8 in 20",
+      "target": "at most 2 in 20",
+      "met": "not met"
+    },
+    {
+      "measure": "Misses, narrowband hands-free, road noise at 5 dB and Bible leaking at -5 dB",
+      "result": "6 in 20",
+      "target": "at most 2 in 20",
+      "met": "not met"
+    },
+    {
+      "measure": "Misses, wideband hands-free, clean",
+      "result": "0 in 20",
+      "target": "at most 2 in 20",
+      "met": "met"
+    },
+    {
+      "measure": "Misses, wideband hands-free, road noise at 10 dB",
+      "result": "0 in 20",
+      "target": "at most 2 in 20",
+      "met": "met"
+    },
+    {
+      "measure": "Misses, wideband hands-free, road noise at 0 dB",
+      "result": "0 in 20",
+      "target": "at most 2 in 20",
+      "met": "met"
+    },
+    {
+      "measure": "Misses, wideband hands-free, Bible leaking at 0 dB",
+      "result": "1 in 20",
+      "target": "at most 2 in 20",
+      "met": "met"
+    },
+    {
+      "measure": "Misses, wideband hands-free, Bible leaking at -10 dB",
+      "result": "9 in 20",
+      "target": "at most 2 in 20",
+      "met": "not met"
+    },
+    {
+      "measure": "Misses, wideband hands-free, road noise at 5 dB and Bible leaking at -5 dB",
+      "result": "0 in 20",
+      "target": "at most 2 in 20",
+      "met": "met"
+    },
+    {
       "measure": "Delay from the phrase end to the wake, median",
-      "result": "62 ms (80 tries that woke)",
+      "result": "83 ms (292 tries that woke)",
       "target": "-",
       "met": "-"
     },
     {
       "measure": "Delay, worst",
-      "result": "115 ms",
+      "result": "327 ms",
       "target": "-",
       "met": "-"
     },
     {
       "measure": "Model size",
-      "result": "469,057 bytes, 346,866 gzipped (hey-lampas.json)",
+      "result": "469,912 bytes, 347,179 gzipped (hey-lampas.json)",
       "target": "-",
       "met": "-"
     },
     {
       "measure": "Compute in Node",
-      "result": "32.65 ms per second of audio (16 kHz in); 37.65 with 48 kHz in",
+      "result": "80.94 ms per second of audio (16 kHz in); 84.68 with 48 kHz in",
       "target": "-",
       "met": "-"
     },
     {
       "measure": "Compute in Chromium",
-      "result": "63.82 ms per second of audio (48 kHz in, page main thread)",
+      "result": "109.70 ms per second of audio (48 kHz in, page main thread)",
       "target": "-",
       "met": "-"
     },
     {
       "measure": "Compute in Chromium, CPU throttled 4x",
-      "result": "189.58 ms per second of audio (a phone proxy)",
+      "result": "431.65 ms per second of audio (a phone proxy)",
       "target": "-",
       "met": "-"
     },

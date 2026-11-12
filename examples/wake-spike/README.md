@@ -75,47 +75,92 @@ nice -n 10 npm run measure --workspace wake-spike            # about 5 min; writ
   the model never trained on (the unseen voice and variant pairs named in `scripts/wake-probe/README.md`): clean; under
   Bible audio at 10 dB and at 0 dB speech-to-speech; under brown noise, a road proxy, at 5 dB. The 20 sayings are the same
   in every set. Each try is 5 s with the saying at 2 s and its phrase end known. Piper is not on the laptop, so there are no
-  Piper tries.
+  Piper tries. It also makes twelve more sets (story mw-rdpwdp1.12) for a car's Bluetooth hands-free microphone: the same 20
+  sayings through `scripts/wake-probe/handsfree.mjs` (the car's noise suppressor, automatic gain, and a narrowband
+  8 kHz CVSD or wideband mSBC link), each link clean, under brown noise at 10 and 0 dB, with the cached Bible leaking back at
+  0 and -10 dB, and with brown noise at 5 dB and the Bible at -5 dB. The dB are the saying over the interferer at the
+  microphone, before the car's processing, so -10 is the Bible 10 dB louder than the voice.
 - `measure.mjs` runs `src/detector.ts` (transpiled, the code the page runs) over the whole cached Bible audio as one
   stream and counts the wakes; over each set of tries and counts misses and the delay from the phrase end to the wake; sizes
   the model files and their gzip; and times the detector in Node and in headless Chromium with the CPU throttled 4x (CDP
-  `Emulation.setCPUThrottlingRate`, a phone proxy). Battery is not measured headless.
+  `Emulation.setCPUThrottlingRate`, a phone proxy). Battery is not measured headless. It also plays the cached Bible
+  through the car with nobody talking, narrowband and wideband (road noise under it in three minutes of four), and counts the
+  false wakes an hour of each. `--model FILE --out FILE --quick` measures another model file and writes the numbers
+  elsewhere without the compute runs: that is how the model before mw-rdpwdp1.12 was measured on the hands-free sets.
 
 ## Results
 
-Measured 2026-11-11 at commit `5f8b35d`, headless on the laptop, by `npm run measure --workspace wake-spike`
-(3 min 55 s; the numbers are in `results.json`). The targets are the Governor's bar (question 6, mw-6ww.165), not provisional:
-at most 1 false wake an hour while the Bible plays, at most 2 misses in 20.
+Measured 2026-11-12 at commit `6925864` (the model, `results.json` and this table are the next commit's), headless on
+the laptop, by `npm run measure --workspace wake-spike` (17 min 1 s; the numbers are in `results.json`). The targets are the
+Governor's bar (question 6, mw-6ww.165), not provisional: at most 1 false wake an hour while the Bible plays, at most 2 misses in 20.
+The model is the one retrained for a car's Bluetooth hands-free microphone (mw-rdpwdp1.12, rule threshold 0.924, 3 in a row).
 
 | Measure | Result | Target (the Governor's bar (question 6, mw-6ww.165)) | Met |
 |---|---|---|---|
 | Bible audio played | 62.0 min of John (10 chapters, recorded voice) | at least 60 min | met |
-| False wakes | 1 in 62.0 min | - | - |
-| False wakes an hour | 0.97 | at most 1 | met |
+| False wakes | 0 in 62.0 min | - | - |
+| False wakes an hour | 0.00 | at most 1 | met |
+| False wakes an hour, Bible through the car, narrowband | 0.97 (1 in 62.0 min) | at most 1 | met |
+| False wakes an hour, Bible through the car, wideband | 0.00 (0 in 62.0 min) | at most 1 | met |
 | Misses, clean | 0 in 20 | at most 2 in 20 | met |
 | Misses, under Bible audio at 10 dB | 0 in 20 | at most 2 in 20 | met |
 | Misses, under Bible audio at 0 dB | 0 in 20 | at most 2 in 20 | met |
 | Misses, under brown noise (a road proxy) at 5 dB | 0 in 20 | at most 2 in 20 | met |
-| Delay from the phrase end to the wake, median | 62 ms (80 tries that woke) | - | - |
-| Delay, worst | 115 ms | - | - |
-| Model size | 469,057 bytes, 346,866 gzipped (hey-lampas.json) | - | - |
-| Compute in Node | 32.65 ms per second of audio (16 kHz in); 37.65 with 48 kHz in | - | - |
-| Compute in Chromium | 63.82 ms per second of audio (48 kHz in, page main thread) | - | - |
-| Compute in Chromium, CPU throttled 4x | 189.58 ms per second of audio (a phone proxy) | - | - |
+| Misses, narrowband hands-free, clean | 0 in 20 | at most 2 in 20 | met |
+| Misses, narrowband hands-free, road noise at 10 dB | 0 in 20 | at most 2 in 20 | met |
+| Misses, narrowband hands-free, road noise at 0 dB | 0 in 20 | at most 2 in 20 | met |
+| Misses, narrowband hands-free, Bible leaking at 0 dB | 4 in 20 | at most 2 in 20 | not met |
+| Misses, narrowband hands-free, Bible leaking at -10 dB | 8 in 20 | at most 2 in 20 | not met |
+| Misses, narrowband hands-free, road noise at 5 dB and Bible leaking at -5 dB | 6 in 20 | at most 2 in 20 | not met |
+| Misses, wideband hands-free, clean | 0 in 20 | at most 2 in 20 | met |
+| Misses, wideband hands-free, road noise at 10 dB | 0 in 20 | at most 2 in 20 | met |
+| Misses, wideband hands-free, road noise at 0 dB | 0 in 20 | at most 2 in 20 | met |
+| Misses, wideband hands-free, Bible leaking at 0 dB | 1 in 20 | at most 2 in 20 | met |
+| Misses, wideband hands-free, Bible leaking at -10 dB | 9 in 20 | at most 2 in 20 | not met |
+| Misses, wideband hands-free, road noise at 5 dB and Bible leaking at -5 dB | 0 in 20 | at most 2 in 20 | met |
+| Delay from the phrase end to the wake, median | 83 ms (292 tries that woke) | - | - |
+| Delay, worst | 327 ms | - | - |
+| Model size | 469,912 bytes, 347,179 gzipped (hey-lampas.json) | - | - |
+| Compute in Node | 80.94 ms per second of audio (16 kHz in); 84.68 with 48 kHz in | - | - |
+| Compute in Chromium | 109.70 ms per second of audio (48 kHz in, page main thread) | - | - |
+| Compute in Chromium, CPU throttled 4x | 431.65 ms per second of audio (a phone proxy) | - | - |
 | Battery | not measured: it needs a phone, not a headless run | - | - |
 
-**What the numbers say.** On this test the bar is met, but the false-wake line is met by a hair: one false wake in 62.0
-minutes of John is 0.97 an hour against a limit of 1, so a second one anywhere in the hour would have missed it, and 62 minutes
-of one reader's voice is a small sample, not a guarantee. The misses are 0 in every set of 20, but those tries are espeak-ng
-voices, synthetic and in the same family as voices the model was trained on in other variants; no human voice, microphone or
-car has been tried, so the 20 tries panel on a phone is the real test of the misses. The delay is small (a wake about 62 ms
-after the phrase ends, 115 ms at worst). The model is 469,057 bytes (346,866 gzipped), a one-time fetch the page can cache,
-and no server, runtime or extra library is needed: a browser-only wake word is possible at this size. The cost that
-stands out is compute: 33 to 50 ms of CPU per second of audio in Node over three runs (a few percent of one core), 50 to 64
-in desktop Chromium, and 190 to 346 ms per second with the CPU throttled 4x, which is a fifth to a third of a core spent for
-as long as the page listens. The runs differ that much from one another because the laptop was shared, and the throttled
-number is a proxy for a phone, not a phone. Battery is not measured: it needs a phone, and that fraction of a core is where
-to look first. The detector is plain, unoptimised JavaScript (a float FFT and convolutions), so the compute has room to fall.
+**The model before and after, on the hands-free sets** (the old model, committed at `d0272bc`, measured with
+`measure.mjs --model` on the same tries):
+
+| Measure (hands-free, the model before mw-rdpwdp1.12) | Misses before | Misses now |
+|---|---|---|
+| False wakes an hour, Bible through the car, narrowband | 0.00 (0 in 62.0 min) | 0.97 (1 in 62.0 min) |
+| False wakes an hour, Bible through the car, wideband | 0.97 (1 in 62.0 min) | 0.00 (0 in 62.0 min) |
+| narrowband hands-free, clean | 15 in 20 | 0 in 20 |
+| narrowband hands-free, road noise at 10 dB | 17 in 20 | 0 in 20 |
+| narrowband hands-free, road noise at 0 dB | 16 in 20 | 0 in 20 |
+| narrowband hands-free, Bible leaking at 0 dB | 17 in 20 | 4 in 20 |
+| narrowband hands-free, Bible leaking at -10 dB | 20 in 20 | 8 in 20 |
+| narrowband hands-free, road noise at 5 dB and Bible leaking at -5 dB | 19 in 20 | 6 in 20 |
+| wideband hands-free, clean | 0 in 20 | 0 in 20 |
+| wideband hands-free, road noise at 10 dB | 0 in 20 | 0 in 20 |
+| wideband hands-free, road noise at 0 dB | 0 in 20 | 0 in 20 |
+| wideband hands-free, Bible leaking at 0 dB | 1 in 20 | 1 in 20 |
+| wideband hands-free, Bible leaking at -10 dB | 6 in 20 | 9 in 20 |
+| wideband hands-free, road noise at 5 dB and Bible leaking at -5 dB | 2 in 20 | 0 in 20 |
+
+**What the numbers say.** The old model could not hear a narrowband call at all: 15 to 20 of 20 missed even with nothing
+else on the line (a call's band stops at 3.4 kHz and the 's' of "Lampas" lives above it), which is the shape of the Governor's
+car (13 and 9 woke of 20). Retrained with the car's microphone chain in the data, narrowband is 0 missed in 20 clean and
+under road noise at 10 and at 0 dB, and wideband stays 0 in every set it had. What is not done: the Bible leaking back
+loud. The target is at most 2 missed in 20 on every set; it is **not met** with the Bible at 0 dB narrowband (4), at -10 dB
+narrowband (8) and wideband (9), and with road noise and the Bible together narrowband (6). At -10 dB the Bible is 10 dB
+louder than the voice at the microphone before the car's own processing, and this small network (86,817 weights, a 1.6 s
+window) does not pull the phrase out of a narrator that much louder. Wideband at -10 dB is also worse than before (6 to 9)
+because the threshold had to rise to 0.924 to keep false wakes through a car under 0.5 an hour. False wakes an hour on the
+Bible, plain and through the car, narrowband and wideband, are all within the bar (0 or 1 in 62 minutes). The tries are 20
+espeak-ng voices, not a person, and the car's chain is a model of kinds of car, not a recording of his: the next real test is
+the car demo (mw-rdpwdp1.4), and a recording from "Record my tries" (mw-rdpwdp1.11) would say what his car really sends.
+The network is the same size and shape as before (469,912 bytes), so its compute should be what it was; the compute rows above
+read higher (81 ms per second in Node against 33) because another measuring run was using the laptop at the same time, so
+treat them as an upper bound and not as a change.
 
 ## Where it is published
 
