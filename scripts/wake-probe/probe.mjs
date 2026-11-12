@@ -5,6 +5,9 @@
 // every file it makes in the scratch folder, outside the repo; only the model and its licences are committed.
 //
 //   node scripts/wake-probe/probe.mjs prepare     make the sayings, mix and featurize the training audio
+//   node scripts/wake-probe/probe.mjs prepare-hf --part stream|pos|neg
+//                                                 the same through a car's Bluetooth hands-free microphone (handsfree.mjs);
+//                                                 the three parts are separate processes and may run together
 //   node scripts/wake-probe/probe.mjs train       train the network (PyTorch, through train.py)
 //   node scripts/wake-probe/probe.mjs calibrate   set the threshold on the threshold set; writes the committed model
 //   node scripts/wake-probe/probe.mjs measure     measure the committed model on the measuring set [--markdown]
@@ -15,6 +18,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as D from './detector.mjs';
+import { HANDSFREE_CONDITIONS, brownNoise, carMic, throughCar } from './handsfree.mjs';
 
 const RATE = D.FRONT_END.rate;
 const WINDOW = 80; // network frames in one window: 1.6 s (train.py's WINDOW)
@@ -481,10 +485,7 @@ async function prepareStream(opt) {
   return info;
 }
 
-/**
- * One training window (WINDOW_SAMPLES long): the clip laid so its last sound ends `end` seconds before the window's
- * end, roughened, over a background of pool speech, road noise or near-quiet. A head keeps only the clip's first part.
- */
+/** A WINDOW-sized (or `n`) stretch of one speaker's pool speech, at a random place. */
 function poolSegment(random, pool, n) {
   const speech = pick(random, pool);
   const at = Math.floor(random() * (speech.length - n));
@@ -499,7 +500,8 @@ function babbleWindow(random, pool) {
   return random() < 0.3 ? reverb(random, out).subarray(0, WINDOW_SAMPLES) : out;
 }
 
-export function trainingWindow(random, clip, pool, how) {
+/** The clip laid in a window of WINDOW_SAMPLES (how: 'whole', 'head' or 'any'), with the level it was laid at: { out, level }. */
+export function layClip(random, clip, how) {
   let c = clip;
   let soundEnd = clip.length - PAD;
   if (how === 'head') {
@@ -515,7 +517,15 @@ export function trainingWindow(random, clip, pool, how) {
   else start = WINDOW_SAMPLES - Math.floor(RATE * between(random, 0.02, Math.min(0.4, room - 0.01))) - soundEnd;
   const gain = 10 ** (between(random, -20, 0) / 20);
   addAt(out, c, gain, start);
-  const level = gain * rms(c);
+  return { out, level: gain * rms(c) };
+}
+
+/**
+ * One training window (WINDOW_SAMPLES long): the clip laid so its last sound ends `end` seconds before the window's
+ * end, roughened, over a background of pool speech, road noise or near-quiet. A head keeps only the clip's first part.
+ */
+export function trainingWindow(random, clip, pool, how) {
+  const { out, level } = layClip(random, clip, how);
   const r = random();
   const snr = -5 + 25 * random() ** 1.5; // -5 to 20 dB, more of it at the hard end
   if (r < 0.5) {
@@ -578,6 +588,160 @@ async function prepare(opt) {
   await prepareWindows(opt, stream);
 }
 
+// ---- through a car's Bluetooth hands-free microphone (story mw-rdpwdp1.12) ----
+
+const HF_LEAD = 2 * RATE; // lead-in a hands-free training window is processed with, then cut off, so the car's gates and gain have settled
+
+/**
+ * The microphone of a training scene: `voice` (level `level`) with road noise and the pool speech leaking back (the
+ * Bible stand-in) at random levels, wider than the held-out sets use: road 20 down to -3 dB under the voice, the leak 12 dB
+ * under it to 12 dB over it, more of it at the hard end.
+ */
+function sceneMic(random, voice, pool, level) {
+  const roadDb = random() < 0.35 ? undefined : between(random, -3, 20);
+  const leakDb = random() < 0.4 ? undefined : -12 + 24 * random() ** 1.2;
+  return carMic(voice, {
+    road: roadDb === undefined ? null : roadNoise(random, voice.length),
+    roadDb,
+    leak: leakDb === undefined ? null : poolSegment(random, pool, voice.length),
+    leakDb,
+    level,
+  });
+}
+
+/** The talker, or nobody, in a 20 s stretch of the hands-free stream: [mic samples] for `x`, one of seven scenes. */
+function streamScene(random, x, pool) {
+  const level = rms(x) || 1e-3;
+  const r = random();
+  const n = x.length;
+  const nobody = new Float32Array(n);
+  if (r < 0.08) return carMic(x, { level });
+  if (r < 0.28) return carMic(x, { road: roadNoise(random, n), roadDb: between(random, -3, 20), level });
+  if (r < 0.53) return carMic(x, { leak: poolSegment(random, pool, n), leakDb: -12 + 24 * random() ** 1.2, level });
+  if (r < 0.68) return sceneMic(random, x, pool, level);
+  if (r < 0.88) {
+    const road = random() < 0.5 ? roadNoise(random, n) : null;
+    return carMic(nobody, { road, roadDb: between(random, 0, 15), leak: poolSegment(random, pool, n), leakDb: 0, level: 0.05 });
+  }
+  if (r < 0.95) return roadNoise(random, n).map((v) => v * 10 ** (between(random, -50, -10) / 20));
+  return Float32Array.from({ length: n }, () => (random() - 0.5) * 10 ** (between(random, -90, -50) / 20));
+}
+
+/** `mics`, each through a car and a link of its own ('nb' or 'wb' at random): [heard samples] in the same order. */
+async function throughRandomCars(random, mics, preroll = 0) {
+  const links = mics.map(() => (random() < 0.5 ? 'nb' : 'wb'));
+  const heard = new Array(mics.length);
+  for (const link of ['nb', 'wb']) {
+    const idx = links.flatMap((l, i) => (l === link ? [i] : []));
+    if (!idx.length) continue;
+    const out = await throughCar(random, idx.map((i) => mics[i]), link, { preroll });
+    idx.forEach((i, k) => (heard[i] = out[k]));
+  }
+  return heard;
+}
+
+/** The hands-free negative stream: the first 11 minutes of each train-clean-100 speaker after the first 6, in scenes of a car. */
+async function prepareHandsFreeStream(opt) {
+  const feat = join(opt.scratch, 'feat');
+  mkdirSync(feat, { recursive: true });
+  if (existsSync(join(feat, 'hf-stream.json'))) return;
+  const t0 = Date.now();
+  const random = rng(71);
+  const { clips: pool } = loadClips(join(opt.scratch, 'sayings', 'speech-pool'));
+  const fd = openSync(join(feat, 'hf-stream.f32'), 'w');
+  let frames = 0;
+  let seconds = 0;
+  const speakers = speakersOf(opt, 'train-clean-100');
+  for (const [n, sp] of speakers.entries()) {
+    const files = filesOf(opt, 'train-clean-100', sp);
+    const chosen = [];
+    let estimate = 0;
+    for (const f of files) {
+      if (estimate >= 11 * 60 * RATE) break;
+      chosen.push(f);
+      estimate += statSync(f).size * 0.8;
+    }
+    const all = await decodeFiles(chosen, opt.scratch);
+    const take = all.subarray(Math.min(all.length, 6 * 60 * RATE), Math.min(all.length, 11 * 60 * RATE));
+    const stretches = [];
+    for (let at = 0; at + 20 * RATE <= take.length; at += 20 * RATE) stretches.push(take.subarray(at, at + 20 * RATE));
+    const heard = await throughRandomCars(random, stretches.map((x) => streamScene(random, x, pool)));
+    for (const h of heard) {
+      const f = D.features(h);
+      writeSync(fd, Buffer.from(f.data.buffer, f.data.byteOffset, f.data.byteLength));
+      frames += f.frames;
+      seconds += h.length / RATE;
+    }
+    if ((n + 1) % 25 === 0) console.log(`prepare-hf: stream: ${n + 1}/${speakers.length} speakers, ${(seconds / 3600).toFixed(1)} h (${((Date.now() - t0) / 1000).toFixed(0)} s)`);
+  }
+  closeSync(fd);
+  const info = { frames, speechHours: seconds / 3600, speakers: speakers.length };
+  writeFileSync(join(feat, 'hf-stream.json'), JSON.stringify(info));
+  console.log(`prepare-hf: stream: ${(seconds / 3600).toFixed(1)} h through a car from ${speakers.length} speakers; ${frames} frames (${((Date.now() - t0) / 1000).toFixed(0)} s)`);
+}
+
+/** Hands-free windows: positives (part 'pos': 4 windows of each saying) or negatives (part 'neg': heads, near words and two talkers). */
+async function prepareHandsFreeWindows(opt, part) {
+  const feat = join(opt.scratch, 'feat');
+  const name = `hf-${part}`;
+  if (existsSync(join(feat, `${name}.json`))) return;
+  const t0 = Date.now();
+  const dir = join(opt.scratch, 'sayings');
+  const { clips: pool } = loadClips(join(dir, 'speech-pool'));
+  const random = rng(part === 'pos' ? 73 : 79);
+  const positives = [...loadClips(join(dir, 'pos-espeak')).clips, ...loadClips(join(dir, 'pos-vits')).clips];
+  const fits = positives.filter((c) => c.length - PAD < WINDOW_SAMPLES - RATE * 0.1);
+  const jobs = []; // [{ voice, level }]: the voice track with the lead-in, and its level
+  const lay = (clip, how) => {
+    const { out, level } = layClip(random, clip, how);
+    const voice = new Float32Array(HF_LEAD + WINDOW_SAMPLES);
+    voice.set(out, HF_LEAD);
+    addAt(voice, Float32Array.from({ length: voice.length }, () => random() - 0.5), level * 10 ** (between(random, -70, -40) / 20));
+    jobs.push({ voice, level });
+  };
+  if (part === 'pos') {
+    for (const clip of fits) for (let k = 0; k < 4; k++) lay(clip, 'whole');
+  } else {
+    for (const clip of fits) lay(clip, 'head');
+    const negatives = [...loadClips(join(dir, 'neg-espeak')).clips, ...loadClips(join(dir, 'neg-vits')).clips];
+    for (const clip of negatives) {
+      lay(clip, 'whole');
+      lay(clip, 'any');
+    }
+    for (let k = 0; k < 4000; k++) {
+      // a talker and, 12 dB under to 12 dB over, another: the Bible leaking back while someone speaks
+      const voice = new Float32Array(HF_LEAD + WINDOW_SAMPLES);
+      voice.set(poolSegment(random, pool, voice.length));
+      jobs.push({ voice, level: rms(voice) || 1e-3, babble: true });
+    }
+  }
+  const fd = openSync(join(feat, `${name}.f32`), 'w');
+  let count = 0;
+  for (let at = 0; at < jobs.length; at += 300) {
+    const chunk = jobs.slice(at, at + 300);
+    const mics = chunk.map((j) => (j.babble ? carMic(j.voice, { leak: poolSegment(random, pool, j.voice.length), leakDb: -12 + 24 * random() ** 1.2, level: j.level }) : sceneMic(random, j.voice, pool, j.level)));
+    const heard = await throughRandomCars(random, mics, HF_LEAD);
+    for (const h of heard) {
+      const f = D.features(h);
+      const data = f.data.subarray(0, WINDOW * D.FRONT_END.bands);
+      writeSync(fd, Buffer.from(data.buffer, data.byteOffset, data.byteLength));
+      count++;
+    }
+    if (((at / 300) | 0) % 10 === 9) console.log(`prepare-hf: ${part}: ${count}/${jobs.length} windows (${((Date.now() - t0) / 1000).toFixed(0)} s)`);
+  }
+  closeSync(fd);
+  writeFileSync(join(feat, `${name}.json`), JSON.stringify({ count }));
+  console.log(`prepare-hf: ${count} ${part === 'pos' ? 'positive' : 'negative'} windows through a car (${((Date.now() - t0) / 1000).toFixed(0)} s)`);
+}
+
+async function prepareHandsFree(opt) {
+  const part = opt.part;
+  if (!['stream', 'pos', 'neg'].includes(part)) throw new Error('prepare-hf needs --part stream, pos or neg');
+  for (const p of [opt.python]) if (!existsSync(p)) throw new Error(`missing ${p}: see scripts/wake-probe/README.md`);
+  if (part === 'stream') await prepareHandsFreeStream(opt);
+  else await prepareHandsFreeWindows(opt, part);
+}
+
 // ---- trials: held-out sayings in four conditions, and long speech ----
 
 export const CONDITIONS = [
@@ -586,6 +750,8 @@ export const CONDITIONS = [
   { key: 'speech0', name: 'under speech at 0 dB', speech: 0 },
   { key: 'road5', name: 'under road-like noise at 5 dB', road: 5 },
 ];
+
+export const ALL_CONDITIONS = [...CONDITIONS, ...HANDSFREE_CONDITIONS];
 
 /** A trial clip: the saying at 2 s inside 5 s of the condition's background (or quiet), and where its sound ends. */
 function trialClip(random, clip, condition, speech) {
@@ -614,6 +780,41 @@ function scoreTrials(net, clips, speech, seed) {
   return out;
 }
 
+/**
+ * Every hands-free trial's window scores, by condition (HANDSFREE_CONDITIONS): the saying at 2 s inside 5 s, behind 3 s of
+ * lead-in, with road noise (brown) and the leaked `speech` (the Bible stand-in) at the condition's levels at the microphone,
+ * through a car's noise suppressor, gain and the narrowband or wideband link.
+ */
+async function scoreHandsfreeTrials(net, clips, speech, seed) {
+  const random = rng(seed);
+  const lead = 3 * RATE;
+  const out = {};
+  for (const c of HANDSFREE_CONDITIONS) {
+    const mics = clips.map((clip) => {
+      const length = lead + Math.max(5 * RATE, 3 * RATE + clip.length);
+      const voice = new Float32Array(length);
+      addAt(voice, clip, 1, lead + 2 * RATE);
+      addAt(voice, Float32Array.from({ length }, () => random() - 0.5), 3e-4);
+      const at = Math.floor(random() * (speech.length - length));
+      return carMic(voice, {
+        road: c.road === undefined ? null : brownNoise(random, length),
+        roadDb: c.road,
+        leak: c.leak === undefined ? null : speech.subarray(at, at + length),
+        leakDb: c.leak,
+        level: rms(clip),
+      });
+    });
+    const heard = await throughCar(random, mics, c.link, { preroll: lead });
+    out[c.key] = heard.map((samples, i) => ({ scores: D.scoreClip(net, samples), start: 2, end: (2 * RATE + clips[i].length - PAD) / RATE }));
+  }
+  return out;
+}
+
+/** The trials of every condition, plain and through the car. */
+async function scoreAllTrials(net, clips, speech, seed) {
+  return { ...scoreTrials(net, clips, speech, seed), ...(await scoreHandsfreeTrials(net, clips, speech, seed + 1)) };
+}
+
 /** Heard when a wake falls between the saying's start and 1 s after its end; the delay is from its end. */
 function judgeTrial(net, trial, rule) {
   const hit = D.wakes(trial.scores, rule, D.stepSeconds(net))
@@ -636,6 +837,34 @@ async function scoreSpeech(opt, net, subset) {
   return out;
 }
 
+/**
+ * Each LibriSpeech speaker's speech heard through a car (`link`): the speaker talks, with brown road noise under it in
+ * three of every four minutes (10, 5 and 0 dB under), through the car's noise suppressor, gain and the link; scored by a
+ * fresh listener, as scoreSpeech does.
+ */
+async function scoreCarSpeech(opt, net, subset, link) {
+  const out = [];
+  const t0 = Date.now();
+  const random = rng(link === 'nb' ? 61 : 62);
+  const roads = [undefined, 10, 5, 0];
+  let block = 0;
+  for (const sp of speakersOf(opt, subset)) {
+    const audio = await decodeFiles(filesOf(opt, subset, sp), opt.scratch);
+    const mic = new Float32Array(audio.length);
+    for (let at = 0; at < audio.length; at += 60 * RATE) {
+      const talk = audio.subarray(at, at + 60 * RATE);
+      const road = roads[block++ % roads.length];
+      mic.set(carMic(talk, { road: road === undefined ? null : brownNoise(random, talk.length), roadDb: road, level: rms(talk) || 1e-3 }), at);
+    }
+    const [heard] = await throughCar(random, [mic], link);
+    const listener = D.createListener(net, { keepScores: true });
+    for (let at = 0; at < heard.length; at += 10 * RATE) listener.push(heard.subarray(at, at + 10 * RATE));
+    out.push({ speaker: sp, seconds: heard.length / RATE, scores: Float32Array.from(listener.scores) });
+  }
+  console.log(`${subset} through a car, ${link === 'nb' ? 'narrowband' : 'wideband'}: ${out.length} speakers, ${(out.reduce((a, s) => a + s.seconds, 0) / 60).toFixed(1)} min scored in ${((Date.now() - t0) / 1000).toFixed(0)} s`);
+  return out;
+}
+
 async function speechSample(opt, subset, seconds) {
   const parts = [];
   for (const sp of speakersOf(opt, subset)) parts.push((await decodeFiles(filesOf(opt, subset, sp).slice(0, 2), opt.scratch)).subarray(0, seconds * RATE));
@@ -654,7 +883,7 @@ function falseWakes(net, speech, rule) {
 
 function missesBySet(net, trials, rule) {
   const out = {};
-  for (const c of CONDITIONS) {
+  for (const c of ALL_CONDITIONS) {
     const sets = [];
     trials[c.key].forEach((t, i) => {
       if (i % 20 === 0) sets.push(0);
@@ -702,8 +931,9 @@ async function calibrate(opt) {
   if (opt.smoke) return true;
   const { clips } = loadClips(join(opt.scratch, 'sayings', 'threshold'));
   const background = await speechSample(opt, 'dev-clean', 60);
-  const trials = scoreTrials(net, clips, background, 53);
+  const trials = await scoreAllTrials(net, clips, background, 53);
   const speech = await scoreSpeech(opt, net, 'dev-clean');
+  const car = { nb: await scoreCarSpeech(opt, net, 'dev-clean', 'nb'), wb: await scoreCarSpeech(opt, net, 'dev-clean', 'wb') };
   const hours = speech.reduce((a, s) => a + s.seconds, 0) / 3600;
   const candidates = [];
   for (const consecutive of [2, 3]) {
@@ -711,10 +941,11 @@ async function calibrate(opt) {
       const threshold = Number((1 / (1 + Math.exp(-z))).toFixed(5)); // a grid even in the network's log-odds
       const rule = { threshold, consecutive, refractory: 2 };
       const fw = falseWakes(net, speech, rule);
-      if (fw / hours > CALIBRATION_TARGET) continue;
+      const fwCar = { nb: falseWakes(net, car.nb, rule), wb: falseWakes(net, car.wb, rule) };
+      if ([fw, fwCar.nb, fwCar.wb].some((n) => n / hours > CALIBRATION_TARGET)) continue;
       const misses = missesBySet(net, trials, rule);
       const total = Object.values(misses).flat().reduce((a, b) => a + b, 0);
-      candidates.push({ rule, fw, misses, total });
+      candidates.push({ rule, fw, fwCar, misses, total });
       break; // the lowest threshold that meets the target, for this many in a row
     }
   }
@@ -725,16 +956,17 @@ async function calibrate(opt) {
   model.calibrated = {
     date: new Date().toISOString().slice(0, 10),
     setWithout: 'the measuring set: set on the threshold set only',
-    how: `the lowest threshold (0.27 to 0.99995, even steps of log-odds), for 2 or 3 windows in a row, with at most ${CALIBRATION_TARGET} false wakes an hour on the threshold speech; of those, the one with the fewest threshold misses`,
+    how: `the lowest threshold (0.27 to 0.99995, even steps of log-odds), for 2 or 3 windows in a row, with at most ${CALIBRATION_TARGET} false wakes an hour on the threshold speech, plain and heard through a car's Bluetooth hands-free microphone (narrowband and wideband); of those, the one with the fewest threshold misses over all the conditions, plain and hands-free`,
     speech: `LibriSpeech dev-clean, ${speech.length} speakers, ${(hours * 60).toFixed(1)} min`,
     sayings: `${clips.length} sayings: 3 each by VCTK VITS speakers ${JSON.parse(readFileSync(join(opt.scratch, 'sets.json'), 'utf8')).threshold.join(' ')}, and espeak-ng en-us-nyc and the m8, klatt5, Andy and Annie variants; none trained on`,
     falseWakes: best.fw,
     falseWakesPerHour: Number((best.fw / hours).toFixed(2)),
+    falseWakesThroughTheCar: { narrowband: best.fwCar.nb, wideband: best.fwCar.wb },
     missesBySetOf20: best.misses,
     candidates: candidates.map((c) => ({ ...c.rule, falseWakes: c.fw, misses: c.total })),
   };
   writeFileSync(MODEL_PATH, JSON.stringify(model) + '\n');
-  console.log(`calibrate: rule ${JSON.stringify(best.rule)}: ${best.fw} false wakes in ${(hours * 60).toFixed(1)} min of threshold speech; misses by set of 20: ${JSON.stringify(best.misses)}`);
+  console.log(`calibrate: rule ${JSON.stringify(best.rule)}: ${best.fw} false wakes in ${(hours * 60).toFixed(1)} min of threshold speech (${best.fwCar.nb} narrowband and ${best.fwCar.wb} wideband through a car); misses by set of 20: ${JSON.stringify(best.misses)}`);
   console.log(`calibrate: the model is written to examples/wake-spike/public/models/hey-lampas.json (${statSync(MODEL_PATH).size} bytes)`);
 }
 
@@ -750,8 +982,9 @@ async function measure(opt) {
   const rule = net.rule;
   const { clips } = loadClips(join(opt.scratch, 'sayings', 'measure'));
   const background = await speechSample(opt, 'test-clean', 60);
-  const trials = scoreTrials(net, clips, background, 59);
+  const trials = await scoreAllTrials(net, clips, background, 59);
   const speech = await scoreSpeech(opt, net, 'test-clean');
+  const car = { nb: await scoreCarSpeech(opt, net, 'test-clean', 'nb'), wb: await scoreCarSpeech(opt, net, 'test-clean', 'wb') };
   const minutes = speech.reduce((a, s) => a + s.seconds, 0) / 60;
   const fw = falseWakes(net, speech, rule);
   const perHour = fw / (minutes / 60);
@@ -760,8 +993,12 @@ async function measure(opt) {
   row('Measuring speech', `${minutes.toFixed(1)} min: LibriSpeech test-clean, ${speech.length} speakers, none trained on or used to set the threshold`, `at least ${BAR.measuringMinutes} min`, minutes >= BAR.measuringMinutes);
   row('False wakes', `${fw} in ${minutes.toFixed(1)} min`, '-', null);
   row('False wakes per hour', perHour.toFixed(2), `at most ${BAR.falseWakesPerHour}`, perHour <= BAR.falseWakesPerHour);
+  for (const [link, name] of [['nb', 'narrowband'], ['wb', 'wideband']]) {
+    const n = falseWakes(net, car[link], rule);
+    row(`False wakes per hour, heard through a car's hands-free microphone, ${name}`, `${(n / (minutes / 60)).toFixed(2)} (${n} in ${minutes.toFixed(1)} min)`, `at most ${BAR.falseWakesPerHour}`, n / (minutes / 60) <= BAR.falseWakesPerHour);
+  }
   const delays = [];
-  for (const c of CONDITIONS) {
+  for (const c of ALL_CONDITIONS) {
     const sets = [];
     trials[c.key].forEach((t, i) => {
       if (i % 20 === 0) sets.push(0);
@@ -788,8 +1025,8 @@ async function measure(opt) {
 
 async function main(argv) {
   const opt = options(argv);
-  const commands = { prepare, train, calibrate, measure };
-  if (!commands[opt.command]) throw new Error(`unknown command ${opt.command}: use prepare, train, calibrate or measure`);
+  const commands = { prepare, 'prepare-hf': prepareHandsFree, train, calibrate, measure };
+  if (!commands[opt.command]) throw new Error(`unknown command ${opt.command}: use prepare, prepare-hf, train, calibrate or measure`);
   const result = await commands[opt.command](opt);
   return result !== false;
 }

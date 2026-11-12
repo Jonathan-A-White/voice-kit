@@ -33,7 +33,8 @@ EPOCHS = 30
 MINE_AT = (8, 15, 22)
 CHANNELS = 64  # each convolution's outputs
 HIDDEN = 48  # the dense layer's units
-RANDOM_PER_EPOCH = 100_000
+RANDOM_PER_EPOCH = 140_000  # of them, HF_SHARE come from the hands-free stream when there is one
+HF_SHARE = 0.4
 HARD_PER_ROUND = 25_000
 
 
@@ -132,10 +133,28 @@ def main(scratch, repo, smoke=False):
     pos = load(os.path.join(feat, "pos.f32"), WINDOW)
     neg = load(os.path.join(feat, "negfixed.f32"), WINDOW)
     stream = torch.from_numpy(np.fromfile(os.path.join(feat, "stream.f32"), dtype=np.float32).reshape(-1, BANDS))
+    # what a car's Bluetooth hands-free microphone sends (probe.mjs prepare-hf): more positives, negatives and stream
+    hf_stream_from = stream.shape[0]
+    hf = all(os.path.exists(os.path.join(feat, f"hf-{part}.json")) for part in ("stream", "pos", "neg"))
+    if hf:
+        hf_pos = load(os.path.join(feat, "hf-pos.f32"), WINDOW)
+        hf_neg = load(os.path.join(feat, "hf-neg.f32"), WINDOW)
+        hf_stream = torch.from_numpy(np.fromfile(os.path.join(feat, "hf-stream.f32"), dtype=np.float32).reshape(-1, BANDS))
+        if smoke:
+            hf_pos, hf_neg, hf_stream = hf_pos[:500], hf_neg[:500], hf_stream[:250_000]
+        pos, neg = torch.cat([pos, hf_pos]), torch.cat([neg, hf_neg])
     if smoke:
         pos, neg, stream = pos[:2000], neg[:2000], stream[:1_000_000]
+        hf_stream_from = stream.shape[0]
+    if hf:
+        stream = torch.cat([stream, hf_stream])
+        hf_summary = (
+            f"{len(hf_pos)} positive windows (4 per saying), {len(hf_neg)} negative windows (heads of the phrase, near words, two talkers) and "
+            f"{(stream.shape[0] - hf_stream_from) * 0.02 / 3600:.1f} h of LibriSpeech train-clean-100 speech and nobody-talking scenes, each through a simulated car "
+            "(noise suppressor, gain, narrowband CVSD or wideband mSBC link, road noise, the Bible leaking back): scripts/wake-probe/handsfree.mjs"
+        )
     hours = stream.shape[0] * 0.02 / 3600
-    print(f"train: {len(pos)} positive windows, {len(neg)} fixed negative windows, {hours:.1f} h of negative stream", flush=True)
+    print(f"train: {len(pos)} positive windows, {len(neg)} fixed negative windows, {hours:.1f} h of negative stream" + (f" ({(stream.shape[0] - hf_stream_from) * 0.02 / 3600:.1f} h of it through a car)" if hf else ""), flush=True)
     gen = torch.Generator().manual_seed(7)
     net = Net()
     params = sum(p.numel() for p in net.parameters())
@@ -153,7 +172,14 @@ def main(scratch, repo, smoke=False):
             line = f"train: mined at epoch {epoch}: {over_half} of {total} training-speech windows scored 0.5 or more ({over_half / hours:.0f} an hour); {len(new)} added, {len(hard)} hard negatives in all"
             print(line, flush=True)
             log.append(line)
-        rand = torch.randint(0, stream.shape[0] - WINDOW, (RANDOM_PER_EPOCH,), generator=gen)
+        if hf:
+            n_hf = int(RANDOM_PER_EPOCH * HF_SHARE)
+            rand = torch.cat([
+                torch.randint(0, hf_stream_from - WINDOW, (RANDOM_PER_EPOCH - n_hf,), generator=gen),
+                torch.randint(hf_stream_from, stream.shape[0] - WINDOW, (n_hf,), generator=gen),
+            ])
+        else:
+            rand = torch.randint(0, stream.shape[0] - WINDOW, (RANDOM_PER_EPOCH,), generator=gen)
         starts = torch.cat([rand, hard])
         n_pos, n_neg, n_stream = len(pos), len(neg), len(starts)
         order = torch.randperm(n_pos + n_neg + n_stream, generator=gen)
@@ -221,7 +247,7 @@ def main(scratch, repo, smoke=False):
             "parameters": params,
             "epochs": EPOCHS,
             "seconds": round(time.time() - t0),
-            "data": meta["summary"],
+            "data": {**meta["summary"], **({"handsFree": hf_summary} if hf else {})},
             "log": log,
         },
         "window": WINDOW,
