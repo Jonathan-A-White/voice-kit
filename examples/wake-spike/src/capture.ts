@@ -11,6 +11,8 @@ export interface CaptureHandlers {
   onWake(wake: Wake): void;
   onStats(stats: DetectorStats): void;
   onError(message: string): void;
+  /** Each batch of input samples as the page received them, before the resampling; it is called before the batch goes on to the worker, so copy what you keep. */
+  onInput?(samples: Float32Array, inputRate: number): void;
 }
 
 export interface Capture {
@@ -53,7 +55,10 @@ export async function startCapture(stream: MediaStream, model: WakeModel, handle
       URL.revokeObjectURL(moduleUrl);
     }
     const tap = new AudioWorkletNode(context, 'wake-capture', { numberOfInputs: 1, numberOfOutputs: 1, channelCount: 1, channelCountMode: 'explicit' });
-    tap.port.onmessage = (event: MessageEvent<Float32Array>) => send({ type: 'audio', samples: event.data }, [event.data.buffer]);
+    tap.port.onmessage = (event: MessageEvent<Float32Array>) => {
+      handlers.onInput?.(event.data, context.sampleRate);
+      send({ type: 'audio', samples: event.data }, [event.data.buffer]);
+    };
     const silent = context.createGain();
     silent.gain.value = 0;
     context.createMediaStreamSource(stream).connect(tap);

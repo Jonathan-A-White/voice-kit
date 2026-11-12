@@ -21,6 +21,12 @@ The page has four parts, all taps:
    the time, how far into the listening it was, and the score. Below it: a **20 tries** count (wakes heard and minutes
    listened, kept across reloads; **Reset tries** clears it), the compute the detector spends per second of audio, the
    bytes of the model it fetched, and the headless numbers from `results.json` (see Results below).
+   **Record my tries** (off by default) keeps what the microphone sends the page, as the page receives it (after the
+   browser's and the car's own processing, before the detector's resampling): the last 10 minutes of the listen, in
+   memory only, with the time of each wake (and **Mark a miss** for a try that did not wake). **Send recording** shares
+   one WAV and the try log (JSON) by the Web Share API with files where the phone has it (pick Postern or mail), else
+   downloads both; the page says which. Nothing leaves the phone unless you tap **Send recording**; a reload loses the
+   recording; a new Listen with the toggle on replaces it.
 4. **Log**: every Play, Pause, Listen, input opened, track ended, muted or unmuted, wake, and device change, with the
    time, is kept in localStorage (it survives a reload). **Copy results** copies it as JSON.
 

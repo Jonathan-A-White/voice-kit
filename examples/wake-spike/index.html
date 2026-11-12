@@ -12,6 +12,7 @@
       button, select { font: inherit; min-height: 48px; padding: 0 14px; margin: 4px 4px 4px 0; }
       select { max-width: 100%; }
       label { display: block; }
+      input[type=checkbox] { width: 24px; height: 24px; vertical-align: middle; }
       audio { width: 100%; }
       meter { width: 100%; height: 28px; }
       pre { white-space: pre-wrap; word-break: break-word; font-size: 12px; background: #f4f4f4; padding: 6px; margin: 6px 0; }
@@ -54,6 +55,13 @@
       <p>20 tries: <span id="tries-text" data-testid="tries-text">no wakes yet</span></p>
       <p>Wakes <span data-testid="tries-wakes">0</span>, minutes listened <span data-testid="tries-minutes">0.0</span></p>
       <button id="reset-tries" type="button">Reset tries</button>
+      <label for="record-tries"><input id="record-tries" type="checkbox" /> Record my tries</label>
+      <p>Off by default. While on, the page keeps the last 10 minutes of what the microphone sends it, in memory, with the time of each wake. Nothing leaves the phone unless you tap "Send recording".</p>
+      <div>
+        <button id="mark-miss" type="button" disabled>Mark a miss</button>
+        <button id="send-recording" type="button" disabled>Send recording</button>
+      </div>
+      <p id="record-status" role="status" data-testid="record-status">Not recording.</p>
       <p>Compute: <span data-testid="compute">0</span> ms per second of audio</p>
       <p>Model fetched: <span data-testid="model-bytes">not yet</span> bytes</p>
       <pre id="headless" data-testid="headless">No headless numbers yet.</pre>

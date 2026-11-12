@@ -307,3 +307,161 @@ describe('the wake spike page with the saying as the microphone', () => {
     await context.close();
   }, 60_000);
 });
+
+describe('Record my tries on the wake spike page (mw-rdpwdp1.11)', () => {
+  let browser: Browser | undefined;
+  let context: BrowserContext;
+  let page: Page;
+  let strays: string[];
+  let microphone: string;
+
+  beforeAll(async () => {
+    microphone = join(tmpdir(), `wake-spike-rec-${process.pid}.wav`);
+    writeFileSync(microphone, fakeMicrophone());
+    browser = await launch(['--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream', `--use-file-for-fake-audio-capture=${microphone}`]);
+  }, 120_000);
+  afterAll(async () => {
+    await browser?.close();
+    rmSync(microphone, { force: true });
+  });
+
+  /** Opens the page; `sharing` stubs navigator.share/canShare so a test can see what the share sheet would be given. */
+  async function openPage(sharing: boolean): Promise<void> {
+    strays = [];
+    context = await (browser as Browser).newContext({ viewport: { width: 390, height: 844 }, acceptDownloads: true });
+    await context.route('**/*', (route) => {
+      strays.push(route.request().url());
+      return route.abort();
+    });
+    await context.route(`${ORIGIN}/**`, (route) => {
+      const path = new URL(route.request().url()).pathname;
+      const file = join(out, 'site', path === '/' ? 'index.html' : path);
+      if (!existsSync(file)) return route.fulfill({ status: 404, body: 'not found' });
+      return route.fulfill({ contentType: TYPES[extname(file)] ?? 'application/octet-stream', body: readFileSync(file) });
+    });
+    await context.addInitScript((stub) => {
+      const w = window as unknown as { __shared: { name: string; type: string; bytes: number[] }[][] };
+      w.__shared = [];
+      const nav = navigator as unknown as Record<string, unknown>;
+      if (stub) {
+        nav.canShare = (data: { files?: File[] }) => Boolean(data.files?.length);
+        nav.share = async (data: { files?: File[] }) => {
+          const kept = await Promise.all((data.files ?? []).map(async (file) => ({ name: file.name, type: file.type, bytes: [...new Uint8Array(await file.arrayBuffer())] })));
+          w.__shared.push(kept);
+        };
+      } else {
+        nav.canShare = undefined;
+        nav.share = undefined;
+      }
+    }, sharing);
+    page = await context.newPage();
+    await page.goto(`${ORIGIN}/`);
+    await page.getByRole('button', { name: 'Listen', exact: true }).waitFor();
+  }
+
+  const shared = () => page.evaluate(() => (window as unknown as { __shared: unknown[][] }).__shared.length);
+
+  /** Records until the saying has been heard `wakes` times, then stops listening. */
+  async function recordTries(wakes: number): Promise<void> {
+    await page.getByLabel('Record my tries').check();
+    await page.getByRole('button', { name: 'Listen', exact: true }).click();
+    await page.waitForFunction((n) => Number(document.querySelector('[data-testid="tries-wakes"]')?.textContent) >= n, wakes, { timeout: 30_000 });
+    await page.getByRole('button', { name: 'Stop listening' }).click();
+  }
+
+  const wavOf = (bytes: number[]) => {
+    const wav = Buffer.from(bytes);
+    return { wav, rate: wav.readUInt32LE(24), channels: wav.readUInt16LE(22), bits: wav.readUInt16LE(34), samples: wav.readUInt32LE(40) / 2 };
+  };
+
+  it('is off by default, and Send recording waits for a recording', async (ctx) => {
+    if (!browser) return ctx.skip();
+    await openPage(true);
+    expect(await page.getByLabel('Record my tries').isChecked()).toBe(false);
+    expect(await page.getByRole('button', { name: 'Send recording' }).isDisabled()).toBe(true);
+    // listening without the toggle keeps nothing
+    await page.getByRole('button', { name: 'Listen', exact: true }).click();
+    await page.getByTestId('heard').filter({ hasText: 'Heard Hey Lampas' }).waitFor({ timeout: 10_000 });
+    await page.getByRole('button', { name: 'Stop listening' }).click();
+    expect(await page.getByRole('button', { name: 'Send recording' }).isDisabled()).toBe(true);
+    await context.close();
+  }, 60_000);
+
+  it('keeps the input audio and the wake times while listening, and shares one WAV and the try log only when Send recording is tapped', async (ctx) => {
+    if (!browser) return ctx.skip();
+    await openPage(true);
+    await recordTries(2);
+    await page.getByRole('button', { name: 'Send recording' }).waitFor();
+    expect(await page.getByRole('button', { name: 'Send recording' }).isEnabled()).toBe(true);
+    // nothing has left the phone yet
+    expect(await shared()).toBe(0);
+    expect(strays).toEqual([]);
+
+    await page.getByRole('button', { name: 'Send recording' }).click();
+    await page.getByTestId('record-status').filter({ hasText: /shared/i }).waitFor();
+    expect(await shared()).toBe(1);
+    const [files] = await page.evaluate(() => (window as unknown as { __shared: { name: string; type: string; bytes: number[] }[][] }).__shared);
+    const wavFile = files.find((file) => file.name.endsWith('.wav'));
+    const logFile = files.find((file) => file.name.endsWith('.json'));
+    expect(files).toHaveLength(2);
+    expect(wavFile?.type).toBe('audio/wav');
+
+    const { wav, rate, channels, bits, samples } = wavOf(wavFile?.bytes ?? []);
+    expect(wav.subarray(0, 4).toString()).toBe('RIFF');
+    expect([channels, bits]).toEqual([1, 16]);
+    expect(rate).toBeGreaterThanOrEqual(8000);
+    // the saying plays twice in the loop: the file holds more than 3 s of what the page received
+    expect(samples / rate).toBeGreaterThan(3);
+    // and it is the saying, not silence: some samples are loud
+    let top = 0;
+    for (let i = 44; i + 1 < wav.length; i += 2) top = Math.max(top, Math.abs(wav.readInt16LE(i)));
+    expect(top).toBeGreaterThan(1000);
+
+    const tryLog = JSON.parse(Buffer.from(logFile?.bytes ?? []).toString()) as { inputRate: number; wakes: number; tries: { kind: string; at: number }[] };
+    expect(tryLog.inputRate).toBe(rate);
+    expect(tryLog.wakes).toBeGreaterThanOrEqual(2);
+    const wakes = tryLog.tries.filter((each) => each.kind === 'wake');
+    expect(wakes.length).toBe(tryLog.wakes);
+    expect(wakes[0].at).toBeGreaterThan(0);
+    expect(wakes[0].at).toBeLessThan(samples / rate);
+    expect((await events()).includes('recording-sent')).toBe(true);
+    expect(strays).toEqual([]);
+    await context.close();
+  }, 90_000);
+
+  it('Mark a miss keeps a miss time in the try log', async (ctx) => {
+    if (!browser) return ctx.skip();
+    await openPage(true);
+    await page.getByLabel('Record my tries').check();
+    expect(await page.getByRole('button', { name: 'Mark a miss' }).isDisabled()).toBe(true);
+    await page.getByRole('button', { name: 'Listen', exact: true }).click();
+    await page.getByTestId('heard').filter({ hasText: 'Listening for' }).waitFor({ timeout: 10_000 });
+    await page.getByRole('button', { name: 'Mark a miss' }).click();
+    await page.getByRole('button', { name: 'Stop listening' }).click();
+    await page.getByRole('button', { name: 'Send recording' }).click();
+    await page.getByTestId('record-status').filter({ hasText: /shared/i }).waitFor();
+    const [files] = await page.evaluate(() => (window as unknown as { __shared: { name: string; bytes: number[] }[][] }).__shared);
+    const tryLog = JSON.parse(Buffer.from(files.find((file) => file.name.endsWith('.json'))?.bytes ?? []).toString()) as { misses: number; tries: { kind: string; at: number }[] };
+    expect(tryLog.misses).toBe(1);
+    expect(tryLog.tries.find((each) => each.kind === 'miss')?.at).toBeGreaterThan(0);
+    await context.close();
+  }, 60_000);
+
+  it('downloads the WAV and the try log when the browser cannot share files, and says so', async (ctx) => {
+    if (!browser) return ctx.skip();
+    await openPage(false);
+    await recordTries(1);
+    const downloads: string[] = [];
+    page.on('download', (download) => downloads.push(download.suggestedFilename()));
+    await page.getByRole('button', { name: 'Send recording' }).click();
+    await page.getByTestId('record-status').filter({ hasText: /download/i }).waitFor();
+    await page.waitForTimeout(500);
+    expect(downloads.some((name) => name.endsWith('.wav'))).toBe(true);
+    expect(downloads.some((name) => name.endsWith('.json'))).toBe(true);
+    expect(await shared()).toBe(0);
+    expect(strays).toEqual([]);
+    await context.close();
+  }, 90_000);
+
+  const events = async () => (JSON.parse((await page.evaluate(() => localStorage.getItem('wake-spike-log'))) ?? '[]') as { event: string }[]).map((entry) => entry.event);
+});

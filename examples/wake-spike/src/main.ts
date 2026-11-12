@@ -9,8 +9,11 @@ import type { DetectorStats, Wake, WakeModel } from './detector.js';
 import { listInputs, openInput, startMeter } from './inputs.js';
 import type { OpenedInput } from './inputs.js';
 import { createLog } from './log.js';
+import { createRecorder } from './recording.js';
+import type { Recorder } from './recording.js';
 import { summarize } from './results.js';
 import type { Results } from './results.js';
+import { downloadFiles, sendFiles } from './share.js';
 import { describeTries, readTries, saveTries } from './tries.js';
 
 const JOHN_1 = 'https://openbible.com/audio/msb/MSB_43_Jhn_001_D.mp3';
@@ -36,6 +39,10 @@ const triesText = byId<HTMLElement>('tries-text');
 const triesWakes = document.querySelector<HTMLElement>('[data-testid="tries-wakes"]') as HTMLElement;
 const triesMinutes = document.querySelector<HTMLElement>('[data-testid="tries-minutes"]') as HTMLElement;
 const resetTries = byId<HTMLButtonElement>('reset-tries');
+const recordToggle = byId<HTMLInputElement>('record-tries');
+const markMiss = byId<HTMLButtonElement>('mark-miss');
+const sendRecording = byId<HTMLButtonElement>('send-recording');
+const recordStatus = byId<HTMLElement>('record-status');
 const compute = document.querySelector<HTMLElement>('[data-testid="compute"]') as HTMLElement;
 const modelBytes = document.querySelector<HTMLElement>('[data-testid="model-bytes"]') as HTMLElement;
 const headless = byId<HTMLElement>('headless');
@@ -155,6 +162,7 @@ function onWake(wake: Wake): void {
   heard.textContent = `Heard Hey Lampas at ${clock} (${wake.time.toFixed(1)} s of listening, score ${wake.score.toFixed(3)})`;
   tries = { ...tries, wakes: tries.wakes + 1 };
   showTries();
+  if (recordingNow) recorder?.markWake(wake);
   log.add('wake', { at: Number(wake.time.toFixed(3)), score: Number(wake.score.toFixed(4)) });
 }
 
@@ -169,7 +177,64 @@ function setListening(on: boolean): void {
   listenButton.disabled = on;
   stopButton.disabled = !on;
   select.disabled = on;
+  recordToggle.disabled = on;
+  if (!on) recordingNow = false;
+  showRecording();
 }
+
+// Record my tries: the input audio of a listen, as the page received it, kept in memory only (recording.ts) until Send
+// recording is tapped. A listen with the toggle on starts a new recording in place of the last one.
+let recorder: Recorder | undefined;
+let recordingNow = false; // this listen is being recorded
+let recordInput: { label: string; settings: unknown } = { label: '', settings: {} };
+let shownSecond = -1;
+
+function showRecording(note?: string): void {
+  markMiss.disabled = !(recordingNow && recorder);
+  sendRecording.disabled = !recorder || recorder.seconds() <= 0;
+  if (note) recordStatus.textContent = note;
+  else if (recordingNow) recordStatus.textContent = `Recording: ${Math.floor(recorder?.keptSeconds() ?? 0)} s kept (the last 10 minutes at most). Tap "Stop listening" when done.`;
+  else if (recorder && recorder.seconds() > 0) recordStatus.textContent = `Recorded ${recorder.keptSeconds().toFixed(1)} s. Tap "Send recording" to send it.`;
+  else recordStatus.textContent = recordToggle.checked ? 'Record my tries is on: tap "Listen" to start recording.' : 'Not recording.';
+}
+showRecording();
+recordToggle.addEventListener('change', () => {
+  log.add(recordToggle.checked ? 'record-on' : 'record-off');
+  showRecording();
+});
+
+function onInput(samples: Float32Array, inputRate: number): void {
+  if (!recordingNow) return;
+  recorder ??= createRecorder(inputRate);
+  recorder.add(samples);
+  const second = Math.floor(recorder.seconds());
+  if (second !== shownSecond) {
+    shownSecond = second;
+    showRecording();
+  }
+}
+
+markMiss.addEventListener('click', () => {
+  recorder?.markMiss();
+  log.add('miss-marked', { at: Number((recorder?.seconds() ?? 0).toFixed(3)) });
+  showRecording('Marked a miss.');
+});
+
+sendRecording.addEventListener('click', () => {
+  if (!recorder) return;
+  const stamp = new Date().toISOString().slice(0, 19).replace(/[-:]/g, '').replace('T', '-');
+  const files = [
+    new File([recorder.toWav()], `hey-lampas-tries-${stamp}.wav`, { type: 'audio/wav' }),
+    new File([JSON.stringify(recorder.tryLog(recordInput), null, 2)], `hey-lampas-tries-${stamp}.json`, { type: 'application/json' }),
+  ];
+  const seconds = recorder.keptSeconds().toFixed(1);
+  void sendFiles(files, navigator as unknown as Parameters<typeof sendFiles>[1], downloadFiles).then((how) => {
+    log.add('recording-sent', { how, seconds: Number(seconds), files: files.map((file) => file.name) });
+    if (how === 'shared') showRecording(`Shared ${seconds} s of audio and the try log with the share sheet.`);
+    else if (how === 'downloaded') showRecording(`This browser cannot share files: downloaded ${files.map((file) => file.name).join(' and ')} (${seconds} s of audio).`);
+    else showRecording('Share cancelled: nothing was sent.');
+  });
+});
 
 function endListening(): void {
   capture?.stop();
@@ -191,6 +256,12 @@ listenButton.addEventListener('click', () => {
   const deviceId = select.value;
   const choice = select.selectedOptions[0]?.textContent ?? 'Default';
   log.add('listen', { input: choice, deviceId: deviceId || null });
+  recordingNow = recordToggle.checked;
+  if (recordingNow) {
+    recorder = undefined;
+    shownSecond = -1;
+    recordInput = { label: '', settings: {} };
+  }
   setListening(true);
   status.textContent = 'Opening…';
   heardSeconds = 0;
@@ -203,6 +274,7 @@ listenButton.addEventListener('click', () => {
       trackLabel.textContent = input.label || '(no label)';
       trackSettings.textContent = JSON.stringify(input.settings, null, 2);
       log.add('input-opened', { label: input.label, settings: input.settings });
+      recordInput = { label: input.label, settings: input.settings };
       input.track.addEventListener('ended', () => {
         log.add('track-ended', { label: input.label });
         status.textContent = 'The input ended by itself.';
@@ -224,7 +296,7 @@ listenButton.addEventListener('click', () => {
       // The detector is the second question: if it cannot start, the input stays open and the first question is still answered.
       try {
         const loaded = await modelReady;
-        const started = await startCapture(input.stream, loaded.value, { onWake, onStats, onError: (error) => log.add('wake-error', { error }) });
+        const started = await startCapture(input.stream, loaded.value, { onWake, onStats, onInput, onError: (error) => log.add('wake-error', { error }) });
         if (opened === input) {
           capture = started;
           log.add('detector-started', { inputRate: started.inputRate, bytes: loaded.bytes });
