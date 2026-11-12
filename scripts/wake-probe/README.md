@@ -105,11 +105,15 @@ for part in stream pos neg; do nice -n 10 node scripts/wake-probe/probe.mjs prep
    the network takes for the phrase, and adds the worst as negatives (hard-negative mining).
 3. `calibrate` sets the rule on the threshold set: the lowest threshold, for 2 or 3 windows in a row, that keeps false
    wakes at or under 0.5 an hour on the threshold speech. Of those, it keeps the one with the fewer threshold misses.
-   It writes `examples/wake-spike/public/models/hey-lampas.json`.
+   When the hands-free features are there it also keeps false wakes on the same speech heard through a car (narrowband and
+   wideband) under that target, and counts the hands-free conditions' misses in the choice. About 100 min, most of it the
+   speech through the car. It writes `examples/wake-spike/public/models/hey-lampas.json`.
 4. `measure` runs the committed model on the measuring set and prints a table with the Governor's bar beside each
    number, met or not met. Add `--markdown` for the table as markdown. It reports:
    - false wakes, and false wakes an hour, over all of test-clean;
    - misses in sets of 20 held-out sayings: clean, under speech at 10 dB and at 0 dB, and under road-like noise at 5 dB;
+   - misses in sets of 20 in the twelve hands-free conditions, and false wakes an hour on test-clean heard through a car,
+     narrowband and wideband (about 100 min in all);
    - the delay from the phrase's end to the wake, median and worst;
    - the model's bytes.
 
@@ -169,4 +173,8 @@ no tool and no scratch folder, and takes seconds. It checks:
 - that the committed model and `licences.json` say what they must;
 - that the committed model hears the fixture saying (a VCTK speaker it never trained on) exactly once;
 - that it does not hear `packages/testing/clips/english.wav`, nor 30 s of silence;
-- the document's tables.
+- the document's tables;
+- that the committed model hears the fixture saying through a narrowband car, clean and under road noise at 5 dB.
+
+`handsfree.test.mjs` checks the simulation's parts: resampling, the call band, CVSD, gain, the suppressor, the levels
+carMic mixes at, the conditions, and (when `ffmpeg` is there) mSBC.
