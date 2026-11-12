@@ -6,6 +6,12 @@
 //   bible0        the same, at 0 dB: the Bible as loud as the saying
 //   brown5        under brown noise, a road proxy, at 5 dB
 //
+// and, for a car's Bluetooth hands-free microphone (story mw-rdpwdp1.12), twelve more: the same sayings, each with
+// the car's noise suppressor, gain and a narrowband ('nb': 8 kHz, 300-3400 Hz, CVSD) or wideband ('wb': 16 kHz, mSBC)
+// link on them (scripts/wake-probe/handsfree.mjs), clean, under brown noise at 10 and 0 dB, with the Bible leaking back
+// at 0 and -10 dB, and with brown noise at 5 dB and the Bible at -5 dB; the dB are the saying over the interferer, at
+// the microphone, before the car's processing. Each is made from 3 s of lead-in too, so the gates and the gain have settled.
+//
 // Run it after fetch-bible-audio.mjs (measure.mjs runs it for a set that is missing):
 //
 //   node examples/wake-spike/scripts/make-tries.mjs [--force]
@@ -16,6 +22,7 @@
 import { mkdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { HANDSFREE_CONDITIONS, brownNoise, carMic, throughCar } from '../../../scripts/wake-probe/handsfree.mjs';
 import { decode, rms, rng, say } from '../../../scripts/wake-probe/probe.mjs';
 import { DEFAULT_DIR, cachedFiles } from './fetch-bible-audio.mjs';
 
@@ -29,7 +36,9 @@ export const SETS = [
   { key: 'bible10', name: 'under Bible audio at 10 dB', bible: 10 },
   { key: 'bible0', name: 'under Bible audio at 0 dB', bible: 0 },
   { key: 'brown5', name: 'under brown noise (a road proxy) at 5 dB', brown: 5 },
+  ...HANDSFREE_CONDITIONS.map((c) => ({ key: c.key, name: c.name, handsfree: true, link: c.link, road: c.road, leak: c.leak })),
 ];
+export const LEAD_IN = 3; // seconds of lead-in a hands-free try is processed with, then cut off
 export const TRIES_DIR = join(DEFAULT_DIR, '..', 'tries');
 
 // The voices the model did not train on, named in scripts/wake-probe/README.md ('The three sets', Measure row): the
@@ -56,18 +65,7 @@ function shuffled(random, list) {
 }
 const pick = (random, list) => list[Math.floor(random() * list.length)];
 
-/** Brown noise (white noise integrated, leaky) with rms 1. */
-export function brownNoise(random, n) {
-  const out = new Float32Array(n);
-  let b = 0;
-  for (let i = 0; i < n; i++) {
-    b = 0.998 * b + 0.05 * (random() * 2 - 1);
-    out[i] = b;
-  }
-  const level = rms(out) || 1;
-  for (let i = 0; i < n; i++) out[i] /= level;
-  return out;
-}
+export { brownNoise };
 
 /** A 16-bit mono WAV file's samples as floats in [-1, 1], and its rate. */
 export function readWav(path) {
@@ -127,16 +125,16 @@ async function sayings() {
   return out;
 }
 
-/** 5 s of cached Bible audio for each try, the same for every Bible set: [Float32Array]. */
-async function bibleSegments(files, random) {
+/** `seconds` of cached Bible audio for each try, the same for every Bible set: [Float32Array]. */
+async function bibleSegments(files, random, seconds = TRY_SECONDS) {
   const out = [];
   const decoded = new Map();
   while (out.length < TRIES_PER_SET) {
     const file = pick(random, files);
     if (!decoded.has(file)) decoded.set(file, await decode(file));
     const audio = decoded.get(file);
-    const at = Math.floor(random() * (audio.length - TRY_SECONDS * RATE));
-    const segment = audio.slice(at, at + TRY_SECONDS * RATE);
+    const at = Math.floor(random() * (audio.length - seconds * RATE));
+    const segment = audio.slice(at, at + seconds * RATE);
     if (rms(segment) > 0.01) out.push(segment); // not a pause between verses
   }
   return out;
@@ -165,6 +163,34 @@ export function mixTry(clip, set, background, random) {
   return { samples: out, start: SAYING_AT, end: SAYING_AT + (clip.length - PAD * RATE) / RATE };
 }
 
+/**
+ * The hands-free tries of one set: each saying at SAYING_AT inside 5 s, behind LEAD_IN s of lead-in, with the set's road
+ * noise (brown) and Bible leak at the microphone, through the car and the link; the lead-in is cut off. [{ samples, start, end }]
+ */
+export async function handsfreeTries(heard, set, leaks, random) {
+  const lead = LEAD_IN * RATE;
+  const mics = heard.map((h, i) => {
+    const length = lead + Math.max(TRY_SECONDS * RATE, (SAYING_AT + 1) * RATE + h.clip.length);
+    const voice = new Float32Array(length);
+    voice.set(h.clip, lead + Math.round(SAYING_AT * RATE));
+    for (let k = 0; k < length; k++) voice[k] += (random() - 0.5) * 3e-4; // the near-quiet of a real room
+    return carMic(voice, {
+      road: set.road !== undefined ? brownNoise(random, length) : null,
+      roadDb: set.road,
+      leak: set.leak !== undefined ? leaks[i] : null,
+      leakDb: set.leak,
+      level: rms(h.clip),
+    });
+  });
+  const heardBy = await throughCar(random, mics, set.link, { preroll: lead });
+  return heardBy.map((samples, i) => {
+    let peak = 0;
+    for (let k = 0; k < samples.length; k++) peak = Math.max(peak, Math.abs(samples[k]));
+    if (peak > 0.95) for (let k = 0; k < samples.length; k++) samples[k] *= 0.95 / peak;
+    return { samples, start: SAYING_AT, end: SAYING_AT + (heard[i].clip.length - PAD * RATE) / RATE };
+  });
+}
+
 /** Makes every set that is not already there (or all, with force). Returns the keys of the sets it made. */
 export async function makeTries({ dir = TRIES_DIR, bibleDir = DEFAULT_DIR, force = false, say: log = console.log } = {}) {
   const todo = SETS.filter((set) => force || !existsSync(join(dir, `${set.key}.json`)));
@@ -175,13 +201,15 @@ export async function makeTries({ dir = TRIES_DIR, bibleDir = DEFAULT_DIR, force
   const heard = await sayings();
   log(`tries: ${heard.length} sayings by ${new Set(heard.map((h) => h.voice)).size} espeak-ng voices the model never trained on`);
   const segments = todo.some((set) => set.bible !== undefined) ? await bibleSegments(files, rng(5)) : [];
+  const leaks = todo.some((set) => set.leak !== undefined) ? await bibleSegments(files, rng(6), LEAD_IN + TRY_SECONDS + 1) : [];
   for (const set of todo) {
     const random = rng(100 + SETS.indexOf(set));
     const tries = [];
     const parts = [];
     let offset = 0;
+    const made = set.handsfree ? await handsfreeTries(heard, set, leaks, random) : null;
     heard.forEach((h, i) => {
-      const mixed = mixTry(h.clip, set, segments[i], random);
+      const mixed = made ? made[i] : mixTry(h.clip, set, segments[i], random);
       tries.push({ voice: h.voice, phrase: h.phrase, speed: h.speed, pitch: h.pitch, offset, length: mixed.samples.length, start: mixed.start, end: mixed.end });
       parts.push(mixed.samples);
       offset += mixed.samples.length;
@@ -193,7 +221,7 @@ export async function makeTries({ dir = TRIES_DIR, bibleDir = DEFAULT_DIR, force
       at += part.length;
     }
     writeWav(join(dir, `${set.key}.wav`), all);
-    writeFileSync(join(dir, `${set.key}.json`), JSON.stringify({ key: set.key, name: set.name, snr: set.bible ?? set.brown ?? null, tries }, null, 1));
+    writeFileSync(join(dir, `${set.key}.json`), JSON.stringify({ key: set.key, name: set.name, snr: set.bible ?? set.brown ?? null, ...(set.handsfree ? { link: set.link, road: set.road ?? null, leak: set.leak ?? null } : {}), tries }, null, 1));
     log(`tries: ${set.key}: ${tries.length} tries (${set.name})`);
   }
   return todo.map((set) => set.key);

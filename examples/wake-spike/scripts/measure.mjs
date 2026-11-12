@@ -1,6 +1,9 @@
 // Measures the wake detector headless and writes examples/wake-spike/results.json:
 //
 //   npm run measure --workspace wake-spike        (from the repo root; run it as `nice -n 10 npm run ...`)
+//   node examples/wake-spike/scripts/measure.mjs --model FILE --out FILE --quick
+//       measures another model file (the committed one's older self, say), writes the numbers to --out and leaves
+//       results.json alone; --quick skips compute (Node and Chromium), which does not depend on the training.
 //
 //   (a) false wakes over the cached Bible audio, as a count and per hour, with the minutes;
 //   (b) misses in each set of 20 tries (clean; under Bible audio at 10 dB and at 0 dB; under brown noise at 5 dB);
@@ -8,6 +11,9 @@
 //   (d) the bytes of every model file and their gzip size;
 //   (e) compute, in milliseconds per second of audio, in Node and in headless Chromium with the CPU throttled 4x (a
 //       phone proxy). Battery is NOT measured here: it needs a phone.
+//   (f) for a car's Bluetooth hands-free microphone (story mw-rdpwdp1.12): the sets of tries made through the car's
+//       noise suppressor, gain and a narrowband or wideband link (they are in (b)), and the false wakes while the Bible
+//       leaks through the car, narrowband and wideband, an hour of it each.
 //
 // It reads the detector from src/detector.ts (the file the page runs, transpiled to plain JavaScript), the model from
 // public/models, the Bible audio fetch-bible-audio.mjs cached and the tries make-tries.mjs made (it makes any set that
@@ -21,9 +27,10 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { gzipSync } from 'node:zlib';
 import ts from 'typescript';
 import { chromium } from 'playwright-core';
-import { decode } from '../../../scripts/wake-probe/probe.mjs';
+import { HANDSFREE_CONDITIONS, carMic, throughCar } from '../../../scripts/wake-probe/handsfree.mjs';
+import { decode, rms, rng } from '../../../scripts/wake-probe/probe.mjs';
 import { DEFAULT_DIR, cachedFiles } from './fetch-bible-audio.mjs';
-import { SETS, makeTries, readSet } from './make-tries.mjs';
+import { SETS, brownNoise, makeTries, readSet } from './make-tries.mjs';
 
 const HERE = fileURLToPath(new URL('..', import.meta.url));
 const REPO = fileURLToPath(new URL('../../..', import.meta.url));
@@ -78,6 +85,35 @@ async function soak(D, net, files) {
     seconds += audio.length / 16000;
   }
   return { minutes: seconds / 60, wakes, files: files.length, stats: detector.stats(), wallSeconds: (Date.now() - t0) / 1000 };
+}
+
+/**
+ * (f) The Bible through a car: each chapter is the leak at the microphone with nobody talking, road noise (brown) under
+ * it in three blocks of four, 10, 5 and 0 dB under the Bible, none in the fourth; through the car's noise suppressor,
+ * gain and the link, a fresh car's settings for every minute. One detector over all of it, as in (a).
+ */
+async function soakHandsfree(D, net, files, link) {
+  const detector = D.createDetector(net);
+  const random = rng(link === 'nb' ? 41 : 42);
+  const roads = [undefined, 10, 5, 0];
+  const wakes = [];
+  let seconds = 0;
+  let block = 0;
+  const t0 = Date.now();
+  for (const file of files) {
+    const audio = await decode(file);
+    const mic = new Float32Array(audio.length);
+    for (let at = 0; at < audio.length; at += 60 * 16000) {
+      const leak = audio.slice(at, at + 60 * 16000);
+      const road = roads[block++ % roads.length];
+      mic.set(carMic(new Float32Array(leak.length), { road: road === undefined ? null : brownNoise(random, leak.length), roadDb: road, leak, leakDb: 0, level: 0.1 }), at);
+    }
+    const [heard] = await throughCar(random, [mic], link); // one car's settings for the chapter
+    // w.time is already seconds from the start of the whole stream; `seconds` here is where this chapter began in it
+    for (const w of pushAll(detector, heard)) wakes.push({ at: w.time, inFile: w.time - seconds, score: w.score, file: file.split('/').pop() });
+    seconds += audio.length / 16000;
+  }
+  return { link, minutes: seconds / 60, wakes, files: files.length, wallSeconds: (Date.now() - t0) / 1000 };
 }
 
 /** (b) and (c) Each set of 20 tries, a fresh detector for each try. */
@@ -194,6 +230,9 @@ export function tableRows(r) {
   row('Bible audio played', `${fixed(r.bible.minutes, 1)} min of John (${r.bible.files} chapters, recorded voice)`, `at least ${BAR.bibleMinutes} min`, r.bible.minutes >= BAR.bibleMinutes);
   row('False wakes', `${r.bible.falseWakes} in ${fixed(r.bible.minutes, 1)} min`);
   row('False wakes an hour', fixed(r.bible.falseWakesPerHour), `at most ${BAR.falseWakesPerHour}`, r.bible.falseWakesPerHour <= BAR.falseWakesPerHour);
+  for (const [name, h] of Object.entries(r.bible.throughTheCar ?? {})) {
+    row(`False wakes an hour, Bible through the car, ${name}`, `${fixed(h.falseWakesPerHour)} (${h.falseWakes} in ${fixed(h.minutes, 1)} min)`, `at most ${BAR.falseWakesPerHour}`, h.falseWakesPerHour <= BAR.falseWakesPerHour);
+  }
   for (const set of r.tries.sets) row(`Misses, ${set.name}`, `${set.misses} in ${set.tries}`, `at most ${BAR.missesIn20} in 20`, set.misses <= BAR.missesIn20);
   row('Delay from the phrase end to the wake, median', `${r.tries.delayMedianMs} ms (${r.tries.heard} tries that woke)`);
   row('Delay, worst', `${r.tries.delayWorstMs} ms`);
@@ -213,13 +252,13 @@ export function printTable(rows, markdown) {
   return [header, ...cells].map((c) => c.map((cell, i) => cell.padEnd(widths[i])).join('  ')).join('\n');
 }
 
-export async function measure({ markdown = false } = {}) {
+export async function measure({ markdown = false, modelFile = join(MODELS, 'hey-lampas.json'), out = RESULTS, quick = false } = {}) {
   const started = Date.now();
   const files = cachedFiles();
   if (files.length === 0) throw new Error(`no Bible audio in ${DEFAULT_DIR}: run node examples/wake-spike/scripts/fetch-bible-audio.mjs first`);
   const { module: D, js, cleanup } = await loadDetector();
   try {
-    const modelJson = JSON.parse(readFileSync(join(MODELS, 'hey-lampas.json'), 'utf8'));
+    const modelJson = JSON.parse(readFileSync(modelFile, 'utf8'));
     const net = D.loadModel(modelJson);
     console.log(`measure: ${files.length} chapters of John cached; model trained ${modelJson.trained.date} at ${modelJson.trained.commit.slice(0, 9)}, rule ${JSON.stringify(net.rule)}`);
 
@@ -229,12 +268,26 @@ export async function measure({ markdown = false } = {}) {
     console.log(`measure: tries: ${sets.map((s) => `${s.key} ${s.misses} missed`).join(', ')}`);
     const delays = sets.flatMap((s) => s.delaysMs);
 
-    const bench = await benchAudio(D, files[0]);
-    const node = nodeCompute(D, net, bench.rate16, 16000);
-    const node48k = nodeCompute(D, net, bench.rate48, 48000);
-    console.log(`measure: compute in Node: ${fixed(node.msPerSecond)} ms per second of audio (${fixed(node48k.msPerSecond)} with 48 kHz in)`);
-    const chromiumResult = await chromiumCompute(js, modelJson, bench.rate48);
-    console.log(`measure: compute in Chromium ${chromiumResult.version}: ${fixed(chromiumResult.unthrottled.msPerSecond)} ms per second, throttled 4x ${fixed(chromiumResult.throttled4x.msPerSecond)}`);
+    const handsfree = {};
+    for (const link of ['nb', 'wb']) {
+      handsfree[link] = await soakHandsfree(D, net, files, link);
+      console.log(`measure: soak through the car, ${link === 'nb' ? 'narrowband' : 'wideband'}: ${fixed(handsfree[link].minutes, 1)} min scored in ${fixed(handsfree[link].wallSeconds, 0)} s, ${handsfree[link].wakes.length} wakes`);
+    }
+
+    let node;
+    let node48k;
+    let chromiumResult;
+    if (quick) {
+      node = node48k = { msPerSecond: NaN };
+      chromiumResult = { unthrottled: { msPerSecond: NaN }, throttled4x: { msPerSecond: NaN }, version: 'skipped' };
+    } else {
+      const bench = await benchAudio(D, files[0]);
+      node = nodeCompute(D, net, bench.rate16, 16000);
+      node48k = nodeCompute(D, net, bench.rate48, 48000);
+      console.log(`measure: compute in Node: ${fixed(node.msPerSecond)} ms per second of audio (${fixed(node48k.msPerSecond)} with 48 kHz in)`);
+      chromiumResult = await chromiumCompute(js, modelJson, bench.rate48);
+      console.log(`measure: compute in Chromium ${chromiumResult.version}: ${fixed(chromiumResult.unthrottled.msPerSecond)} ms per second, throttled 4x ${fixed(chromiumResult.throttled4x.msPerSecond)}`);
+    }
 
     const dirty = git('status', '--porcelain', '--', ':!examples/wake-spike/results.json', ':!examples/wake-spike/README.md') !== '';
     const hours = bible.minutes / 60;
@@ -251,6 +304,18 @@ export async function measure({ markdown = false } = {}) {
         falseWakes: bible.wakes.length,
         falseWakesPerHour: bible.wakes.length / hours,
         wakes: bible.wakes.map((w) => ({ atSeconds: Math.round(w.at * 10) / 10, secondsIntoFile: Math.round(w.inFile * 10) / 10, score: Math.round(w.score * 1000) / 1000, file: w.file })),
+        throughTheCar: Object.fromEntries(
+          Object.entries(handsfree).map(([link, h]) => [
+            link === 'nb' ? 'narrowband' : 'wideband',
+            {
+              minutes: h.minutes,
+              falseWakes: h.wakes.length,
+              falseWakesPerHour: h.wakes.length / (h.minutes / 60),
+              wakes: h.wakes.map((w) => ({ atSeconds: Math.round(w.at * 10) / 10, secondsIntoFile: Math.round(w.inFile * 10) / 10, score: Math.round(w.score * 1000) / 1000, file: w.file })),
+            },
+          ]),
+        ),
+        throughTheCarNote: 'The same chapters as the soak above with nobody talking: each is the Bible leaking from the car\'s speakers to its microphone, with road (brown) noise 10, 5 and 0 dB under it in three of every four minutes, through the car\'s noise suppressor and gain and a narrowband (8 kHz, 300-3400 Hz, CVSD) or wideband (16 kHz, mSBC) link. scripts/wake-probe/handsfree.mjs.',
       },
       tries: {
         sets,
@@ -270,11 +335,11 @@ export async function measure({ markdown = false } = {}) {
     };
     results.table = tableRows(results);
     results.bar.met = results.table.filter((r) => r.met !== '-').every((r) => r.met === 'met');
-    writeFileSync(RESULTS, JSON.stringify(results, null, 2) + '\n');
+    if (out !== '-') writeFileSync(out, JSON.stringify(results, null, 2) + '\n');
     const seconds = Math.round((Date.now() - started) / 1000);
     console.log(printTable(results.table, false));
     if (markdown) console.log('\n' + printTable(results.table, true));
-    console.log(`measure: wrote ${RESULTS}; ${BAR.label} is ${results.bar.met ? 'MET' : 'NOT MET'}; the run took ${Math.floor(seconds / 60)} min ${seconds % 60} s`);
+    console.log(`measure: wrote ${out}; ${BAR.label} is ${results.bar.met ? 'MET' : 'NOT MET'}; the run took ${Math.floor(seconds / 60)} min ${seconds % 60} s`);
     return results;
   } finally {
     cleanup();
@@ -282,7 +347,11 @@ export async function measure({ markdown = false } = {}) {
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  measure({ markdown: process.argv.includes('--markdown') }).then(
+  const flag = (name) => {
+    const at = process.argv.indexOf(name);
+    return at >= 0 ? process.argv[at + 1] : undefined;
+  };
+  measure({ markdown: process.argv.includes('--markdown'), quick: process.argv.includes('--quick'), modelFile: flag('--model'), out: flag('--out') }).then(
     () => process.exit(0),
     (err) => {
       console.error(`measure: ${err.stack ?? err.message}`);
