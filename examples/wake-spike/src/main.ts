@@ -195,7 +195,7 @@ function showRecording(note?: string): void {
   if (note) recordStatus.textContent = note;
   else if (recordingNow) recordStatus.textContent = `Recording: ${Math.floor(recorder?.keptSeconds() ?? 0)} s kept (the last 10 minutes at most). Tap "Stop listening" when done.`;
   else if (recorder && recorder.seconds() > 0) recordStatus.textContent = `Recorded ${recorder.keptSeconds().toFixed(1)} s. Tap "Send recording" to send it.`;
-  else recordStatus.textContent = recordToggle.checked ? 'Record my tries is on: tap "Listen" to start recording.' : 'Not recording.';
+  else recordStatus.textContent = recordToggle.checked ? 'Record my tries is on: tap "Listen" to start recording; tap "Mark a miss" for a try that did not wake.' : 'Not recording.';
 }
 showRecording();
 recordToggle.addEventListener('change', () => {
