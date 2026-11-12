@@ -4,6 +4,8 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'vitest';
+import { brownNoise, carMic, throughCar } from './handsfree.mjs';
+import { rng } from './probe.mjs';
 import { createListener, FRONT_END, frameCount, listen, loadModel, logMel, poolFrames, scoreClip, wakes, windowEnd } from './detector.mjs';
 
 const DOC = new URL('../../docs/wake-word-engines.md', import.meta.url);
@@ -211,4 +213,19 @@ test('the listener gives the same scores fed in chunks as fed at once, and windo
   assert.deepEqual(listener.scores, whole);
   assert.ok(whole.length > 0);
   assert.ok(Math.abs(windowEnd(net, 0) - (FRONT_END.win + FRONT_END.hop * (net.window * FRONT_END.pool - 1)) / FRONT_END.rate) < 1e-9);
+});
+
+test("the committed model hears 'Hey Lampas' through a car's narrowband hands-free microphone, with road noise at 5 dB, exactly once", { timeout: SCORING_TIMEOUT }, async () => {
+  const net = loaded();
+  const wav = readWav(FIXTURE);
+  const lead = 3 * 16000;
+  const random = rng(8);
+  for (const road of [undefined, 5]) {
+    const voice = new Float32Array(lead + wav.samples.length + 2 * 16000);
+    voice.set(wav.samples, lead + 16000);
+    const level = Math.sqrt(wav.samples.reduce((a, v) => a + v * v, 0) / wav.samples.length);
+    const mic = carMic(voice, { road: road === undefined ? null : brownNoise(random, voice.length), roadDb: road, level });
+    const [heard] = await throughCar(random, [mic], 'nb', { preroll: lead });
+    assert.equal(listen(net, heard).length, 1, `heard ${listen(net, heard).length} times (road ${road})`);
+  }
 });
