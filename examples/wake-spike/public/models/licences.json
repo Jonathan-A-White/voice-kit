@@ -1,10 +1,19 @@
 {
   "model": "hey-lampas.json",
-  "about": "Every file, dataset and tool the training of hey-lampas.json used, with its source, its licence and the licence's own words, read at the source on the date given (story mw-rdpwdp1.1). The model's weights are ours (MIT), made by scripts/wake-probe from the data below. The road-like noise and the room echo are made by scripts/wake-probe/probe.mjs itself, from no recording. Nothing below ships except the model.",
+  "about": "Every file, dataset and tool the training of hey-lampas.json used, with its source, its licence and the licence's own words, read at the source on the date given (story mw-rdpwdp1.1; the hands-free entries, story mw-rdpwdp1.12). The model's weights are ours (MIT), made by scripts/wake-probe from the data below. The road-like noise and the room echo are made by scripts/wake-probe/probe.mjs itself, from no recording. Nothing below ships except the model. The road-like noise, the room echo and the car's microphone chain (noise suppressor, gain, CVSD, resamplers) are made by scripts/wake-probe from no recording.",
   "entries": [
     {
       "name": "scripts/wake-probe (probe.mjs, detector.mjs, train.py, vits_say.py)",
       "use": "makes the training audio, trains the network, sets the threshold, measures; detector.mjs is the scoring code",
+      "url": "https://github.com/Jonathan-A-White/voice-kit",
+      "where": "LICENSE",
+      "licence": "MIT",
+      "words": "Permission is hereby granted, free of charge, to any person obtaining a copy of this software",
+      "readOn": "2026-11-11"
+    },
+    {
+      "name": "scripts/wake-probe/handsfree.mjs (the car's Bluetooth hands-free microphone, simulated)",
+      "use": "puts the training audio, the threshold and measuring audio and the page's tries through a model of a car's microphone chain: road noise and the Bible leaking back, a spectral-gate noise suppressor, automatic gain, a narrowband (8 kHz, 300-3400 Hz, CVSD) or wideband (16 kHz, mSBC) link; plain JavaScript written for this repo, no code copied",
       "url": "https://github.com/Jonathan-A-White/voice-kit",
       "where": "LICENSE",
       "licence": "MIT",
@@ -103,11 +112,20 @@
     },
     {
       "name": "FFmpeg",
-      "use": "decodes LibriSpeech and resamples the sayings to 16 kHz; run as a tool, never shipped",
+      "use": "decodes LibriSpeech and resamples the sayings to 16 kHz; and, for the car's wideband Bluetooth link (story mw-rdpwdp1.12), its SBC encoder and decoder in mSBC mode (libavcodec/sbcenc.c, sbcdec.c) put the training and measuring audio through the hands-free wideband codec; run as a tool, never shipped",
       "url": "https://github.com/FFmpeg/FFmpeg",
-      "where": "LICENSE.md",
+      "where": "LICENSE.md, and the header of libavcodec/sbcenc.c",
       "licence": "LGPL-2.1-or-later",
-      "words": "Most files in FFmpeg are under the GNU Lesser General Public License version 2.1 or later (LGPL v2.1+).",
+      "words": "Most files in FFmpeg are under the GNU Lesser General Public License version 2.1 or later (LGPL v2.1+). / sbcenc.c: \"FFmpeg is free software; you can redistribute it and/or modify it under the terms of the GNU Lesser General Public License as published by the Free Software Foundation; either version 2.1 of the License, or (at your option) any later version.\"",
+      "readOn": "2026-11-11"
+    },
+    {
+      "name": "Bluetooth CVSD (continuously variable slope delta) codec parameters",
+      "use": "handsfree.mjs's cvsd() is written from the published parameters of the Bluetooth narrowband voice codec (64 kbit/s; step 10 to 1280 of 16-bit units, step decay 1 - 1/1024, accumulator decay 1 - 1/32, 4 equal bits to grow the step); no code is taken from any implementation; nothing of the specification ships",
+      "url": "https://www.gnuradio.org/doc/doxygen/cvsd__decode__bs_8h_source.html",
+      "where": "GNU Radio's CVSD block documentation (accumulator decay 0.96875 = 1 - 1/32, J 4, 'modeled after the Bluetooth standard') and a US patent, 8,340,977, quoting Bluetooth Specification 2.0 (delta min 10, delta max 1280, beta 1 - 1/1024); the Bluetooth Core Specification (Vol 2, Part B) itself was not opened, so the values are as those two sources give them",
+      "licence": "parameters of a published standard; no licence needed for the numbers, none of the specification's text or any code is copied",
+      "words": "in accordance with Version 2.0 of the Bluetooth Specification, delta min=10, delta max=1280 and beta = 1 - 1/1024 for 64 kbit/s CVSD (patent text, as searched on 2026-11-11)",
       "readOn": "2026-11-11"
     }
   ],
