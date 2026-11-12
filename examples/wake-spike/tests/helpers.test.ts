@@ -55,6 +55,19 @@ describe('the headless summary', () => {
     const text = summarize(results);
     for (const word of ['False wakes', 'Misses, clean', 'Model size', 'Compute in Chromium, CPU throttled 4x', 'Battery']) expect(text).toContain(word);
   });
+
+  it("has the car's hands-free rows, narrowband and wideband, and the bar is met on those without the Bible loud (mw-rdpwdp1.12)", () => {
+    const file = fileURLToPath(new URL('../results.json', import.meta.url));
+    const results = JSON.parse(readFileSync(file, 'utf8')) as Results;
+    const car = results.table.filter((r) => /hands-free|through the car/.test(r.measure));
+    // 12 sets of 20 tries (6 conditions, narrowband and wideband) and the Bible's false wakes through the car, each link
+    expect(car.filter((r) => r.measure.startsWith('Misses, narrowband hands-free')).length).toBe(6);
+    expect(car.filter((r) => r.measure.startsWith('Misses, wideband hands-free')).length).toBe(6);
+    expect(car.filter((r) => r.measure.startsWith('False wakes an hour, Bible through the car')).length).toBe(2);
+    // the Bible leaking back louder than the voice is not yet within the bar: the README says which sets (do not hide them here)
+    for (const r of car.filter((x) => !/Bible leaking at/.test(x.measure))) expect(r.met, r.measure).toBe('met');
+    for (const r of car.filter((x) => /Bible leaking at/.test(x.measure))) expect(['met', 'not met']).toContain(r.met);
+  });
 });
 
 describe('measure.mjs', () => {

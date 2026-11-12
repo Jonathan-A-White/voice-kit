@@ -7,6 +7,9 @@ Route (d) of [docs/wake-word-engines.md](../../docs/wake-word-engines.md): our o
   It is plain JavaScript with no import, so the page can run it as it is (story mw-rdpwdp1.3).
 - `probe.mjs` makes the audio, sets the threshold and measures. Everything it scores goes through `detector.mjs`.
 - `train.py` trains the network (PyTorch, on the CPU) on features `probe.mjs` made with `detector.mjs`.
+- `handsfree.mjs` is a car's Bluetooth hands-free microphone, simulated: road noise and the Bible leaking back, a noise
+  suppressor, automatic gain, and a narrowband (CVSD) or wideband (mSBC) call-quality link. `probe.mjs` trains and
+  measures through it (story mw-rdpwdp1.12; see [The car's microphone](#the-cars-microphone)).
 - `vits_say.py` speaks sayings with Coqui's VITS voice trained on VCTK (109 speakers).
 
 The trained model is committed as `examples/wake-spike/public/models/hey-lampas.json`. Beside it,
@@ -21,6 +24,7 @@ It is a spike, not a library. Nothing in it is exported, and no package imports 
 - [Where it keeps things](#where-it-keeps-things)
 - [How to run it](#how-to-run-it)
 - [The three sets](#the-three-sets)
+- [The car's microphone](#the-cars-microphone)
 - [Tests](#tests)
 
 <!-- /toc -->
@@ -79,6 +83,13 @@ nice -n 10 node scripts/wake-probe/probe.mjs calibrate   # about 20 min; writes 
 node scripts/wake-probe/probe.mjs measure                # about 20 min; reads only the committed model
 ```
 
+For the car's microphone, run `prepare-hf` after `prepare` and before `train` (three processes that may run together,
+about 50 min at low priority; `train.py` uses the hands-free features when all three parts are there):
+
+```sh
+for part in stream pos neg; do nice -n 10 node scripts/wake-probe/probe.mjs prepare-hf --part $part & done; wait
+```
+
 1. `prepare` makes the audio, then turns it into the network's features with `detector.mjs`:
    - sayings of 'Hey Lampas' by espeak-ng voices and by the VCTK VITS voice's training speakers;
    - their sayings of near words and sentences;
@@ -94,11 +105,15 @@ node scripts/wake-probe/probe.mjs measure                # about 20 min; reads o
    the network takes for the phrase, and adds the worst as negatives (hard-negative mining).
 3. `calibrate` sets the rule on the threshold set: the lowest threshold, for 2 or 3 windows in a row, that keeps false
    wakes at or under 0.5 an hour on the threshold speech. Of those, it keeps the one with the fewer threshold misses.
-   It writes `examples/wake-spike/public/models/hey-lampas.json`.
+   When the hands-free features are there it also keeps false wakes on the same speech heard through a car (narrowband and
+   wideband) under that target, and counts the hands-free conditions' misses in the choice. About 100 min, most of it the
+   speech through the car. It writes `examples/wake-spike/public/models/hey-lampas.json`.
 4. `measure` runs the committed model on the measuring set and prints a table with the Governor's bar beside each
    number, met or not met. Add `--markdown` for the table as markdown. It reports:
    - false wakes, and false wakes an hour, over all of test-clean;
    - misses in sets of 20 held-out sayings: clean, under speech at 10 dB and at 0 dB, and under road-like noise at 5 dB;
+   - misses in sets of 20 in the twelve hands-free conditions, and false wakes an hour on test-clean heard through a car,
+     narrowband and wideband (about 100 min in all);
    - the delay from the phrase's end to the wake, median and worst;
    - the model's bytes.
 
@@ -120,6 +135,34 @@ The sets are kept apart by speaker and by voice:
 LibriSpeech's parts share no speaker. One more VCTK speaker spoke the test's fixture saying and is in no set.
 `probe.mjs` picks the VCTK speakers with a fixed seed, and writes them to `route-d/sets.json`.
 
+## The car's microphone
+
+In the Governor's car the page heard 13 and then 9 of 20 tries (mw-rdpwdp1.4): while the page listens the car switches
+to the Bluetooth hands-free profile, and its own microphone reaches the phone as a call. `handsfree.mjs` models that
+chain, in this order:
+
+1. the microphone hears the voice, road noise (`roadDb` dB under the voice) and the Bible leaking back from the car's
+   speakers (`leakDb`; negative means the Bible is louder than the voice). These levels are at the microphone, before
+   the car's processing;
+2. the car's noise suppressor, a spectral gate: it tracks each frequency's steady floor, cuts what is not over it, and
+   so clips quiet tails and weak consonants (`suppress`);
+3. automatic gain to a level of its own, up to 30 dB (`agc`);
+4. the link. Narrowband: 300 Hz high-pass, 8 kHz, low-pass at 3.4 kHz, CVSD (64 kbit/s), back up to 16 kHz as the
+   phone's resampler does (`linkNarrow`; a quarter of the training cars use a cheap linear resampler that leaves
+   images above 4 kHz). Wideband: 80 Hz to 7 kHz and mSBC through FFmpeg's SBC encoder and decoder (`linkWide`, `msbc`).
+
+It is a model of kinds of car, not a recording of one: the suppressor's and the gain's settings are drawn afresh for
+every clip. CVSD is written from the Bluetooth parameters (see `licences.json` for where they were read); mSBC is
+FFmpeg's. What the Governor's own car sends is not known; `mw-rdpwdp1.11` records it, and a recording is the better
+test when there is one.
+
+The held-out set is `HANDSFREE_CONDITIONS`: each link clean, with road noise at 10 and at 0 dB, with the Bible at 0 and
+at -10 dB, and with road noise at 5 dB and the Bible at -5 dB. `measure` puts the measuring set's sayings through all
+twelve (the Bible stand-in is test-clean speech) and test-clean speech through the car, narrowband and wideband, for
+false wakes. The page's `scripts/measure.mjs` does the same with its 20 espeak-ng tries and the cached Bible audio.
+Training uses wider levels than the held-out set (road 20 down to -3 dB, the Bible 12 dB under to 12 dB over the
+voice), 4 windows of each saying, 11,290 negative windows and 21 h of speech, all through random cars, beside the plain data.
+
 ## Tests
 
 `probe.test.mjs` runs in the root `npm test`, or alone with `npx vitest run scripts/wake-probe`. It needs no network,
@@ -130,4 +173,8 @@ no tool and no scratch folder, and takes seconds. It checks:
 - that the committed model and `licences.json` say what they must;
 - that the committed model hears the fixture saying (a VCTK speaker it never trained on) exactly once;
 - that it does not hear `packages/testing/clips/english.wav`, nor 30 s of silence;
-- the document's tables.
+- the document's tables;
+- that the committed model hears the fixture saying through a narrowband car, clean and under road noise at 5 dB.
+
+`handsfree.test.mjs` checks the simulation's parts: resampling, the call band, CVSD, gain, the suppressor, the levels
+carMic mixes at, the conditions, and (when `ffmpeg` is there) mSBC.
