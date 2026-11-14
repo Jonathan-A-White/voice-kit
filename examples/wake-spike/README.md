@@ -44,6 +44,7 @@ the microphone with the browser's own settings (echo cancellation and noise supp
 - [Run it locally](#run-it-locally)
 - [Measure it](#measure-it)
 - [Results](#results)
+- [Hands-free check](#hands-free-check)
 - [Where it is published](#where-it-is-published)
 
 <!-- /toc -->
@@ -168,6 +169,34 @@ the car demo (mw-rdpwdp1.4), and a recording from "Record my tries" (mw-rdpwdp1.
 The network is the same size and shape as before (469,912 bytes), so its compute should be what it was; the compute rows above
 read higher (81 ms per second in Node against 33) because another measuring run was using the laptop at the same time, so
 treat them as an upper bound and not as a change.
+
+## Hands-free check
+
+The question (the hands-free epic's risk 1): can Android Chrome's speech recogniser hear him while the wake detector holds the
+microphone? Nothing waits on the answer: the session's default, `handover`, works either way. The answer decides a later polish:
+`share` as the default (one stream, no gap, no switching of the car's sound).
+
+The panel "Hands-free check" runs the real session from `voice-kit/handsfree` with composer's `startListening` after "Hey Lampas":
+the open chime, his words to the end of his pause, the lower chime. The page's detector is the session's wake: in `handover`
+the session lets the microphone go at the wake so the recogniser opens it itself (and opens the detector again afterwards); in
+`share` the detector keeps running and the recogniser listens on a clone of its track. The page's own audio is paused at the wake
+and played again at the close if it was playing, as an app will do. Each exchange adds one entry to the log (and so to **Copy
+results**): `hands-free-check` with `way`, `pauseMs`, `openMs` (milliseconds from the wake to the recogniser being open),
+`words` or `error` (the error's kind; a recogniser that merely hears nothing is not an error here, so `closed` says `no-speech`),
+`trackEnded` and `trackMuted` (the detector's track, from the wake to the close) and `wakeAgain` (`not yet`, then `yes` once the
+wake is heard again).
+
+Steps, at home or parked, on his phone:
+
+1. Open <https://jonathan-a-white.github.io/voice-kit/>, tap **Listen** and allow the microphone.
+2. Under "Hands-free check" choose **share**.
+3. Say "Hey Lampas", wait for the chime, say "read John three". Right: the page shows the words.
+4. Choose **handover** (tap **Stop listening** first, then **Listen** again) and do the same.
+5. Tap **Copy results** and send them to the Mayor.
+6. With the car's Bluetooth connected, do it once more, parked.
+
+The panel's logic is `src/handsfreeCheck.ts`, over injected ports, tested in `tests/handsfree-check.test.ts` with the kit's own
+fake wake and the mic fake's recogniser.
 
 ## Where it is published
 

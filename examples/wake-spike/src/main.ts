@@ -3,8 +3,15 @@
 // puts it on the clipboard. The first question is whether opening a microphone drops the car's sound to call quality; the
 // second is whether a small model can hear 'Hey Lampas' on the page: Listen also feeds the input to the wake detector
 // (a worklet and a Web Worker, from 'voice-kit/wake') and shows what it hears, what it costs and the headless numbers.
+// The third is whether the speech recogniser can hear him after the wake (the Hands-free check: the real session from
+// 'voice-kit/handsfree', whose wake is that detector over the chosen input, opened and closed by the session as it needs).
+import { startListening } from 'voice-kit/composer';
+import { createChimes } from 'voice-kit/handsfree';
+import type { WakePort } from 'voice-kit/handsfree';
 import { startCapture } from 'voice-kit/wake';
 import type { Capture, DetectorStats, Wake, WakeModel } from 'voice-kit/wake';
+import { createHandsFreeCheck } from './handsfreeCheck.js';
+import type { CheckView } from './handsfreeCheck.js';
 import { listInputs, openInput, startMeter } from './inputs.js';
 import type { OpenedInput } from './inputs.js';
 import { createLog } from './log.js';
@@ -45,6 +52,12 @@ const recordStatus = byId<HTMLElement>('record-status');
 const compute = document.querySelector<HTMLElement>('[data-testid="compute"]') as HTMLElement;
 const modelBytes = document.querySelector<HTMLElement>('[data-testid="model-bytes"]') as HTMLElement;
 const headless = byId<HTMLElement>('headless');
+const wayHandover = byId<HTMLInputElement>('way-handover');
+const wayShare = byId<HTMLInputElement>('way-share');
+const pauseLength = byId<HTMLSelectElement>('pause-length');
+const hfState = byId<HTMLElement>('hf-state');
+const hfHeard = byId<HTMLElement>('hf-heard');
+const hfLast = byId<HTMLElement>('hf-last');
 
 // The model file, next to the page (public/models). The headless numbers are bundled if scripts/measure.mjs has written them.
 const MODEL_URL = 'models/hey-lampas.json';
@@ -177,6 +190,8 @@ function setListening(on: boolean): void {
   stopButton.disabled = !on;
   select.disabled = on;
   recordToggle.disabled = on;
+  wayHandover.disabled = on;
+  wayShare.disabled = on;
   if (!on) recordingNow = false;
   showRecording();
 }
@@ -235,7 +250,8 @@ sendRecording.addEventListener('click', () => {
   });
 });
 
-function endListening(): void {
+/** Lets the microphone go: the detector, the meter and the input. Safe to call twice. */
+function releaseInput(): void {
   capture?.stop();
   capture = undefined;
   stopMeter?.();
@@ -243,8 +259,119 @@ function endListening(): void {
   opened?.close();
   opened = undefined;
   level.value = 0;
+}
+
+function endListening(): void {
+  check.stop();
+  releaseInput();
   setListening(false);
 }
+
+const failureKind = (err: unknown): 'permission-denied' | 'no-microphone' | 'other' => {
+  const name = err instanceof Error ? err.name : '';
+  if (name === 'NotAllowedError' || name === 'SecurityError') return 'permission-denied';
+  if (name === 'NotFoundError' || name === 'OverconstrainedError') return 'no-microphone';
+  return 'other';
+};
+
+/**
+ * The wake as the session sees it: each start opens the chosen input and runs the detector on it (what Listen has always
+ * done), each stop lets the microphone go. In 'handover' the session stops it at a wake so the recogniser can open the
+ * microphone itself, and starts it again afterwards; in 'share' it keeps running and the recogniser listens on a clone of its track.
+ */
+const pageWake: WakePort = {
+  async start(onSessionWake) {
+    const deviceId = select.value;
+    heardSeconds = 0;
+    const modelReady = fetchModel();
+    modelReady.catch(() => undefined); // reported below, once the input is open
+    let input: OpenedInput;
+    try {
+      input = await openInput(media as MediaDevices, deviceId);
+    } catch (err) {
+      log.add('listen-failed', { error: message(err) });
+      status.textContent = `Could not open the input: ${message(err)}`;
+      return { ok: false, kind: failureKind(err), message: message(err) };
+    }
+    opened = input;
+    trackLabel.textContent = input.label || '(no label)';
+    trackSettings.textContent = JSON.stringify(input.settings, null, 2);
+    log.add('input-opened', { label: input.label, settings: input.settings });
+    recordInput = { label: input.label, settings: input.settings };
+    input.track.addEventListener('ended', () => {
+      if (opened !== input) return; // ended by the session's own stop
+      log.add('track-ended', { label: input.label });
+      status.textContent = 'The input ended by itself.';
+      endListening();
+    });
+    input.track.addEventListener('mute', () => {
+      log.add('track-muted', { label: input.label });
+      status.textContent = 'The input is muted by the system.';
+    });
+    input.track.addEventListener('unmute', () => {
+      log.add('track-unmuted', { label: input.label });
+      status.textContent = 'Listening. Tap "Stop listening" when done.';
+    });
+    stopMeter = startMeter(input.stream, (value) => {
+      level.value = value;
+    });
+    status.textContent = 'Listening. Tap "Stop listening" when done.';
+    await refreshInputs();
+    // The detector is the second question: if it cannot start, the input stays open and the first question is still answered.
+    try {
+      const loaded = await modelReady;
+      const started = await startCapture(
+        input.stream,
+        loaded.value,
+        {
+          onWake: (wake) => {
+            onWake(wake);
+            onSessionWake();
+          },
+          onStats,
+          onInput,
+          onError: (error) => log.add('wake-error', { error }),
+        },
+      );
+      if (opened === input) {
+        capture = started;
+        log.add('detector-started', { inputRate: started.inputRate, bytes: loaded.bytes });
+        heard.textContent = 'Listening for "Hey Lampas".';
+      } else started.stop();
+    } catch (err) {
+      log.add('detector-failed', { error: message(err) });
+      heard.textContent = `The wake detector could not start: ${message(err)}`;
+    }
+    return {
+      ok: true,
+      track: input.track,
+      stop() {
+        if (opened === input) releaseInput();
+      },
+    };
+  },
+};
+
+// The Hands-free check: the real session over the page's wake. The audio element is the page's own.
+function showCheck(view: CheckView): void {
+  hfState.textContent = view.state;
+  hfHeard.textContent = view.heard || 'nothing yet';
+  hfLast.textContent = view.last || 'No exchange yet.';
+}
+const check = createHandsFreeCheck({
+  wake: pageWake,
+  listen: startListening,
+  chime: createChimes(),
+  audio: {
+    isPlaying: () => !player.paused && !player.ended,
+    pause: () => player.pause(),
+    play: () => player.play().catch((err: unknown) => void log.add('play-failed', { error: message(err) })),
+  },
+  log,
+  way: () => (wayShare.checked ? 'share' : 'handover'),
+  pauseMs: () => Number(pauseLength.value) || 1500,
+  onChange: showCheck,
+});
 
 listenButton.addEventListener('click', () => {
   if (!media) {
@@ -252,9 +379,8 @@ listenButton.addEventListener('click', () => {
     log.add('listen-failed', { error: 'no mediaDevices' });
     return;
   }
-  const deviceId = select.value;
   const choice = select.selectedOptions[0]?.textContent ?? 'Default';
-  log.add('listen', { input: choice, deviceId: deviceId || null });
+  log.add('listen', { input: choice, deviceId: select.value || null });
   recordingNow = recordToggle.checked;
   if (recordingNow) {
     recorder = undefined;
@@ -263,54 +389,10 @@ listenButton.addEventListener('click', () => {
   }
   setListening(true);
   status.textContent = 'Opening…';
-  heardSeconds = 0;
-  const modelReady = fetchModel();
-  modelReady.catch(() => undefined); // reported below, once the input is open
-  void (async () => {
-    try {
-      const input = await openInput(media, deviceId);
-      opened = input;
-      trackLabel.textContent = input.label || '(no label)';
-      trackSettings.textContent = JSON.stringify(input.settings, null, 2);
-      log.add('input-opened', { label: input.label, settings: input.settings });
-      recordInput = { label: input.label, settings: input.settings };
-      input.track.addEventListener('ended', () => {
-        log.add('track-ended', { label: input.label });
-        status.textContent = 'The input ended by itself.';
-        endListening();
-      });
-      input.track.addEventListener('mute', () => {
-        log.add('track-muted', { label: input.label });
-        status.textContent = 'The input is muted by the system.';
-      });
-      input.track.addEventListener('unmute', () => {
-        log.add('track-unmuted', { label: input.label });
-        status.textContent = 'Listening. Tap "Stop listening" when done.';
-      });
-      stopMeter = startMeter(input.stream, (value) => {
-        level.value = value;
-      });
-      status.textContent = 'Listening. Tap "Stop listening" when done.';
-      await refreshInputs();
-      // The detector is the second question: if it cannot start, the input stays open and the first question is still answered.
-      try {
-        const loaded = await modelReady;
-        const started = await startCapture(input.stream, loaded.value, { onWake, onStats, onInput, onError: (error) => log.add('wake-error', { error }) });
-        if (opened === input) {
-          capture = started;
-          log.add('detector-started', { inputRate: started.inputRate, bytes: loaded.bytes });
-          heard.textContent = 'Listening for "Hey Lampas".';
-        } else started.stop();
-      } catch (err) {
-        log.add('detector-failed', { error: message(err) });
-        heard.textContent = `The wake detector could not start: ${message(err)}`;
-      }
-    } catch (err) {
-      log.add('listen-failed', { error: message(err) });
-      status.textContent = `Could not open the input: ${message(err)}`;
-      endListening();
-    }
-  })();
+  // The session opens the wake (pageWake above): the input, then the detector. If it could not, nothing is left open.
+  void check.start().then(() => {
+    if (check.state().name === 'failed') endListening();
+  });
 });
 
 stopButton.addEventListener('click', () => {

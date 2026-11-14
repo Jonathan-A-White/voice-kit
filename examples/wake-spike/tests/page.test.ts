@@ -197,6 +197,26 @@ describe('the wake spike page', () => {
     await context.close();
   }, 90_000);
 
+  it('has a Hands-free check panel with both ways and the pause lengths, and the ways are fixed while it listens', async (ctx) => {
+    if (!browser) return ctx.skip();
+    await newContext();
+    await openPage();
+    await page.getByRole('heading', { name: 'Hands-free check' }).waitFor();
+    expect(await page.getByLabel('handover', { exact: true }).isChecked()).toBe(true);
+    expect(await page.getByLabel('share', { exact: true }).isChecked()).toBe(false);
+    expect(await page.getByLabel('Pause length', { exact: true }).locator('option').allTextContents()).toEqual(['1.5 s', '3 s']);
+    await page.getByLabel('share', { exact: true }).check();
+    await page.getByRole('button', { name: 'Listen', exact: true }).click();
+    await enabled('stop');
+    expect(await page.getByLabel('handover', { exact: true }).isDisabled()).toBe(true);
+    expect(await page.getByLabel('share', { exact: true }).isDisabled()).toBe(true);
+    await page.getByRole('button', { name: 'Stop listening' }).click();
+    await enabled('listen');
+    expect(await page.getByLabel('share', { exact: true }).isEnabled()).toBe(true);
+    expect(strays).toEqual([]);
+    await context.close();
+  }, 60_000);
+
   it('Play streams John 1 from an audio element that has no crossorigin attribute, and the log keeps it across a reload', async (ctx) => {
     if (!browser) return ctx.skip();
     await newContext();
@@ -306,6 +326,70 @@ describe('the wake spike page with the saying as the microphone', () => {
     expect(strays).toEqual([]);
     await context.close();
   }, 60_000);
+});
+
+describe.each(['handover', 'share'] as const)('the Hands-free check on the wake spike page, way %s (mw-rl10piw.4)', (way) => {
+  let browser: Browser | undefined;
+  let context: BrowserContext;
+  let page: Page;
+  let strays: string[];
+  let microphone: string;
+
+  beforeAll(async () => {
+    microphone = join(tmpdir(), `wake-spike-hf-${way}-${process.pid}.wav`);
+    writeFileSync(microphone, fakeMicrophone());
+    browser = await launch(['--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream', `--use-file-for-fake-audio-capture=${microphone}`]);
+  }, 120_000);
+  afterAll(async () => {
+    await browser?.close();
+    rmSync(microphone, { force: true });
+  });
+
+  const log = async () => JSON.parse((await page.evaluate(() => localStorage.getItem('wake-spike-log'))) ?? '[]') as { event: string; detail?: Record<string, unknown> }[];
+
+  it('a wake from the fixture saying runs the session; with no speech service the entry names the error and the page goes on listening', async (ctx) => {
+    if (!browser) return ctx.skip();
+    strays = [];
+    context = await browser.newContext({ viewport: { width: 390, height: 844 } });
+    await context.route('**/*', (route) => {
+      strays.push(route.request().url());
+      return route.abort();
+    });
+    await context.route(`${ORIGIN}/**`, (route) => {
+      const path = new URL(route.request().url()).pathname;
+      const file = join(out, 'site', path === '/' ? 'index.html' : path);
+      if (!existsSync(file)) return route.fulfill({ status: 404, body: 'not found' });
+      return route.fulfill({ contentType: TYPES[extname(file)] ?? 'application/octet-stream', body: readFileSync(file) });
+    });
+    page = await context.newPage();
+    await page.goto(`${ORIGIN}/`);
+    await page.getByLabel(way, { exact: true }).check();
+    await page.getByRole('button', { name: 'Listen', exact: true }).click();
+
+    // the first wake runs the session; headless Chromium has no speech service, so the recogniser ends in an error and the entry says which
+    await page.waitForFunction(() => (JSON.parse(localStorage.getItem('wake-spike-log') ?? '[]') as { event: string }[]).some((entry) => entry.event === 'hands-free-check'), undefined, { timeout: 30_000 });
+    const first = (await log()).find((entry) => entry.event === 'hands-free-check');
+    expect(first?.detail).toMatchObject({ way, trackEnded: false, wakeAgain: expect.stringMatching(/^(not yet|yes)$/) });
+    // No speech service answers here: composer treats a recogniser that hears nothing as a pause (a transient error it restarts
+    // through), so the entry holds no words, no error kind, and the session's own reason for closing; a fatal error would
+    // carry its kind in `error`. Either way the entry says why it ended, and the page goes on.
+    const outcome = first?.detail as { words: string | null; error: string | null; closed: string };
+    expect(outcome.words !== null || outcome.error !== null || outcome.closed.length > 0).toBe(true);
+
+    // no stuck state: the wake is heard again (the saying loops) and the page is still listening
+    await page.waitForFunction(() => (JSON.parse(localStorage.getItem('wake-spike-log') ?? '[]') as { event: string; detail?: { wakeAgain?: string } }[]).some((entry) => entry.event === 'hands-free-check' && entry.detail?.wakeAgain === 'yes'), undefined, { timeout: 40_000 });
+    await page.getByTestId('hf-last').filter({ hasText: 'wake heard again: yes' }).waitFor();
+    expect(await page.getByRole('button', { name: 'Stop listening' }).isEnabled()).toBe(true);
+    await page.getByTestId('hf-state').filter({ hasText: /Waiting|Listening|Starting/ }).waitFor();
+
+    // Stop listening leaves no microphone open
+    await page.getByRole('button', { name: 'Stop listening' }).click();
+    await page.getByRole('button', { name: 'Listen', exact: true }).waitFor();
+    await page.waitForTimeout(500);
+    expect(await page.getByTestId('hf-state').textContent()).toMatch(/^Off/);
+    expect(strays).toEqual([]);
+    await context.close();
+  }, 120_000);
 });
 
 describe('Record my tries on the wake spike page (mw-rdpwdp1.11)', () => {
