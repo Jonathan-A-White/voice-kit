@@ -271,6 +271,12 @@ Data and tools behind the wake-word spike's model (`scripts/wake-probe`; every f
   `examples/wake-spike/tests/fixtures/hey-lampas-espeak.wav` (kept as data) and makes its sets of 20 tries; run as a tool,
   never shipped. Licence:
   [GPL-3.0-or-later](https://github.com/espeak-ng/espeak-ng/blob/master/COPYING). Kind: tool.
+- [openbible.com Bible audio](https://openbible.com/audio/): the recorded John (`https://openbible.com/audio/msb/MSB_43_Jhn_001_D.mp3`
+  to `MSB_43_Jhn_021_D.mp3`) that the wake spike's page plays and that `examples/wake-spike/scripts/fetch-bible-audio.mjs` fetches
+  for the soak, as the speech the wake word must not fire on. The pages state no licence. Licence:
+  [none stated](https://openbible.com/audio/). It is fetched at run time (the soak one file at a time, 2 s apart, into a cache
+  outside the repo; the page streams it from the publisher) and is never committed, bundled or shipped. We use it as published.
+  Kind: data.
 
 Projects and ideas we took:
 

@@ -71,6 +71,16 @@ describe('README Credits', () => {
     expect(problemsWithCredits(readme, runtimeDependencies(), allDependencies())).toEqual([]);
   });
 
+  it('credits the Bible audio the wake soak fetches: its source, that no licence is stated, and that it is never committed', () => {
+    const readme = readFileSync(new URL('../README.md', import.meta.url), 'utf8');
+    const credit = parseCredits(creditsSection(readme)).find((c) => /openbible/i.test(c.name + c.text));
+    expect(credit, 'Credits has no entry for the openbible.com Bible audio').toBeDefined();
+    expect(credit.text).toContain('https://openbible.com/audio/msb/MSB_43_Jhn_');
+    expect(credit.text).toMatch(/no licen[cs]e/i);
+    expect(credit.text).toMatch(/never committed/i);
+    expect(credit.kind).toBe('data');
+  });
+
   it('fails a credit for a package that is no longer a dependency', () => {
     expect(problemsWithCredits(GOOD, ['alpha'], ['alpha'])).toEqual([
       'credit "@scope/beta" is a package that is no longer a dependency (remove the credit, or give it another Kind)',
