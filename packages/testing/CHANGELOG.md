@@ -2,6 +2,16 @@
 
 Newest first. Breaking changes come first in a release, each with its migration in one sentence.
 
+## 0.5.0 (2026-11-14, not yet tagged)
+
+- New (mw-rl10piw.2): `voice-kit/testing/handsfree`, a wake word for an app's tests. `installWake(target)` (the global object, where
+  `startWake` looks) and `wakeInitScript(options)` for Playwright put a handle on `__bsvKitTesting.wake`; with it there, the kit's own
+  `startWake` (voice-kit/wake) opens no microphone and loads no model. The handle: `say()` (one wake to every open startWake),
+  `listening` (a startWake is open), `starts` (a count), `tracks` and `liveTracks` (the fake microphone tracks, clones included),
+  `failWith(kind)` (every later startWake fails with that kind until `failWith()`), `options.openMs` (100) and `uninstall()`.
+- The fake mic's `MediaRecorder` casts its chunks for the `Blob` constructor, so `mic.ts` also type-checks under the DOM library (the
+  hands-free tests read it with it). No change in behaviour.
+
 ## 0.4.1 (2026-10-23, not yet tagged)
 
 - Fixed (mw-k4sekr.1): the fake speech's default clock is `performance.now` (`Date.now` only where there is no `performance`), as the fake mic's

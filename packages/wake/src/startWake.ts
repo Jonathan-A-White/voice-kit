@@ -60,8 +60,19 @@ function openFailure(err: unknown): WakeFailure {
 
 const g = globalThis as { AudioContext?: unknown; AudioWorkletNode?: unknown; Worker?: unknown; navigator?: { mediaDevices?: { getUserMedia?: unknown } } };
 
+/** The testing seam's shape: voice-kit/testing/handsfree's installWake puts it on globalThis.__bsvKitTesting.wake. */
+interface WakeSeam {
+  start(options: WakeOptions): Promise<StartWakeResult>;
+}
+
 /** Listens for the wake word. Resolves once the detector is running, or with the reason it could not be. */
 export async function startWake(options: WakeOptions): Promise<StartWakeResult> {
+  // The one testing seam (mw-rl10piw.2): when a test or a page's init script has installed the fake wake
+  // (voice-kit/testing/handsfree: installWake, wakeInitScript), the call is handed to it, so no microphone is opened and no
+  // model is loaded; its handle says the wake word. Nothing else here knows about tests.
+  const seam = (globalThis as { __bsvKitTesting?: { wake?: WakeSeam } }).__bsvKitTesting?.wake;
+  if (seam && typeof seam.start === 'function') return seam.start(options);
+
   if (typeof g.AudioContext !== 'function' || typeof g.AudioWorkletNode !== 'function' || typeof g.Worker !== 'function') {
     return failure('not-supported', 'This browser has no AudioWorklet or Web Worker.');
   }

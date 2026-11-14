@@ -481,7 +481,8 @@ function mountMic(target: object, options: MicOptions & { clip: Clip }): MicFake
       const pcm = this.stream.read(fromMs, toMs);
       const parts: Uint8Array[] = isWav(this.mimeType) && !this.#sent ? [this.stream.wavHeader(last ? pcm.length : null), pcm] : [pcm];
       this.#sent = true;
-      this.emit('dataavailable', { data: new BlobCtor(parts, { type: this.mimeType }) });
+      // cast: under the DOM lib (a package that type-checks this file with it) a Uint8Array<ArrayBufferLike> is not a BlobPart
+      this.emit('dataavailable', { data: new BlobCtor(parts as unknown as ConstructorParameters<typeof Blob>[0], { type: this.mimeType }) });
     }
     #flush() {
       const to = this.stream.elapsedMs();

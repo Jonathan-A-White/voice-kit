@@ -1,7 +1,7 @@
 {
   "name": "@voice-kit/testing",
-  "version": "0.4.1",
-  "description": "voice-kit: honest fakes for an app's tests, in vitest and Playwright: speech synthesis and a microphone (getUserMedia, MediaRecorder, SpeechRecognition) that behave like Android Chrome in time; and, for a talk, a grind that answers scripted turns and a store that records.",
+  "version": "0.5.0",
+  "description": "voice-kit: honest fakes for an app's tests, in vitest and Playwright: speech synthesis and a microphone (getUserMedia, MediaRecorder, SpeechRecognition) that behave like Android Chrome in time; a wake word that voice-kit/wake's startWake hands itself to, said by the test; and, for a talk, a grind that answers scripted turns and a store that records.",
   "license": "MIT",
   "type": "module",
   "main": "./dist/index.js",
@@ -22,6 +22,10 @@
     "./talks": {
       "types": "./dist/talks.d.ts",
       "default": "./dist/talks.js"
+    },
+    "./handsfree": {
+      "types": "./dist/handsfree.d.ts",
+      "default": "./dist/handsfree.js"
     }
   },
   "files": [

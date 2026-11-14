@@ -13,6 +13,7 @@ It imports nothing from the other voice-kit libraries and needs no DOM library: 
 - [In Playwright](#in-playwright)
 - [Honest speech](#honest-speech)
 - [Honest microphone](#honest-microphone)
+- [Wake word](#wake-word)
 - [Credits](#credits)
 - [Talks](#talks)
 
@@ -34,6 +35,7 @@ Then import the subpaths:
 | `voice-kit/testing/speech`  | `speechSynthesis`, `SpeechSynthesisUtterance`                       |
 | `voice-kit/testing/mic`     | `navigator.mediaDevices.getUserMedia`, `MediaRecorder`, `SpeechRecognition` and `webkitSpeechRecognition` |
 | `voice-kit/testing/talks`   | a grind that answers scripted turns, and a talk store that records (see below)                      |
+| `voice-kit/testing/handsfree` | the wake word: `voice-kit/wake`'s `startWake` hands itself to it (see [Wake word](#wake-word))      |
 
 (The fake Postern backend for grist tests, `bsv-kit/testing`, did not move: it stays in
 [bsv-kit](https://github.com/Jonathan-A-White/bsv-kit) with grist.)
@@ -127,6 +129,37 @@ Script options are JSON: everything but `clock`. The handle's name, `__bsvKitTes
 
 The recogniser hears the clip's transcript whatever `lang` it is given, and a recogniser and a stream open at once each play the clip
 from their own start (Android Chrome would let only one hold the microphone).
+
+## Wake word
+
+`installWake(target)` puts a handle on `target.__bsvKitTesting.wake`, and the kit's own `startWake` (`voice-kit/wake`) looks there
+first: while the handle is there, `startWake` opens no microphone, fetches and runs no model, and makes no AudioWorklet or Worker.
+It is one documented check at the top of `startWake`, the only place the kit knows about tests. `startWake` reads `globalThis`,
+so install on the global object (the default). In Playwright, `page.addInitScript(wakeInitScript())` does the same on the page.
+
+```ts
+import { installWake } from 'voice-kit/testing/handsfree';
+
+const wake = installWake(); // before the app starts its wake
+// ... the app calls startWake({ modelUrl, onWake }) as it always does; it opens after 100 ms (openMs) ...
+wake.say(); // one wake: every open startWake's onWake is called once
+expect(wake.listening).toBe(true); // a startWake is open (resolved and not stopped)
+expect(wake.starts).toBe(1); // how many times startWake was called
+expect(wake.liveTracks).toBe(1); // fake microphone tracks not stopped, clones included (wake.tracks has them all)
+wake.failWith('permission-denied'); // every later startWake fails with that kind ('not-supported', 'no-microphone', 'other')
+wake.failWith(); // and starts again
+wake.uninstall();
+```
+
+| What              | How it behaves |
+| ----------------- | -------------- |
+| `startWake`       | counts a start; after `openMs` (100) resolves `{ ok: true, stop, track, stream, inputRate: 48000, model }` with a fake live track (or the `stream` it was given, whose tracks it leaves alone), or `{ ok: false, kind, message }` while `failWith(kind)` is set |
+| `stop()`          | ends the track it opened; `listening` is false once no startWake is open; safe twice |
+| `track.clone()`   | a new live track, counted in `tracks` and `liveTracks` (a hands-free 'share' gives the recogniser one) |
+| `say()`           | calls `onWake({ time, score, window })` of every open startWake; returns false when none is open |
+
+With `voice-kit/testing/mic`'s recogniser behind composer's `startListening`, `voice-kit/handsfree` runs whole exchanges on fake
+time; see its [README](../handsfree/README.md#testing).
 
 ## Credits
 
