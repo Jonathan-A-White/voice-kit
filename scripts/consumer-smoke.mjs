@@ -9,6 +9,8 @@
 //   - 'voice-kit/talks/grind' gives the grind's instructions part and answer fragment in plain node, and the tutor client carries out its examples;
 //   - 'voice-kit/testing/talks' drives that loop with a scripted grind and a recording store;
 //   - 'voice-kit/wake' hears the saying once in plain node, on the packed model;
+//   - 'voice-kit/handsfree' runs one whole exchange (a fake wake, the fake recogniser, a command, a follow-up, the close) in the
+//     vitest the app installs, with 'voice-kit/testing/handsfree' and 'voice-kit/testing/mic'; its import graph reaches only voice-kit/wake;
 //   - 'voice-kit/testing/speech' and 'voice-kit/testing/mic' run in the vitest the app installs (fake timers), by import
 //     and by init script.
 // The "fresh clone" is the working tree as it stands (tracked and untracked files, minus what git ignores),
@@ -50,7 +52,7 @@ try {
 
   // The exports map names the entry points (and package.json), nothing else: no deep imports.
   const entries = Object.keys(JSON.parse(readFileSync(join(installed, 'package.json'), 'utf-8')).exports).sort();
-  const expected = ['./composer', './composer/styles.css', './forms', './package.json', './speech', './speech/react', './speech/styles.css', './talks', './talks/dexie', './talks/grind', './talks/react', './talks/styles.css', './testing/mic', './testing/speech', './testing/talks', './wake', './wake/models/*'];
+  const expected = ['./composer', './composer/styles.css', './forms', './handsfree', './package.json', './speech', './speech/react', './speech/styles.css', './talks', './talks/dexie', './talks/grind', './talks/react', './talks/styles.css', './testing/handsfree', './testing/mic', './testing/speech', './testing/talks', './wake', './wake/models/*'];
   if (JSON.stringify(entries) !== JSON.stringify(expected)) throw new Error('exports: ' + entries.join(', '));
   console.log('the exports map names the entry points');
 
@@ -365,6 +367,81 @@ console.log('voice-kit/wake hears the saying once');
 `,
   );
   console.log(run('node', ['wake.mjs', join(clone, 'examples/wake-spike/tests/fixtures/hey-lampas-espeak.wav')], app).trim());
+
+  // 7. 'voice-kit/handsfree': packed (packages/handsfree/dist), resolved by the exports map, its import graph reaching no other
+  // voice-kit library than voice-kit/wake (composer's listen is the app's, passed in); and in the vitest the app installs, one
+  // whole exchange on fake time: the fake wake ('voice-kit/testing/handsfree') says the wake word, composer's startListening on
+  // the fake recogniser ('voice-kit/testing/mic') hears a command, the app asks for a follow-up, he says nothing, it closes.
+  for (const file of ['index.js', 'session.js', 'chime.js', 'browser.js']) {
+    if (!existsSync(join(installed, 'packages/handsfree/dist', file))) throw new Error(`packages/handsfree/dist/${file} is not packed`);
+  }
+  if (!existsSync(join(installed, 'packages/testing/dist/handsfree.js'))) throw new Error('packages/testing/dist/handsfree.js is not packed');
+  {
+    const seen = new Set();
+    const walk = (file) => {
+      if (seen.has(file)) return;
+      seen.add(file);
+      for (const m of readFileSync(file, 'utf-8').matchAll(specifier)) {
+        const s = m[1] ?? m[2] ?? m[3];
+        if (/^(@voice-kit\/|voice-kit\/)/.test(s) && s !== 'voice-kit/wake') throw new Error(`${relative(installed, file)} imports ${s}`);
+        if (s.startsWith('.')) walk(resolve(dirname(file), s));
+      }
+    };
+    walk(join(installed, 'packages/handsfree/dist/index.js'));
+  }
+  writeFileSync(
+    join(app, 'handsfree.test.mjs'),
+    `
+import { afterEach, expect, it, vi } from 'vitest';
+import { startListening } from 'voice-kit/composer';
+import { browserWake, createHandsFree } from 'voice-kit/handsfree';
+import { installWake } from 'voice-kit/testing/handsfree';
+import { installMic } from 'voice-kit/testing/mic';
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.useRealTimers();
+});
+
+it('one whole exchange: wake, chime, a command, a follow-up, the close', async () => {
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date', 'performance'] });
+  vi.stubGlobal('window', globalThis);
+  const mic = installMic(globalThis);
+  const wake = installWake(globalThis);
+  const log = [];
+  const answers = [{ followUp: true }];
+  const hf = createHandsFree({
+    wake: browserWake({ modelUrl: '/models/hey-lampas.json' }),
+    listen: startListening,
+    chime: { open: () => log.push('chime:open'), close: () => log.push('chime:close') },
+    onOpen: () => log.push('open'),
+    onCommand: async (words, { followUp }) => {
+      log.push('command:' + words + ':' + followUp);
+      mic.options.silent = Infinity; // he says nothing more: the follow-up hears nothing
+      return answers.shift();
+    },
+    onClose: ({ reason }) => log.push('close:' + reason),
+  });
+  void hf.start();
+  await vi.advanceTimersByTimeAsync(200);
+  expect(hf.state().name).toBe('waiting');
+  expect(wake.say()).toBe(true);
+  await vi.advanceTimersByTimeAsync(8000);
+  expect(log).toEqual(['open', 'chime:open', 'command:Please read me the first chapter:false']);
+  await vi.advanceTimersByTimeAsync(10000);
+  expect(log.slice(3)).toEqual(['chime:close', 'close:follow-up-ended']);
+  expect(hf.state().name).toBe('waiting');
+  expect(wake.listening).toBe(true);
+  hf.stop();
+  await vi.advanceTimersByTimeAsync(1000);
+  expect(wake.liveTracks).toBe(0);
+  wake.uninstall();
+  mic.uninstall();
+});
+`,
+  );
+  run('npx', ['vitest', 'run', 'handsfree.test.mjs'], app, { timeout: 240_000 });
+  console.log('voice-kit/handsfree runs an exchange in vitest');
 
   console.log('consumer smoke test passed');
 } catch (err) {

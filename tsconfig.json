@@ -11,5 +11,5 @@
     }
   },
   "include": ["packages/*/src", "packages/*/tests", "vitest.config.ts", "eslint.config.js"],
-  "exclude": ["packages/composer", "packages/speech", "packages/talks", "packages/forms", "packages/wake", "**/dist"]
+  "exclude": ["packages/composer", "packages/speech", "packages/talks", "packages/forms", "packages/wake", "packages/handsfree", "packages/testing/tests/handsfree.test.ts", "**/dist"]
 }

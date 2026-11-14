@@ -9,6 +9,20 @@ Each library keeps its own changelog; this one records the repo's releases and p
 - [@voice-kit/talks](packages/talks/CHANGELOG.md)
 - [@voice-kit/testing](packages/testing/CHANGELOG.md)
 - [@voice-kit/wake](packages/wake/CHANGELOG.md)
+- [@voice-kit/handsfree](packages/handsfree/CHANGELOG.md)
+
+## v0.20.0 (2026-11-14)
+
+- New library @voice-kit/handsfree 0.1.0 (mw-rl10piw.2): the hands-free session as `voice-kit/handsfree`. On the wake word a short
+  soft chime, then it listens until a silence of a set length (1.5 s, a setting) and hands the words to the app; a follow-up window
+  (8 s) with no wake word when the app asks; a lower chime when it closes with nothing heard; `onOpen` and `onClose` hooks, paired
+  once in every path, so the app pauses and resumes its sound; a wake over a command calls `onInterrupt`. Two microphone ways,
+  'handover' (the default) and 'share'. No React; it imports `voice-kit/wake` and only types from `voice-kit/composer`. See
+  [its changelog](packages/handsfree/CHANGELOG.md).
+- @voice-kit/testing 0.5.0: `voice-kit/testing/handsfree`, a fake wake word (`installWake`, `wakeInitScript`; `say()`, `listening`,
+  `starts`, `failWith(kind)`). @voice-kit/wake's `startWake` has the one testing seam it needs: when the fake is installed on
+  `globalThis.__bsvKitTesting.wake`, `startWake` hands the call to it and opens no microphone. See
+  [its changelog](packages/testing/CHANGELOG.md).
 
 ## v0.19.0 (2026-11-14)
 

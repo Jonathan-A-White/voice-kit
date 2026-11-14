@@ -20,13 +20,17 @@ working code in [Postern](https://github.com/Jonathan-A-White/postern) by way of
 - `@voice-kit/wake`: the wake word 'Hey Lampas': a small detector, the microphone tap (an AudioWorklet) and the Web Worker that
   runs it, and the trained model packed beside them; `startWake` opens the microphone and calls you for each wake. No React, no
   bundler needed. See [packages/wake](packages/wake/README.md).
+- `@voice-kit/handsfree`: the hands-free session: on the wake word a soft chime, then it listens until a silence of a set length
+  and hands the words to the app; a follow-up window with no wake word; a lower chime as it closes; open and close hooks so the
+  app pauses and resumes its sound. A state machine over injected ports; no React. See [packages/handsfree](packages/handsfree/README.md).
 - `@voice-kit/testing`: honest fakes for an app's tests, in vitest and in Playwright: a speech synthesiser and a
-  microphone (getUserMedia, MediaRecorder, SpeechRecognition) that behave like Android Chrome in time, and a scripted grind and a
-  recording store for tests of a talk. See
+  microphone (getUserMedia, MediaRecorder, SpeechRecognition) that behave like Android Chrome in time, a wake word the test says,
+  and a scripted grind and a recording store for tests of a talk. See
   [packages/testing](packages/testing/README.md).
 
 What belongs here: the browser's speech and microphone APIs, the UI over them, and honest fakes of exactly those APIs.
-Nothing here needs a key, a server or storage. Each library imports nothing from the others; a test in each says so.
+Nothing here needs a key, a server or storage. Each library imports nothing from the others (a test in each says so), but for
+`@voice-kit/handsfree`, which runs on `@voice-kit/wake` and takes only types from `@voice-kit/composer`.
 
 The composer needs React 18 or later (`react`, `react-dom`); speech needs React only for its `voice-kit/speech/react`
 entry; testing needs none. React is an optional peer dependency, so an app that uses only the speech engine or the
@@ -162,6 +166,22 @@ if (!wake.ok) console.log(wake.kind, wake.message); // 'not-supported' | 'permis
 // ... wake.stop() ends the worker, the audio context and the microphone track
 ```
 
+`voice-kit/handsfree`: the hands-free session on that wake, with the app's listen (composer's `startListening`):
+
+```ts
+import { startListening } from 'voice-kit/composer';
+import { createBrowserHandsFree } from 'voice-kit/handsfree';
+
+const handsFree = createBrowserHandsFree({
+  modelUrl: '/models/hey-lampas.json',
+  listen: startListening,
+  onOpen: () => player.pause(),
+  onCommand: async (words) => ({ followUp: await carryOut(words) }),
+  onClose: () => player.resume(),
+});
+await handsFree.start(); // waiting -> (Hey Lampas) -> chime, listening -> working -> waiting
+```
+
 ## Modules
 
 | Entry point | Exports | What it is | Postern source |
@@ -178,9 +198,11 @@ if (!wake.ok) console.log(wake.kind, wake.message); // 'not-supported' | 'permis
 | `voice-kit/talks/styles.css` | | the list's default look | |
 | `voice-kit/wake` | `startWake`, `loadModel`, `createDetector`, `createResampler`, `startCapture`, ... | the wake word 'Hey Lampas': detector, microphone tap and worker; no React | (new; lifted from examples/wake-spike) |
 | `voice-kit/wake/models/*` | `hey-lampas.json`, `licences.json` | the trained model and the licences of what trained it | |
+| `voice-kit/handsfree` | `createHandsFree`, `createBrowserHandsFree`, `browserWake`, `createChimes`, `documentVisibility`, ... | the hands-free session: wake, chime, listen to a silence, follow-up, close chime, open and close hooks; no React | (new) |
 | `voice-kit/testing/speech` | `installSpeech`, `speechInitScript` | TEST-ONLY honest speechSynthesis, vitest and Playwright | (new; not from Postern) |
 | `voice-kit/testing/mic` | `installMic`, `micInitScript`, `clips` | TEST-ONLY honest getUserMedia, MediaRecorder and SpeechRecognition | (new; not from Postern) |
 | `voice-kit/testing/talks` | `createFakeGrind`, `createFakeTalkStore` | TEST-ONLY a grind that answers scripted turns, a store that records | (new) |
+| `voice-kit/testing/handsfree` | `installWake`, `wakeInitScript` | TEST-ONLY a wake word the test says; `startWake` hands itself to it | (new) |
 
 ## Credits
 
