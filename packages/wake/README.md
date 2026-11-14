@@ -8,6 +8,18 @@ No React, no dependency, no bundler needed: the worklet and the worker start fro
 carries, and detection runs in the worker, never on the page's main thread. This is the wake word as the spike
 ([examples/wake-spike](../../examples/wake-spike/README.md)) has it: the same model, the same detector, the same numbers.
 
+<!-- toc -->
+
+- [Install](#install)
+- [Use](#use)
+- [The model and its licences](#the-model-and-its-licences)
+- [What it does, measured](#what-it-does-measured)
+- [Two accepted limits](#two-accepted-limits)
+- [Content-Security-Policy](#content-security-policy)
+- [Develop](#develop)
+
+<!-- /toc -->
+
 ## Install
 
 By pinned commit (there is no registry); the repo's [README](../../README.md#install) names the commit to pin and has the npm 11
