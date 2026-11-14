@@ -1,7 +1,7 @@
 {
   "name": "voice-kit",
   "version": "0.1.0",
-  "description": "Speaking and listening in the browser, for React PWAs: @voice-kit/composer (a hold-to-talk message composer, a React component), @voice-kit/speech (a read-aloud engine with Pause, Resume, Restart and Stop that keep the place, and a themeable SpeakingBar), @voice-kit/talks (multi-turn conversations: a talk of turns, the turn loop over an injected grind, picture turns, a store, a Dexie store and a searchable list), @voice-kit/forms (a form as the tutor sees it, and the command that sends it), @voice-kit/wake (the wake word 'Hey Lampas': a small detector, the microphone tap and its worker, and the model packed with them), @voice-kit/handsfree (the hands-free session: wake, chime, listen to a silence, a follow-up window, a lower chime, open and close hooks) and @voice-kit/testing (honest speech, microphone, wake and talk fakes for an app's tests, vitest and Playwright).",
+  "description": "Speaking and listening in the browser, for React PWAs: @voice-kit/composer (a hold-to-talk message composer, a React component), @voice-kit/speech (a read-aloud engine with Pause, Resume, Restart and Stop that keep the place, and a themeable SpeakingBar), @voice-kit/talks (multi-turn conversations: a talk of turns, the turn loop over an injected grind, picture turns, a store, a Dexie store and a searchable list), @voice-kit/forms (a form as the tutor sees it, and the command that sends it), @voice-kit/wake (the wake word 'Hey Lampas': a small detector, the microphone tap and its worker, and the model packed with them), @voice-kit/handsfree (the hands-free session: wake, chime, listen to a silence, a follow-up window, a lower chime, open and close hooks; a spoken-command router, the three-finger tap, the microphone mark) and @voice-kit/testing (honest speech, microphone, wake and talk fakes for an app's tests, vitest and Playwright).",
   "license": "MIT",
   "type": "module",
   "repository": {
@@ -72,6 +72,11 @@
       "types": "./packages/handsfree/dist/index.d.ts",
       "default": "./packages/handsfree/dist/index.js"
     },
+    "./handsfree/react": {
+      "types": "./packages/handsfree/dist/react.d.ts",
+      "default": "./packages/handsfree/dist/react.js"
+    },
+    "./handsfree/styles.css": "./packages/handsfree/dist/styles.css",
     "./testing/handsfree": {
       "types": "./packages/testing/dist/handsfree.d.ts",
       "default": "./packages/testing/dist/handsfree.js"
@@ -85,7 +90,7 @@
     "!**/*.tsbuildinfo"
   ],
   "scripts": {
-    "build": "node packages/wake/scripts/embed.mjs && tsc -b packages/wake/tsconfig.build.json packages/composer/tsconfig.build.json packages/speech/tsconfig.build.json packages/talks/tsconfig.build.json packages/forms/tsconfig.build.json packages/handsfree/tsconfig.build.json packages/testing/tsconfig.build.json && node packages/wake/scripts/embed.mjs --models && node -e \"for (const p of ['composer', 'speech', 'talks']) require('node:fs').copyFileSync('packages/' + p + '/src/styles.css', 'packages/' + p + '/dist/styles.css')\"",
+    "build": "node packages/wake/scripts/embed.mjs && tsc -b packages/wake/tsconfig.build.json packages/composer/tsconfig.build.json packages/speech/tsconfig.build.json packages/talks/tsconfig.build.json packages/forms/tsconfig.build.json packages/handsfree/tsconfig.build.json packages/testing/tsconfig.build.json && node packages/wake/scripts/embed.mjs --models && node -e \"for (const p of ['composer', 'speech', 'talks', 'handsfree']) require('node:fs').copyFileSync('packages/' + p + '/src/styles.css', 'packages/' + p + '/dist/styles.css')\"",
     "prepare": "npm run build",
     "lint": "eslint .",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p packages/composer/tsconfig.json --noEmit && tsc -p packages/speech/tsconfig.json --noEmit && tsc -p packages/talks/tsconfig.json --noEmit && tsc -p packages/forms/tsconfig.json --noEmit && tsc -p packages/wake/tsconfig.json --noEmit && tsc -p packages/handsfree/tsconfig.json --noEmit && tsc -p examples/composer-demo/tsconfig.json --noEmit && tsc -p examples/wake-spike/tsconfig.json --noEmit",

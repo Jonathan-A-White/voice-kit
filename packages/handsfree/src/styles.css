@@ -1,0 +1,95 @@
+/* @voice-kit/handsfree: the microphone mark's default look. The mark carries data-state (off, starting, waiting, listening, working,
+   follow-up, needs-touch, failed); every colour and size is a CSS custom property read with a default, so an app themes it by setting
+   the properties on :root, on a parent or on .bk-handsfree, or leaves this file out and styles [data-state] itself.
+   Import once: import 'voice-kit/handsfree/styles.css'. The properties and their defaults:
+     --bk-handsfree-size: 2.25rem
+     --bk-handsfree-radius: 999px
+     --bk-handsfree-off: color-mix(in srgb, CanvasText 40%, Canvas)       (off; also starting)
+     --bk-handsfree-waiting: color-mix(in srgb, CanvasText 65%, Canvas)   (the wake listens)
+     --bk-handsfree-listening: #16a34a                                   (the microphone is open: speak)
+     --bk-handsfree-working: #2563eb                                     (the app is carrying out what he said)
+     --bk-handsfree-follow-up: #0d9488                                   (open for a follow-up with no wake word)
+     --bk-handsfree-needs-touch: #d97706                                 (touch the page to start the audio)
+     --bk-handsfree-failed: #dc2626
+     --bk-handsfree-surface: color-mix(in srgb, CanvasText 6%, Canvas)
+     --bk-handsfree-pulse: 1.4s                                          (one pulse while listening)
+*/
+
+.bk-handsfree {
+  --bk-handsfree-now: var(--bk-handsfree-waiting, color-mix(in srgb, CanvasText 65%, Canvas));
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: var(--bk-handsfree-size, 2.25rem);
+  height: var(--bk-handsfree-size, 2.25rem);
+  padding: 0;
+  border: 2px solid var(--bk-handsfree-now);
+  border-radius: var(--bk-handsfree-radius, 999px);
+  background: var(--bk-handsfree-surface, color-mix(in srgb, CanvasText 6%, Canvas));
+  color: var(--bk-handsfree-now);
+  font: inherit;
+  line-height: 1;
+}
+
+button.bk-handsfree {
+  cursor: pointer;
+}
+
+.bk-handsfree__icon {
+  display: block;
+  flex-shrink: 0;
+}
+
+.bk-handsfree[data-state='off'],
+.bk-handsfree[data-state='starting'] {
+  --bk-handsfree-now: var(--bk-handsfree-off, color-mix(in srgb, CanvasText 40%, Canvas));
+}
+
+.bk-handsfree[data-state='waiting'] {
+  --bk-handsfree-now: var(--bk-handsfree-waiting, color-mix(in srgb, CanvasText 65%, Canvas));
+}
+
+.bk-handsfree[data-state='listening'] {
+  --bk-handsfree-now: var(--bk-handsfree-listening, #16a34a);
+  background: var(--bk-handsfree-now);
+  color: var(--bk-handsfree-surface, Canvas);
+  animation: bk-handsfree-pulse var(--bk-handsfree-pulse, 1.4s) ease-in-out infinite;
+}
+
+.bk-handsfree[data-state='working'] {
+  --bk-handsfree-now: var(--bk-handsfree-working, #2563eb);
+  border-style: dashed;
+}
+
+.bk-handsfree[data-state='follow-up'] {
+  --bk-handsfree-now: var(--bk-handsfree-follow-up, #0d9488);
+  border-style: double;
+  border-width: 4px;
+}
+
+.bk-handsfree[data-state='needs-touch'] {
+  --bk-handsfree-now: var(--bk-handsfree-needs-touch, #d97706);
+}
+
+.bk-handsfree[data-state='failed'] {
+  --bk-handsfree-now: var(--bk-handsfree-failed, #dc2626);
+  border-style: dotted;
+}
+
+@keyframes bk-handsfree-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--bk-handsfree-now) 45%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 0.4rem color-mix(in srgb, var(--bk-handsfree-now) 0%, transparent);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bk-handsfree[data-state='listening'] {
+    animation: none;
+  }
+}

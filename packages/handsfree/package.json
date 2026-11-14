@@ -1,7 +1,7 @@
 {
   "name": "@voice-kit/handsfree",
-  "version": "0.1.0",
-  "description": "voice-kit: the hands-free session. On the wake word a short soft chime, then it listens until a silence of a set length and hands the words to the app; a follow-up window with no wake word; a lower chime as it closes; open and close hooks so the app can pause and resume its sound. A plain state machine over injected ports (the wake, the app's listen, the chimes, the page's visibility) and an injected clock. No React.",
+  "version": "0.2.0",
+  "description": "voice-kit: the hands-free session. On the wake word a short soft chime, then it listens until a silence of a set length and hands the words to the app; a follow-up window with no wake word; a lower chime as it closes; open and close hooks so the app can pause and resume its sound. A plain state machine over injected ports (the wake, the app's listen, the chimes, the page's visibility) and an injected clock. A spoken-command router (words to a named command), the three-finger tap, and a React entry: a hook for the session's state and a small microphone mark with its stylesheet. The session and the router have no React.",
   "license": "MIT",
   "type": "module",
   "main": "./dist/index.js",
@@ -10,10 +10,26 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
-    }
+    },
+    "./react": {
+      "types": "./dist/react.d.ts",
+      "default": "./dist/react.js"
+    },
+    "./styles.css": "./dist/styles.css"
   },
   "files": [
     "dist/**",
     "!**/*.tsbuildinfo"
-  ]
+  ],
+  "sideEffects": [
+    "*.css"
+  ],
+  "peerDependencies": {
+    "react": ">=18"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    }
+  }
 }
