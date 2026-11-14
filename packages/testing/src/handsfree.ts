@@ -200,3 +200,53 @@ export function installWake(target: object = globalThis, options: WakeFakeOption
 export function wakeInitScript(options: WakeFakeOptions = {}): string {
   return `(${mountWake.toString()})(globalThis, ${JSON.stringify(options)});`;
 }
+
+/** What threeFingerTap can change: it is a real tap by default. */
+export interface ThreeFingerTapFake {
+  /** How many fingers land. Default 3. */
+  fingers?: number;
+  /** How far, in px, the second finger moves before the lift. Default 0. */
+  moveBy?: number;
+}
+
+interface FakeFinger {
+  identifier: number;
+  clientX: number;
+  clientY: number;
+  target: object;
+}
+
+/**
+ * A three-finger tap on `target` (an element, or the document), for an app's tests of what voice-kit/handsfree's
+ * watchThreeFingerTaps and useThreeFingerTap listen for: one touchstart per finger in turn (touches.length 1, then 2, then 3), then
+ * a touchend for each, all at once in time, so it is a tap on any clock. The events bubble, as a phone's do. Needs a DOM (jsdom, or a
+ * page) whose Event the test runs in; `target` is handed in, as the other fakes' targets are.
+ */
+export function threeFingerTap(target: object, options: ThreeFingerTapFake = {}): void {
+  const dispatch = (target as { dispatchEvent(event: unknown): boolean }).dispatchEvent.bind(target);
+  const EventClass = (globalThis as unknown as { Event: new (type: string, init: { bubbles: boolean; cancelable: boolean }) => object }).Event;
+  const send = (type: string, touches: FakeFinger[], changed: FakeFinger[]): void => {
+    const event = new EventClass(type, { bubbles: true, cancelable: true });
+    Object.defineProperties(event, {
+      touches: { value: touches },
+      targetTouches: { value: touches },
+      changedTouches: { value: changed },
+    });
+    dispatch(event);
+  };
+  const fingers: FakeFinger[] = Array.from({ length: options.fingers ?? 3 }, (_, i) => ({ identifier: i, clientX: 120 + i * 60, clientY: 300, target }));
+  const down: FakeFinger[] = [];
+  for (const finger of fingers) {
+    down.push(finger);
+    send('touchstart', [...down], [finger]);
+  }
+  if (options.moveBy && fingers.length > 1) {
+    const moved: FakeFinger = { ...fingers[1], clientX: fingers[1].clientX + options.moveBy };
+    send('touchmove', [...down], [moved]);
+  }
+  const left = [...fingers];
+  for (const finger of fingers) {
+    left.shift();
+    send('touchend', [...left], [finger]);
+  }
+}

@@ -4,7 +4,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { startWake } from '../../wake/src/index.js';
 import type { WakeModel } from '../../wake/src/index.js';
-import { installWake, wakeInitScript } from '../src/handsfree.js';
+import { watchThreeFingerTaps } from '../../handsfree/src/threeFingerTap.js';
+import { installWake, threeFingerTap, wakeInitScript } from '../src/handsfree.js';
 import type { WakeFake } from '../src/handsfree.js';
 
 const registry = () => (globalThis as { __bsvKitTesting?: { wake?: WakeFake } }).__bsvKitTesting;
@@ -142,5 +143,35 @@ describe('wakeInitScript', () => {
     expect(wake.listening).toBe(false);
     await vi.advanceTimersByTimeAsync(1);
     expect((await pending).ok).toBe(true);
+  });
+});
+
+// threeFingerTap: the fake finger gesture for an app's tests; the listeners are voice-kit/handsfree's own. Node's own EventTarget and
+// Event stand in for the page (the fake needs only dispatchEvent and a global Event).
+describe('threeFingerTap', () => {
+  it('sends one touchstart per finger, then the touchends, each with the touches still down', () => {
+    const target = new EventTarget();
+    const seen: string[] = [];
+    for (const type of ['touchstart', 'touchmove', 'touchend']) {
+      target.addEventListener(type, (e) => {
+        const t = e as Event & { touches: unknown[]; changedTouches: unknown[] };
+        seen.push(`${e.type}:${t.touches.length}:${t.changedTouches.length}`);
+      });
+    }
+    threeFingerTap(target);
+    expect(seen).toEqual(['touchstart:1:1', 'touchstart:2:1', 'touchstart:3:1', 'touchend:2:1', 'touchend:1:1', 'touchend:0:1']);
+  });
+
+  it('is a tap to watchThreeFingerTaps, and a moved, a two-finger or a four-finger one is not', () => {
+    const target = new EventTarget();
+    const onTap = vi.fn();
+    const stop = watchThreeFingerTaps(target, onTap);
+    threeFingerTap(target);
+    expect(onTap).toHaveBeenCalledTimes(1);
+    threeFingerTap(target, { moveBy: 25 });
+    threeFingerTap(target, { fingers: 4 });
+    threeFingerTap(target, { fingers: 2 });
+    expect(onTap).toHaveBeenCalledTimes(1);
+    stop();
   });
 });

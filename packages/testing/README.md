@@ -35,7 +35,7 @@ Then import the subpaths:
 | `voice-kit/testing/speech`  | `speechSynthesis`, `SpeechSynthesisUtterance`                       |
 | `voice-kit/testing/mic`     | `navigator.mediaDevices.getUserMedia`, `MediaRecorder`, `SpeechRecognition` and `webkitSpeechRecognition` |
 | `voice-kit/testing/talks`   | a grind that answers scripted turns, and a talk store that records (see below)                      |
-| `voice-kit/testing/handsfree` | the wake word: `voice-kit/wake`'s `startWake` hands itself to it (see [Wake word](#wake-word))      |
+| `voice-kit/testing/handsfree` | the wake word: `voice-kit/wake`'s `startWake` hands itself to it; a three-finger tap (see [Wake word](#wake-word)) |
 
 (The fake Postern backend for grist tests, `bsv-kit/testing`, did not move: it stays in
 [bsv-kit](https://github.com/Jonathan-A-White/bsv-kit) with grist.)
@@ -160,6 +160,17 @@ wake.uninstall();
 
 With `voice-kit/testing/mic`'s recogniser behind composer's `startListening`, `voice-kit/handsfree` runs whole exchanges on fake
 time; see its [README](../handsfree/README.md#testing).
+
+`threeFingerTap(target, { fingers?, moveBy? })` is the finger side of the same hands-free tests: on an element or the document, one
+`touchstart` per finger in turn (`touches.length` 1, 2, 3), then a `touchend` for each, so `watchThreeFingerTaps` and
+`useThreeFingerTap` take it for a tap. `{ moveBy: 25 }` moves one finger 25 px first; `{ fingers: 4 }` lands four. It needs a global
+`Event` (jsdom, a page, or node's own with a target of its own) and sends the events itself, so it is a tap on any clock.
+
+```ts
+import { threeFingerTap } from 'voice-kit/testing/handsfree';
+
+threeFingerTap(document.body); // the page's useThreeFingerTap handler is called once
+```
 
 ## Credits
 

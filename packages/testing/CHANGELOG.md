@@ -2,6 +2,11 @@
 
 Newest first. Breaking changes come first in a release, each with its migration in one sentence.
 
+## 0.6.0 (2026-11-14, not yet tagged)
+
+- New (mw-rl10piw.3): `threeFingerTap(target, { fingers?, moveBy? })` in `voice-kit/testing/handsfree`: one touchstart per finger in
+  turn (`touches.length` 1, 2, 3), then a touchend for each, for tests of `watchThreeFingerTaps` and `useThreeFingerTap`.
+
 ## 0.5.0 (2026-11-14, not yet tagged)
 
 - New (mw-rl10piw.2): `voice-kit/testing/handsfree`, a wake word for an app's tests. `installWake(target)` (the global object, where
