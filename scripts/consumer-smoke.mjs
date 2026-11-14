@@ -8,6 +8,7 @@
 //     'voice-kit/talks/dexie' keeps it in IndexedDB (fake-indexeddb) and 'voice-kit/talks/react' renders TalkList with the app's React;
 //   - 'voice-kit/talks/grind' gives the grind's instructions part and answer fragment in plain node, and the tutor client carries out its examples;
 //   - 'voice-kit/testing/talks' drives that loop with a scripted grind and a recording store;
+//   - 'voice-kit/wake' hears the saying once in plain node, on the packed model;
 //   - 'voice-kit/testing/speech' and 'voice-kit/testing/mic' run in the vitest the app installs (fake timers), by import
 //     and by init script.
 // The "fresh clone" is the working tree as it stands (tracked and untracked files, minus what git ignores),
@@ -49,7 +50,7 @@ try {
 
   // The exports map names the entry points (and package.json), nothing else: no deep imports.
   const entries = Object.keys(JSON.parse(readFileSync(join(installed, 'package.json'), 'utf-8')).exports).sort();
-  const expected = ['./composer', './composer/styles.css', './forms', './package.json', './speech', './speech/react', './speech/styles.css', './talks', './talks/dexie', './talks/grind', './talks/react', './talks/styles.css', './testing/mic', './testing/speech', './testing/talks'];
+  const expected = ['./composer', './composer/styles.css', './forms', './package.json', './speech', './speech/react', './speech/styles.css', './talks', './talks/dexie', './talks/grind', './talks/react', './talks/styles.css', './testing/mic', './testing/speech', './testing/talks', './wake', './wake/models/*'];
   if (JSON.stringify(entries) !== JSON.stringify(expected)) throw new Error('exports: ' + entries.join(', '));
   console.log('the exports map names the entry points');
 
@@ -323,6 +324,48 @@ it('the init scripts are the same fakes, from the built files', async () => {
   );
   run('npx', ['vitest', 'run'], app, { timeout: 240_000 });
   console.log('voice-kit/testing/speech and voice-kit/testing/mic run in vitest');
+
+  // 6. 'voice-kit/wake': packed (packages/wake/dist, the model and its licences beside it), resolved by the exports map, stands
+  // alone, and in plain node (no browser) the installed model hears the fixture saying exactly once.
+  for (const file of ['index.js', 'startWake.js', 'capture.js', 'workerSource.js', 'workletSource.js', 'models/hey-lampas.json', 'models/licences.json']) {
+    if (!existsSync(join(installed, 'packages/wake/dist', file))) throw new Error(`packages/wake/dist/${file} is not packed`);
+  }
+  standsAlone('packages/wake/dist/index.js');
+  writeFileSync(
+    join(app, 'wake.mjs'),
+    `
+import { readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
+import { createDetector, loadModel, startWake } from 'voice-kit/wake';
+
+const require = createRequire(import.meta.url);
+const model = JSON.parse(readFileSync(require.resolve('voice-kit/wake/models/hey-lampas.json'), 'utf-8'));
+const licences = JSON.parse(readFileSync(require.resolve('voice-kit/wake/models/licences.json'), 'utf-8'));
+if (licences.model !== 'hey-lampas.json' || !licences.entries.length) throw new Error('licences.json: ' + JSON.stringify(licences).slice(0, 200));
+const buf = readFileSync(process.argv[2]);
+let at = 12;
+let pcm;
+while (at + 8 <= buf.length) {
+  const id = buf.toString('ascii', at, at + 4);
+  const size = buf.readUInt32LE(at + 4);
+  if (id === 'data') { pcm = buf.subarray(at + 8, at + 8 + size); break; }
+  at += 8 + size + (size % 2);
+}
+if (!pcm) throw new Error('no data chunk');
+const saying = new Float32Array(pcm.length >> 1).map((_, i) => pcm.readInt16LE(i * 2) / 32768);
+const samples = new Float32Array(16000 + saying.length + 32000);
+samples.set(saying, 16000);
+const detector = createDetector(loadModel(model));
+const wakes = [];
+for (let i = 0; i < samples.length; i += 4000) wakes.push(...detector.push(samples.subarray(i, i + 4000)));
+if (wakes.length !== 1) throw new Error('wakes: ' + wakes.length);
+const refused = await startWake({ model, onWake: () => {} });
+if (refused.ok || refused.kind !== 'not-supported') throw new Error('node is not a browser: ' + JSON.stringify(refused));
+console.log('voice-kit/wake hears the saying once');
+`,
+  );
+  console.log(run('node', ['wake.mjs', join(clone, 'examples/wake-spike/tests/fixtures/hey-lampas-espeak.wav')], app).trim());
+
   console.log('consumer smoke test passed');
 } catch (err) {
   console.error(String(err?.stderr ?? '') || err);

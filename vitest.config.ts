@@ -4,6 +4,7 @@ import { defineConfig } from 'vitest/config';
 export default defineConfig({
   resolve: {
     alias: {
+      'voice-kit/wake': fileURLToPath(new URL('./packages/wake/src/index.ts', import.meta.url)),
       'voice-kit/speech/react': fileURLToPath(new URL('./packages/speech/src/react.tsx', import.meta.url)),
       'voice-kit/speech': fileURLToPath(new URL('./packages/speech/src/index.ts', import.meta.url)),
       'voice-kit/testing/speech': fileURLToPath(new URL('./packages/testing/src/speech.ts', import.meta.url)),

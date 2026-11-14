@@ -30,9 +30,10 @@ The page has four parts, all taps:
 4. **Log**: every Play, Pause, Listen, input opened, track ended, muted or unmuted, wake, and device change, with the
    time, is kept in localStorage (it survives a reload). **Copy results** copies it as JSON.
 
-How the detector is fed: an AudioWorklet (`src/capture-worklet.js`) takes the microphone's samples off the audio thread;
-the page relays them to a Web Worker (`src/worker.ts`) that brings them to 16 kHz (`createResampler`) and runs the
-detector (`src/detector.ts`, a TypeScript port of `scripts/wake-probe/detector.mjs`: log-mel front end, a small 1-D
+How the detector is fed (the code is the package [`@voice-kit/wake`](../../packages/wake/README.md), `voice-kit/wake`, which this
+page imports as an app does; Vite resolves it to `packages/wake/src`): an AudioWorklet (`workletSource.ts`) takes the
+microphone's samples off the audio thread; the page relays them to a Web Worker (`worker.ts`) that brings them to 16 kHz
+(`createResampler`) and runs the detector (`detector.ts`, a TypeScript port of `scripts/wake-probe/detector.mjs`: log-mel front end, a small 1-D
 convolutional network, a rule that turns scores into one wake with a 2 s cooldown). The worklet is joined to a silent gain
 node and that to the output, because some browsers do not run a worklet that nothing pulls; it adds no sound. The page opens
 the microphone with the browser's own settings (echo cancellation and noise suppression as the browser defaults them).
@@ -86,7 +87,7 @@ nice -n 10 npm run measure --workspace wake-spike            # about 5 min; writ
   8 kHz CVSD or wideband mSBC link), each link clean, under brown noise at 10 and 0 dB, with the cached Bible leaking back at
   0 and -10 dB, and with brown noise at 5 dB and the Bible at -5 dB. The dB are the saying over the interferer at the
   microphone, before the car's processing, so -10 is the Bible 10 dB louder than the voice.
-- `measure.mjs` runs `src/detector.ts` (transpiled, the code the page runs) over the whole cached Bible audio as one
+- `measure.mjs` runs `packages/wake/src/detector.ts` (transpiled, the code the page runs) over the whole cached Bible audio as one
   stream and counts the wakes; over each set of tries and counts misses and the delay from the phrase end to the wake; sizes
   the model files and their gzip; and times the detector in Node and in headless Chromium with the CPU throttled 4x (CDP
   `Emulation.setCPUThrottlingRate`, a phone proxy). Battery is not measured headless. It also plays the cached Bible

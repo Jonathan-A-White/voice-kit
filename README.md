@@ -1,6 +1,6 @@
 # voice-kit
 
-Speaking and listening in the browser, for React web apps on a phone. Three small TypeScript libraries, lifted from the
+Speaking and listening in the browser, for React web apps on a phone. Small TypeScript libraries, lifted from the
 working code in [Postern](https://github.com/Jonathan-A-White/postern) by way of
 [bsv-kit](https://github.com/Jonathan-A-White/bsv-kit), where they lived until 2026-10-16:
 
@@ -17,6 +17,9 @@ working code in [Postern](https://github.com/Jonathan-A-White/postern) by way of
 - `@voice-kit/forms`: a form as the tutor sees it (text, link, choice and pictures fields), the values an answer may fill, and
   `formCommand(form)`, the command that sends it for the talks registry, so the Send button and the tutor call one path. See
   [packages/forms](packages/forms/README.md).
+- `@voice-kit/wake`: the wake word 'Hey Lampas': a small detector, the microphone tap (an AudioWorklet) and the Web Worker that
+  runs it, and the trained model packed beside them; `startWake` opens the microphone and calls you for each wake. No React, no
+  bundler needed. See [packages/wake](packages/wake/README.md).
 - `@voice-kit/testing`: honest fakes for an app's tests, in vitest and in Playwright: a speech synthesiser and a
   microphone (getUserMedia, MediaRecorder, SpeechRecognition) that behave like Android Chrome in time, and a scripted grind and a
   recording store for tests of a talk. See
@@ -147,6 +150,18 @@ it('reads the answer aloud to its end', async () => {
 In Playwright the same fakes go in as init scripts: `page.addInitScript(speechInitScript())` and
 `page.addInitScript(micInitScript({ clip: clips.greek }))`. See [packages/testing](packages/testing/README.md).
 
+`voice-kit/wake` (`@voice-kit/wake`, installed with the rest by the line under Install: `npm install github:Jonathan-A-White/voice-kit#<full commit SHA>`): the wake word, framework-free. The model is a file the build packs; `licences.json` beside it lists what an app
+that ships the model must credit.
+
+```ts
+import { startWake } from 'voice-kit/wake';
+import model from 'voice-kit/wake/models/hey-lampas.json' with { type: 'json' };
+
+const wake = await startWake({ model, onWake: () => console.log('Hey Lampas') });
+if (!wake.ok) console.log(wake.kind, wake.message); // 'not-supported' | 'permission-denied' | 'no-microphone' | 'other'
+// ... wake.stop() ends the worker, the audio context and the microphone track
+```
+
 ## Modules
 
 | Entry point | Exports | What it is | Postern source |
@@ -161,6 +176,8 @@ In Playwright the same fakes go in as init scripts: `page.addInitScript(speechIn
 | `voice-kit/talks/react` | `TalkList` | a searchable list of the kept talks that opens one (React) | Lampas `src/Conversations.tsx` |
 | `voice-kit/talks/grind` | `instructionsPart`, `answerFragment`, `answerExamples` | the grind side of the tutor client: the words and the answer schema fragment an app's grind includes (plain node) | (new) |
 | `voice-kit/talks/styles.css` | | the list's default look | |
+| `voice-kit/wake` | `startWake`, `loadModel`, `createDetector`, `createResampler`, `startCapture`, ... | the wake word 'Hey Lampas': detector, microphone tap and worker; no React | (new; lifted from examples/wake-spike) |
+| `voice-kit/wake/models/*` | `hey-lampas.json`, `licences.json` | the trained model and the licences of what trained it | |
 | `voice-kit/testing/speech` | `installSpeech`, `speechInitScript` | TEST-ONLY honest speechSynthesis, vitest and Playwright | (new; not from Postern) |
 | `voice-kit/testing/mic` | `installMic`, `micInitScript`, `clips` | TEST-ONLY honest getUserMedia, MediaRecorder and SpeechRecognition | (new; not from Postern) |
 | `voice-kit/testing/talks` | `createFakeGrind`, `createFakeTalkStore` | TEST-ONLY a grind that answers scripted turns, a store that records | (new) |

@@ -4,8 +4,8 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { createDetector, createListener, createResampler, loadModel } from '../src/detector.js';
-import type { Net } from '../src/detector.js';
+import { createDetector, createListener, createResampler, loadModel } from 'voice-kit/wake';
+import type { Net } from 'voice-kit/wake';
 
 const here = (path: string) => fileURLToPath(new URL(path, import.meta.url));
 const MODEL = here('../public/models/hey-lampas.json');

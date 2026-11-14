@@ -2,10 +2,9 @@
 // the chosen input and shows its track label, settings and a level meter; the log keeps what happened and Copy results
 // puts it on the clipboard. The first question is whether opening a microphone drops the car's sound to call quality; the
 // second is whether a small model can hear 'Hey Lampas' on the page: Listen also feeds the input to the wake detector
-// (a worklet and a Web Worker, capture.ts) and shows what it hears, what it costs and the headless numbers.
-import { startCapture } from './capture.js';
-import type { Capture } from './capture.js';
-import type { DetectorStats, Wake, WakeModel } from './detector.js';
+// (a worklet and a Web Worker, from 'voice-kit/wake') and shows what it hears, what it costs and the headless numbers.
+import { startCapture } from 'voice-kit/wake';
+import type { Capture, DetectorStats, Wake, WakeModel } from 'voice-kit/wake';
 import { listInputs, openInput, startMeter } from './inputs.js';
 import type { OpenedInput } from './inputs.js';
 import { createLog } from './log.js';

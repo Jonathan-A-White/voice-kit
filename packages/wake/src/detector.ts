@@ -5,12 +5,12 @@
 //   - the front end: 16 kHz samples to log-mel frames (25 ms Hann window, 10 ms step, 40 bands, 60-7600 Hz), averaged
 //     in pairs to 20 ms frames;
 //   - the network: a window of those frames (its mean taken off) through small 1-D convolutions to the chance it holds
-//     the phrase, its weights read from the model's JSON (public/models/hey-lampas.json);
+//     the phrase, its weights read from the model's JSON (examples/wake-spike/public/models/hey-lampas.json, packed as voice-kit/wake/models/hey-lampas.json);
 //   - the rule: a wake when `consecutive` windows in a row reach the threshold, then none for `refractory` seconds, so
 //     one saying is one wake;
 //   - createResampler: any input rate to 16 kHz; createDetector: input of any rate in, wakes out, compute counted.
 //
-// tests/detector.test.ts holds the scores to within 0.0001 of detector.mjs on the same audio. Change both together.
+// examples/wake-spike/tests/detector.test.ts holds the scores to within 0.0001 of detector.mjs on the same audio. Change both together.
 
 export const FRONT_END = Object.freeze({
   rate: 16000,

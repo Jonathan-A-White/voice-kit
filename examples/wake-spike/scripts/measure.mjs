@@ -15,7 +15,7 @@
 //       noise suppressor, gain and a narrowband or wideband link (they are in (b)), and the false wakes while the Bible
 //       leaks through the car, narrowband and wideband, an hour of it each.
 //
-// It reads the detector from src/detector.ts (the file the page runs, transpiled to plain JavaScript), the model from
+// It reads the detector from packages/wake/src/detector.ts (the file the page runs, transpiled to plain JavaScript), the model from
 // public/models, the Bible audio fetch-bible-audio.mjs cached and the tries make-tries.mjs made (it makes any set that
 // is missing). Faster than real time; one run at a time. The exit code is 0 when the numbers were written, whether or
 // not they meet the bar: the bar is printed beside them.
@@ -36,7 +36,7 @@ const HERE = fileURLToPath(new URL('..', import.meta.url));
 const REPO = fileURLToPath(new URL('../../..', import.meta.url));
 const MODELS = join(HERE, 'public', 'models');
 export const RESULTS = join(HERE, 'results.json');
-export const SOURCE = join(HERE, 'src', 'detector.ts');
+export const SOURCE = join(REPO, 'packages', 'wake', 'src', 'detector.ts');
 
 // The Governor's bar (question 6, mw-6ww.165): at most 1 false wake an hour while the Bible plays, at most 2 misses in 20.
 export const BAR = { label: "the Governor's bar (question 6, mw-6ww.165)", falseWakesPerHour: 1, missesIn20: 2, bibleMinutes: 60 };
@@ -44,7 +44,7 @@ const CHUNK = 4096; // samples per push: what the page's worklet sends
 const BENCH_SECONDS = 30;
 const WARMUP_SECONDS = 5;
 
-/** src/detector.ts as an ES module in a scratch folder, imported: the very code the page bundles. */
+/** packages/wake/src/detector.ts as an ES module in a scratch folder, imported: the very code the page bundles. */
 export async function loadDetector() {
   const dir = mkdtempSync(join(tmpdir(), 'wake-measure-'));
   const js = ts.transpileModule(readFileSync(SOURCE, 'utf8'), { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } }).outputText;

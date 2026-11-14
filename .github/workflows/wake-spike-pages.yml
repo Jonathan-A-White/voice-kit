@@ -7,6 +7,7 @@ on:
     branches: [main]
     paths:
       - 'examples/wake-spike/**'
+      - 'packages/wake/**'
 
 permissions:
   contents: read

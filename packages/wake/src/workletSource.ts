@@ -1,4 +1,7 @@
-/* global AudioWorkletProcessor, registerProcessor */
+// The microphone tap's AudioWorklet module, kept as text so the package needs no file of its own on the server and no
+// bundler: capture.ts loads it from a blob: URL. The worklet itself is plain JavaScript on purpose: a worklet module is
+// loaded by URL, not bundled.
+export const workletSource = `/* global AudioWorkletProcessor, registerProcessor */
 // The page's microphone tap (an AudioWorklet): collects the first channel of the input, 128 samples at a time, into
 // batches of about 85 ms and posts each to the page, which hands it to the detector's worker. It does nothing else, so the
 // audio thread stays free. Plain JavaScript on purpose: a worklet module is loaded by URL, not bundled.
@@ -25,3 +28,4 @@ class CaptureProcessor extends AudioWorkletProcessor {
 }
 
 registerProcessor('wake-capture', CaptureProcessor);
+`;

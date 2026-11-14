@@ -8,6 +8,15 @@ Each library keeps its own changelog; this one records the repo's releases and p
 - [@voice-kit/speech](packages/speech/CHANGELOG.md)
 - [@voice-kit/talks](packages/talks/CHANGELOG.md)
 - [@voice-kit/testing](packages/testing/CHANGELOG.md)
+- [@voice-kit/wake](packages/wake/CHANGELOG.md)
+
+## v0.19.0 (2026-11-14)
+
+- New library @voice-kit/wake 0.1.0 (mw-rl10piw.1): the wake word 'Hey Lampas' as `voice-kit/wake`. The detector, the microphone tap
+  (an AudioWorklet) and the Web Worker are lifted from examples/wake-spike, which now runs on the package, and the trained model is
+  packed at `voice-kit/wake/models/hey-lampas.json` with its `licences.json`. `startWake(options)` opens the microphone, loads the
+  model and calls `onWake`; every failure is a value with a kind. No bundler is needed (the worklet and the worker start from `blob:`
+  URLs). The model, the detector and the numbers are the spike's, unchanged. See [its changelog](packages/wake/CHANGELOG.md).
 
 ## v0.18.4 (2026-10-23)
 
