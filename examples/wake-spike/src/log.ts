@@ -17,6 +17,8 @@ export type LogStorage = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
 export interface Log {
   add(event: string, detail?: Record<string, unknown>): LogEntry;
   entries(): LogEntry[];
+  /** Adds `detail` to an entry already in the log (an entry that learns something later); returns the entry as it is now. */
+  update(entry: LogEntry, detail: Record<string, unknown>): LogEntry;
   clear(): void;
   /** The log as JSON text, for Copy results. */
   toJson(): string;
@@ -52,6 +54,12 @@ export function createLog(storage: LogStorage | undefined, now: () => Date = () 
       return entry;
     },
     entries: () => kept,
+    update(entry, detail) {
+      const updated: LogEntry = { ...entry, detail: { ...entry.detail, ...detail } };
+      kept = kept.map((each) => (each === entry ? updated : each));
+      save();
+      return updated;
+    },
     clear() {
       kept = [];
       try {
