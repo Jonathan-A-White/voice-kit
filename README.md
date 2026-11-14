@@ -22,7 +22,8 @@ working code in [Postern](https://github.com/Jonathan-A-White/postern) by way of
   bundler needed. See [packages/wake](packages/wake/README.md).
 - `@voice-kit/handsfree`: the hands-free session: on the wake word a soft chime, then it listens until a silence of a set length
   and hands the words to the app; a follow-up window with no wake word; a lower chime as it closes; open and close hooks so the
-  app pauses and resumes its sound. A state machine over injected ports; no React. See [packages/handsfree](packages/handsfree/README.md).
+  app pauses and resumes its sound; a spoken-command router, the three-finger tap, and a microphone mark with a hook for the session
+  (React, in its own entry). The session is a state machine over injected ports. See [packages/handsfree](packages/handsfree/README.md).
 - `@voice-kit/testing`: honest fakes for an app's tests, in vitest and in Playwright: a speech synthesiser and a
   microphone (getUserMedia, MediaRecorder, SpeechRecognition) that behave like Android Chrome in time, a wake word the test says,
   and a scripted grind and a recording store for tests of a talk. See
@@ -198,11 +199,13 @@ await handsFree.start(); // waiting -> (Hey Lampas) -> chime, listening -> worki
 | `voice-kit/talks/styles.css` | | the list's default look | |
 | `voice-kit/wake` | `startWake`, `loadModel`, `createDetector`, `createResampler`, `startCapture`, ... | the wake word 'Hey Lampas': detector, microphone tap and worker; no React | (new; lifted from examples/wake-spike) |
 | `voice-kit/wake/models/*` | `hey-lampas.json`, `licences.json` | the trained model and the licences of what trained it | |
-| `voice-kit/handsfree` | `createHandsFree`, `createBrowserHandsFree`, `browserWake`, `createChimes`, `documentVisibility`, ... | the hands-free session: wake, chime, listen to a silence, follow-up, close chime, open and close hooks; no React | (new) |
+| `voice-kit/handsfree` | `createHandsFree`, `createBrowserHandsFree`, `browserWake`, `createChimes`, `route`, `defineSpoken`, `normaliseSpoken`, `watchThreeFingerTaps`, ... | the hands-free session: wake, chime, listen to a silence, follow-up, close chime, open and close hooks; the spoken-command router; the three-finger tap; no React | (new) |
+| `voice-kit/handsfree/react` | `useHandsFree`, `useThreeFingerTap`, `HandsFreeMark` | the session's state as a hook, the tap on the document, and the microphone mark drawn by `data-state` (React) | (new) |
+| `voice-kit/handsfree/styles.css` | | the mark's default look, by `--bk-handsfree-*` variables | |
 | `voice-kit/testing/speech` | `installSpeech`, `speechInitScript` | TEST-ONLY honest speechSynthesis, vitest and Playwright | (new; not from Postern) |
 | `voice-kit/testing/mic` | `installMic`, `micInitScript`, `clips` | TEST-ONLY honest getUserMedia, MediaRecorder and SpeechRecognition | (new; not from Postern) |
 | `voice-kit/testing/talks` | `createFakeGrind`, `createFakeTalkStore` | TEST-ONLY a grind that answers scripted turns, a store that records | (new) |
-| `voice-kit/testing/handsfree` | `installWake`, `wakeInitScript` | TEST-ONLY a wake word the test says; `startWake` hands itself to it | (new) |
+| `voice-kit/testing/handsfree` | `installWake`, `wakeInitScript`, `threeFingerTap` | TEST-ONLY a wake word the test says; `startWake` hands itself to it; a three-finger tap on an element | (new) |
 
 ## Credits
 

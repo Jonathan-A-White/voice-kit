@@ -6,7 +6,8 @@ the app; after a command the app may ask for a follow-up (the microphone stays o
 closes with nothing heard. Open and close hooks let the app pause its sound while it listens and resume it after.
 
 It is a plain state machine over ports (the wake, the app's listen, the chimes, the page's visibility) and a clock, so every
-order of events can be tested on fake time. No React. It imports `voice-kit/wake`, and only types from `voice-kit/composer`:
+order of events can be tested on fake time. The session, the router and the tap have no React; the mark and the hooks are in
+`voice-kit/handsfree/react`. It imports `voice-kit/wake`, and only types from `voice-kit/composer`:
 the listen is the app's, passed in.
 
 <!-- toc -->
@@ -19,6 +20,9 @@ the listen is the app's, passed in.
 - [Hooks](#hooks)
 - [Options](#options)
 - [States](#states)
+- [The spoken-command router](#the-spoken-command-router)
+- [The three-finger tap](#the-three-finger-tap)
+- [React: the hook, the tap and the mic mark](#react-the-hook-the-tap-and-the-mic-mark)
 - [Every end leaves nothing open](#every-end-leaves-nothing-open)
 - [The chimes](#the-chimes)
 - [Testing](#testing)
@@ -152,6 +156,95 @@ choices (the Governor to confirm); each is an option.
 | `working` | `onCommand` is carrying the words out; the wake listens for an interrupt. |
 | `follow-up` | The microphone is open (or opening) for a follow-up, and no words have come yet. |
 | `{ name: 'failed', kind, message }` | It cannot run: `kind` is `'permission-denied'` (the microphone was refused), `'not-supported'` (no AudioWorklet or Worker, or no speech recogniser), `'no-microphone'` or `'other'`. It is not tried again by itself; `start()` tries again. |
+
+## The spoken-command router
+
+The words a command heard are not always a command. `route(words, rules)` says which of the app's commands they name, by name and
+nothing else: the app maps the name to its own registry, function or screen. It imports no registry and no DOM, and runs in plain
+node.
+
+```ts
+import { defineSpoken, route } from 'voice-kit/handsfree';
+
+const rules = defineSpoken([
+  { name: 'read', phrases: ['read', 'open', 'go to'], rest: true }, // the rest of the words are its argument
+  { name: 'pause', phrases: ['pause'] },
+  { name: 'play', phrases: ['play', 'resume', 'continue', 'go on'] },
+  { name: 'next', phrases: ['next chapter'] },
+  { name: 'ask', phrases: ['ask'], rest: true },
+]);
+
+route('Read John three, please.', rules); // { name: 'read', rest: 'john 3', words: 'read john 3' }
+route('pause', rules); // { name: 'pause', rest: '', words: 'pause' }
+route('playground', rules); // undefined: nothing fits, so the app asks the tutor, or says it did not understand
+```
+
+- `normaliseSpoken(words)` is applied first, to the words and to each phrase: lower case, punctuation off (a hyphen is a space, an
+  apostrophe goes), a leading and a trailing 'please' off, number words as digits ('three' 3, 'twenty one' 21, 'one hundred
+  nineteen' 119, 'first' and '1st' 1, 'second' 2, 'third' 3): `'Romans eight verse twenty eight'` is `'romans 8 verse 28'`,
+  `'first john two'` is `'1 john 2'`.
+- A rule has a `name`, `phrases` (strings, matched on whole words from the start: `'paused'` is not `'pause'`; or patterns, tested
+  on the normalised words from the start) and `rest`. With `rest: true` the words after the phrase are the argument; without it,
+  extra words mean the rule does not fit.
+- The first rule that fits wins, in the order given. The result is `{ name, rest, words }` (`words` are the normalised words), or
+  `undefined`.
+- This is the simplest thing that fits and is provisional: it is a prefix match over a handful of phrases, not a grammar.
+
+## The three-finger tap
+
+`watchThreeFingerTaps(element, onTap, { skip })` calls `onTap` for each three-finger tap on `element` (the document, usually) and
+returns how to stop (every listener is removed).
+
+A real three-finger tap sends one `touchstart` per finger (`touches.length` 1, then 2, then 3), so the fingers are counted as they
+land. It is a tap when:
+
+- exactly three fingers were down (a fourth finger, even one that lifts, is no tap);
+- none moved more than 10 px (`TAP_MOVE_PX`);
+- all were up within 400 ms of the third landing (`TAP_WITHIN_MS`); a slow lift, or a cancelled touch, is no tap.
+
+Some phones send a click after the tap; it is dropped (for 700 ms, `CLICK_DROP_MS`, once). `skip(target)` is given the element a touch
+started on, and leaves it alone (a map or a pinch-zoom area with finger gestures of its own). `now` is the clock, `performance.now`
+by default, so fake timers move it. For tests, `threeFingerTap(target)` from [`voice-kit/testing/handsfree`](../testing/README.md)
+fires the touches.
+
+## React: the hook, the tap and the mic mark
+
+`voice-kit/handsfree/react` (React 18 or later, an optional peer) and `voice-kit/handsfree/styles.css`:
+
+```tsx
+import { HandsFreeMark, useHandsFree, useThreeFingerTap } from 'voice-kit/handsfree/react';
+import 'voice-kit/handsfree/styles.css';
+
+function Mark() {
+  const state = useHandsFree(handsFree); // the session; re-renders on each state
+  useThreeFingerTap(() => handsFree.start(), { skip: (t) => t instanceof Element && t.closest('.map') !== null });
+  return <HandsFreeMark state={state} label={t('handsFree.' + state.name)} onClick={() => handsFree.start()} />;
+}
+```
+
+- `useHandsFree(session)`: the session's `state()`, following its `subscribe`. Hold the session in a module or a ref: it must be the
+  same each render.
+- `useThreeFingerTap(onTap, options)`: `watchThreeFingerTaps` on the document while the component is mounted; the latest `onTap` is
+  the one called.
+- `<HandsFreeMark state label onClick? className? />`: a small microphone. `state` is the session's state or its name; `label` is
+  the accessible name, in the app's words (the mark has no text of its own). Without `onClick` it is a `span` with `role="img"`; with
+  it, a `button`. It carries `data-state`, and the stylesheet draws each:
+
+| `data-state` | Look |
+| --- | --- |
+| `off`, `starting` | muted outline |
+| `waiting` | the wake listens: a quiet outline |
+| `listening` | the microphone is open: filled green, a gentle pulse that stops under `prefers-reduced-motion` |
+| `working` | the app is carrying the words out: blue, dashed |
+| `follow-up` | open for a follow-up with no wake word: teal, a thick double line |
+| `needs-touch` | amber: touch to start the audio |
+| `failed` | red, dotted |
+
+State is never carried by colour alone: the border style differs too. Theme it by CSS variables on `:root`, a parent or
+`.bk-handsfree`: `--bk-handsfree-size` (2.25rem), `--bk-handsfree-radius` (999px), `--bk-handsfree-surface`, `--bk-handsfree-off`,
+`--bk-handsfree-waiting`, `--bk-handsfree-listening` (#16a34a), `--bk-handsfree-working` (#2563eb), `--bk-handsfree-follow-up`
+(#0d9488), `--bk-handsfree-needs-touch` (#d97706), `--bk-handsfree-failed` (#dc2626) and `--bk-handsfree-pulse` (1.4s). Or leave the
+file out and style `.bk-handsfree[data-state=...]` yourself.
 
 ## Every end leaves nothing open
 

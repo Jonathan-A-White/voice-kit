@@ -11,6 +11,14 @@ Each library keeps its own changelog; this one records the repo's releases and p
 - [@voice-kit/wake](packages/wake/CHANGELOG.md)
 - [@voice-kit/handsfree](packages/handsfree/CHANGELOG.md)
 
+## v0.21.0 (2026-11-14)
+
+- @voice-kit/handsfree 0.2.0 (mw-rl10piw.3): a spoken-command router (`normaliseSpoken`, `defineSpoken`, `route`: words to a named
+  command the app maps to its own), `watchThreeFingerTaps` (the three-finger tap), and the React entry `voice-kit/handsfree/react`
+  (`useHandsFree`, `useThreeFingerTap`, `HandsFreeMark`, the microphone mark) with `voice-kit/handsfree/styles.css`. See
+  [its changelog](packages/handsfree/CHANGELOG.md).
+- @voice-kit/testing 0.6.0: `threeFingerTap(target)` in `voice-kit/testing/handsfree`. See [its changelog](packages/testing/CHANGELOG.md).
+
 ## v0.20.0 (2026-11-14)
 
 - New library @voice-kit/handsfree 0.1.0 (mw-rl10piw.2): the hands-free session as `voice-kit/handsfree`. On the wake word a short

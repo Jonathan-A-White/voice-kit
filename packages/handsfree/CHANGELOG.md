@@ -2,6 +2,19 @@
 
 Newest first. Breaking changes come first in a release, each with its migration in one sentence.
 
+## 0.2.0 (2026-11-14, not yet tagged)
+
+- New (mw-rl10piw.3): the spoken-command router in `voice-kit/handsfree`: `normaliseSpoken(words)` (lower case, punctuation off, a leading
+  and a trailing 'please' off, number words and ordinals as digits), `defineSpoken(rules)` and `route(words, rules)`, which give
+  `{ name, rest, words }` for the first rule that fits, or nothing. The app maps the name to its own command; no registry is imported.
+- New: `watchThreeFingerTaps(element, onTap, { skip, now })`: a three-finger tap is exactly three fingers, none moved more than 10 px,
+  all up within 400 ms of the third landing; the click some phones send after it is dropped; `skip(target)` leaves an element with
+  finger gestures of its own alone; it returns how to stop.
+- New: `voice-kit/handsfree/react` (React 18 or later, an optional peer): `useHandsFree(session)`, `useThreeFingerTap(onTap, options)` and
+  `HandsFreeMark`, a microphone mark that draws the state by `data-state` with the accessible name the app passes in; and
+  `voice-kit/handsfree/styles.css`, its look by `--bk-handsfree-*` CSS variables, with a pulse while listening that stops under
+  `prefers-reduced-motion`.
+
 ## 0.1.0 (2026-11-14)
 
 - New (mw-rl10piw.2): the hands-free session as a package, `voice-kit/handsfree`. `createHandsFree(ports, options)` is a state

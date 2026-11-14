@@ -11,6 +11,8 @@
 //   - 'voice-kit/wake' hears the saying once in plain node, on the packed model;
 //   - 'voice-kit/handsfree' runs one whole exchange (a fake wake, the fake recogniser, a command, a follow-up, the close) in the
 //     vitest the app installs, with 'voice-kit/testing/handsfree' and 'voice-kit/testing/mic'; its import graph reaches only voice-kit/wake;
+//     it routes a spoken phrase to a command name in plain node, and 'voice-kit/handsfree/react' renders HandsFreeMark with the app's React
+//     (its styles.css is packed; the react entry reaches no other voice-kit library);
 //   - 'voice-kit/testing/speech' and 'voice-kit/testing/mic' run in the vitest the app installs (fake timers), by import
 //     and by init script.
 // The "fresh clone" is the working tree as it stands (tracked and untracked files, minus what git ignores),
@@ -52,7 +54,7 @@ try {
 
   // The exports map names the entry points (and package.json), nothing else: no deep imports.
   const entries = Object.keys(JSON.parse(readFileSync(join(installed, 'package.json'), 'utf-8')).exports).sort();
-  const expected = ['./composer', './composer/styles.css', './forms', './handsfree', './package.json', './speech', './speech/react', './speech/styles.css', './talks', './talks/dexie', './talks/grind', './talks/react', './talks/styles.css', './testing/handsfree', './testing/mic', './testing/speech', './testing/talks', './wake', './wake/models/*'];
+  const expected = ['./composer', './composer/styles.css', './forms', './handsfree', './handsfree/react', './handsfree/styles.css', './package.json', './speech', './speech/react', './speech/styles.css', './talks', './talks/dexie', './talks/grind', './talks/react', './talks/styles.css', './testing/handsfree', './testing/mic', './testing/speech', './testing/talks', './wake', './wake/models/*'];
   if (JSON.stringify(entries) !== JSON.stringify(expected)) throw new Error('exports: ' + entries.join(', '));
   console.log('the exports map names the entry points');
 
@@ -442,6 +444,40 @@ it('one whole exchange: wake, chime, a command, a follow-up, the close', async (
   );
   run('npx', ['vitest', 'run', 'handsfree.test.mjs'], app, { timeout: 240_000 });
   console.log('voice-kit/handsfree runs an exchange in vitest');
+
+  // 7b. The router in plain node, and the React entry: HandsFreeMark renders with the app's React and its stylesheet is packed.
+  for (const file of ['router.js', 'threeFingerTap.js', 'react.js', 'styles.css']) {
+    if (!existsSync(join(installed, 'packages/handsfree/dist', file))) throw new Error(`packages/handsfree/dist/${file} is not packed`);
+  }
+  standsAlone('packages/handsfree/dist/react.js');
+  writeFileSync(
+    join(app, 'handsfree-router.mjs'),
+    `
+import { createElement } from 'react';
+import { renderToString } from 'react-dom/server';
+import { createRequire } from 'node:module';
+import { existsSync, readFileSync } from 'node:fs';
+import { defineSpoken, normaliseSpoken, route, watchThreeFingerTaps } from 'voice-kit/handsfree';
+import { HandsFreeMark } from 'voice-kit/handsfree/react';
+
+const rules = defineSpoken([
+  { name: 'read', phrases: ['read', 'open', 'go to'], rest: true },
+  { name: 'pause', phrases: ['pause'] },
+  { name: 'ask', phrases: ['ask'], rest: true },
+]);
+if (normaliseSpoken('Read John three, please.') !== 'read john 3') throw new Error('normalise: ' + normaliseSpoken('Read John three, please.'));
+const routed = route('Please go to first John two', rules);
+if (!routed || routed.name !== 'read' || routed.rest !== '1 john 2') throw new Error('route: ' + JSON.stringify(routed));
+if (route('paused', rules) !== undefined || route('', rules) !== undefined) throw new Error('a phrase that is no command was routed');
+if (typeof watchThreeFingerTaps !== 'function') throw new Error('no watchThreeFingerTaps');
+const html = renderToString(createElement(HandsFreeMark, { state: { name: 'listening' }, label: 'Hands-free: listening' }));
+if (!html.includes('data-state="listening"') || !html.includes('aria-label="Hands-free: listening"') || !html.includes('bk-handsfree')) throw new Error('mark html: ' + html);
+const css = createRequire(import.meta.url).resolve('voice-kit/handsfree/styles.css');
+if (!existsSync(css) || !readFileSync(css, 'utf-8').includes('prefers-reduced-motion')) throw new Error('styles.css is not packed');
+console.log('voice-kit/handsfree routes a phrase and renders the mark');
+`,
+  );
+  console.log(run('node', ['handsfree-router.mjs'], app).trim());
 
   console.log('consumer smoke test passed');
 } catch (err) {
