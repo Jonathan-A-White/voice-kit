@@ -1,10 +1,10 @@
-"""Trains the 'Hey Lampas' network of scripts/wake-probe/detector.mjs, on the features probe.mjs's prepare step wrote.
+"""Trains a phrase's network ('Hey Lampas' unless probe.mjs says another with --phrase) of scripts/wake-probe/detector.mjs, on the features probe.mjs's prepare step wrote.
 
 Run by `node scripts/wake-probe/probe.mjs train` with the scratch folder's venv (PyTorch for the CPU; see README.md):
 
-    python train.py SCRATCH REPO
+    python train.py SCRATCH REPO [--shared DIR] [--smoke]
 
-It reads SCRATCH/feat (network frames: 40 log-mel bands every 20 ms, made by detector.mjs, so training and scoring
+It reads SCRATCH/feat (and the phrase-free stream from DIR/feat when --shared names DIR; SCRATCH's own otherwise) (network frames: 40 log-mel bands every 20 ms, made by detector.mjs, so training and scoring
 share one front end), trains, mines hard negatives from the training speech, and writes SCRATCH/model-trained.json:
 the layers as detector.mjs reads them (float32, little-endian, base64), with the date and the commit that trained it.
 The threshold is set later, by probe.mjs's calibrate step, on other speech. One process, at most 4 threads.
@@ -119,12 +119,14 @@ def b64(t):
     return base64.b64encode(t.detach().numpy().astype("<f4").tobytes()).decode("ascii")
 
 
-def main(scratch, repo, smoke=False):
+def main(scratch, repo, smoke=False, shared=None):
     global EPOCHS, MINE_AT, RANDOM_PER_EPOCH
     if smoke:  # a quick check of the whole path on a slice of the data: 2 epochs, one mining round
         EPOCHS, MINE_AT, RANDOM_PER_EPOCH = 2, (2,), 5_000
     t0 = time.time()
     feat = os.path.join(scratch, "feat")
+    # what does not depend on the phrase (the stream and the hands-free stream) is in the shared folder; for Hey Lampas it is the scratch folder itself
+    shared_feat = os.path.join(shared or scratch, "feat")
     global WINDOW
     with open(os.path.join(feat, "meta.json"), encoding="utf-8") as f:
         meta = json.load(f)
@@ -132,14 +134,14 @@ def main(scratch, repo, smoke=False):
     assert meta["bands"] == BANDS
     pos = load(os.path.join(feat, "pos.f32"), WINDOW)
     neg = load(os.path.join(feat, "negfixed.f32"), WINDOW)
-    stream = torch.from_numpy(np.fromfile(os.path.join(feat, "stream.f32"), dtype=np.float32).reshape(-1, BANDS))
+    stream = torch.from_numpy(np.fromfile(os.path.join(shared_feat, "stream.f32"), dtype=np.float32).reshape(-1, BANDS))
     # what a car's Bluetooth hands-free microphone sends (probe.mjs prepare-hf): more positives, negatives and stream
     hf_stream_from = stream.shape[0]
-    hf = all(os.path.exists(os.path.join(feat, f"hf-{part}.json")) for part in ("stream", "pos", "neg"))
+    hf = all(os.path.exists(os.path.join(shared_feat if part == "stream" else feat, f"hf-{part}.json")) for part in ("stream", "pos", "neg"))
     if hf:
         hf_pos = load(os.path.join(feat, "hf-pos.f32"), WINDOW)
         hf_neg = load(os.path.join(feat, "hf-neg.f32"), WINDOW)
-        hf_stream = torch.from_numpy(np.fromfile(os.path.join(feat, "hf-stream.f32"), dtype=np.float32).reshape(-1, BANDS))
+        hf_stream = torch.from_numpy(np.fromfile(os.path.join(shared_feat, "hf-stream.f32"), dtype=np.float32).reshape(-1, BANDS))
         if smoke:
             hf_pos, hf_neg, hf_stream = hf_pos[:500], hf_neg[:500], hf_stream[:250_000]
         pos, neg = torch.cat([pos, hf_pos]), torch.cat([neg, hf_neg])
@@ -261,4 +263,5 @@ def main(scratch, repo, smoke=False):
 
 
 if __name__ == "__main__":
-    main(sys.argv[1], sys.argv[2], "--smoke" in sys.argv[3:])
+    rest = sys.argv[3:]
+    main(sys.argv[1], sys.argv[2], "--smoke" in rest, rest[rest.index("--shared") + 1] if "--shared" in rest else None)

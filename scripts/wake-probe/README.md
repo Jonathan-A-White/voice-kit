@@ -68,6 +68,8 @@ Everything the probe makes stays in `~/.cache/voice-kit-wake-spike/route-d`, out
 - the features of the training audio (`feat/`, about 2 GB);
 - `model-trained.json`, the network before its threshold is set.
 
+A phrase other than Hey Lampas keeps its own files in `route-d/phrases/<slug>/` (see "A second phrase" below).
+
 To use another scratch root, pass `--root DIR` or set `WAKE_PROBE_ROOT`. To use another Python, set
 `WAKE_PROBE_PYTHON`. You may delete the scratch folder at any time. Nothing in it is committed. To make one part
 again, delete its file: `sayings/<name>.json`, `feat/stream.json` or `feat/meta.json`.
@@ -122,6 +124,40 @@ The exit code:
 - `measure`: 0 when the bar is met, 1 when it is not;
 - every step: 2 on an error, for example a missing tool or folder.
 
+## A second phrase
+
+The phrases are one table, `phrases.mjs`: a phrase by its slug, with the spellings it is said with, its near words, the
+path of its model and of its test fixture, and where its measuring numbers go. `hey-lampas` and `hey-postern` are in it.
+Every step of `probe.mjs` takes `--phrase <slug>` (`hey-lampas` when not given); an unknown slug exits 2 and lists the
+slugs; `node scripts/wake-probe/probe.mjs --help` names the option. To make Hey Postern's model, after the one-time
+downloads above:
+
+1. Add the phrase to `phrases.mjs` if it is not there: its slug, five spellings (plain, comma, full stop, exclamation
+   mark, lower case), near words (words that sound a little like it, the other phrases, and what the app is told), and
+   the paths `examples/wake-spike/public/models/<slug>.json`, `scripts/wake-probe/fixtures/<slug>.wav` and
+   `examples/wake-spike/results-<slug>.json`. Add the licence's row to `public/models/licences.json` and
+   `docs/wake-word-engines.md` if the model needs one.
+2. `nice -n 10 node scripts/wake-probe/probe.mjs prepare --phrase hey-postern`: the sayings, near words and the held-out
+   sets of the phrase, and the training windows. It makes the test fixture `fixtures/<slug>.wav` too, and it does not make
+   again what is shared (below), so the second phrase takes a fraction of the first one's time.
+3. Optionally the car's microphone, as above, with `--phrase hey-postern`: `prepare-hf --part stream` is shared and is
+   not made again; `--part pos` and `--part neg` are the phrase's.
+4. `nice -n 10 node scripts/wake-probe/probe.mjs train --phrase hey-postern`, then `calibrate --phrase hey-postern`
+   (writes `examples/wake-spike/public/models/<slug>.json`) and `measure --phrase hey-postern`.
+5. For the page's own tries and numbers, `node examples/wake-spike/scripts/make-tries.mjs --phrase hey-postern` and
+   `npm run measure --workspace wake-spike -- --phrase hey-postern` (see `examples/wake-spike/README.md`).
+6. Commit the model, the fixture and its results file; add a test beside the Hey Lampas ones for the new model.
+
+What is shared by every phrase, made once, in `route-d/`: LibriSpeech's stream and its features (`feat/stream.f32`,
+`feat/stream.json`), the hands-free stream (`feat/hf-stream.f32`, `feat/hf-stream.json`), the speech pool behind the
+positives (`sayings/speech-pool`), the VCTK speaker sets (`sets.json`), the road-like noise (made inside the stream) and
+the downloads. What is the phrase's own: the sayings of the phrase and of its near words (`sayings/`, `vits/`), the
+held-out sets made from them, the training windows (`feat/pos.f32`, `feat/negfixed.f32`, `feat/meta.json`, and
+`feat/hf-pos.*`, `feat/hf-neg.*`), the trained network (`model-trained.json`), the committed model, the fixture and the
+results. Hey Lampas's own files stay where they were made, in `route-d/` itself; another phrase's are in
+`route-d/phrases/<slug>/`. A phrase trains on the same speakers and the same seeds as the first, so its sets are kept
+apart by speaker and by voice in the same way.
+
 ## The three sets
 
 The sets are kept apart by speaker and by voice:
@@ -174,7 +210,10 @@ no tool and no scratch folder, and takes seconds. It checks:
 - that the committed model hears the fixture saying (a VCTK speaker it never trained on) exactly once;
 - that it does not hear `packages/testing/clips/english.wav`, nor 30 s of silence;
 - the document's tables;
-- that the committed model hears the fixture saying through a narrowband car, clean and under road noise at 5 dB.
+- that the committed model hears the fixture saying through a narrowband car, clean and under road noise at 5 dB;
+- the phrase table: Hey Lampas's model, fixture, spellings and near words are what they were, Hey Postern's are all
+  there, the shared files have the same path for both phrases and the sayings differ, and an unknown `--phrase` exits 2
+  and lists the slugs.
 
 `handsfree.test.mjs` checks the simulation's parts: resampling, the call band, CVSD, gain, the suppressor, the levels
 carMic mixes at, the conditions, and (when `ffmpeg` is there) mSBC.

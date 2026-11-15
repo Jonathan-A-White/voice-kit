@@ -1,6 +1,6 @@
 // The wake-word probe of route (d) in docs/wake-word-engines.md: makes the training, threshold and measuring audio,
-// trains our own small 'Hey Lampas' network, sets its threshold on audio kept apart, and measures the committed model
-// on other audio again. All scoring goes through ./detector.mjs. It needs espeak-ng and ffmpeg on the PATH (or
+// trains our own small phrase's network ('Hey Lampas', or another phrase of ./phrases.mjs), sets its threshold on audio kept
+// apart, and measures the committed model on other audio again. All scoring goes through ./detector.mjs. It needs espeak-ng and ffmpeg on the PATH (or
 // ESPEAK_NG and FFMPEG), and, for prepare and train, the scratch folder's Python venv (README.md says how). It keeps
 // every file it makes in the scratch folder, outside the repo; only the model and its licences are committed.
 //
@@ -11,21 +11,22 @@
 //   node scripts/wake-probe/probe.mjs train       train the network (PyTorch, through train.py)
 //   node scripts/wake-probe/probe.mjs calibrate   set the threshold on the threshold set; writes the committed model
 //   node scripts/wake-probe/probe.mjs measure     measure the committed model on the measuring set [--markdown]
-//   (options: --root DIR, the scratch root, default ~/.cache/voice-kit-wake-spike)
+//   (options: --phrase SLUG, a phrase of ./phrases.mjs, 'hey-lampas' when not given; an unknown slug exits 2 and lists them.
+//    The speech that does not depend on the phrase is made once and shared; the sayings, near words and what is made from
+//    them are the phrase's own. --root DIR, the scratch root, default ~/.cache/voice-kit-wake-spike)
 import { spawn } from 'node:child_process';
 import { closeSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, statSync, writeFileSync, writeSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as D from './detector.mjs';
 import { HANDSFREE_CONDITIONS, brownNoise, carMic, throughCar } from './handsfree.mjs';
+import { DEFAULT_PHRASE, phraseOf, scratchPaths, slugs } from './phrases.mjs';
 
 const RATE = D.FRONT_END.rate;
 const WINDOW = 80; // network frames in one window: 1.6 s (train.py's WINDOW)
 const WINDOW_SAMPLES = D.windowSamples(WINDOW);
 const REPO = fileURLToPath(new URL('../../', import.meta.url));
-export const MODEL_PATH = join(REPO, 'examples/wake-spike/public/models/hey-lampas.json');
-const FIXTURE_PATH = join(REPO, 'scripts/wake-probe/fixtures/hey-lampas.wav');
 const VITS_MODEL = 'tts_models--en--vctk--vits'; // Coqui's VITS voice trained on VCTK: 109 speakers
 
 // The Governor's bar (mw-6ww.165, question 6): at most 1 false wake an hour while speech plays, at most 2 misses in 20.
@@ -35,7 +36,6 @@ const CALIBRATION_TARGET = 0.5;
 
 // ---- who says what: three sets kept apart by speaker and voice ----
 
-const PHRASES = ['Hey Lampas', 'Hey, Lampas', 'Hey Lampas.', 'Hey Lampas!', 'hey lampas'];
 // espeak-ng: training voices and variants; the threshold set has en-us-nyc and four other variants; the measuring set
 // has en-029 and the m4, f4 and klatt4 variants. No (voice, variant) pair is in two sets.
 const ES_TRAIN_VOICES = ['en-gb', 'en-us', 'en-gb-scotland', 'en-gb-x-gbclan', 'en-gb-x-rp', 'en-gb-x-gbcwmd'];
@@ -44,16 +44,8 @@ const ES_THRESHOLD = { voices: ['en-us-nyc'], variants: ['+m8', '+klatt5', '+And
 const ES_MEASURE = { voices: ['en-029'], variants: ['+m4', '+f4', '+klatt4'] };
 const SPEEDS = [120, 145, 170, 195];
 const PITCHES = [25, 50, 75];
-// Near words and everyday sentences: negatives. "Please read me the first chapter" (the test clip) is not here, and
-// nothing that sounds the same as the phrase ("Hey lamp us") is.
-const CONFUSABLES = [
-  'Hey', 'Hey Lamp', 'Hey lamb', 'Hey campus', 'Hey Postern', 'Hey buddy', 'Hey Lucas', 'Hey Thomas', 'Hey lampshade',
-  'Hey glasses', 'Lampas', 'Hey Las Vegas', 'Hey Lambert', 'Hey Atlas', 'Hey alarm', 'Okay, Lampas', 'Hello',
-  'Play', 'Pause', 'Stop', 'Next chapter', 'Previous chapter', 'Back a verse', 'Open John three', 'Hey Linda',
-  'Hey llama', 'Hey Lana', 'Hey Pampas', 'Hey Tampa', 'Hey canvas', 'Hey lemon', 'Hey, let us pass', 'Hey Alexa',
-  'Hey Google', 'Hey Siri', 'Hey Lambo', 'Hey Lamar', 'Hey lamplight', 'Hey compass', 'Hey Douglas', 'Hey palace',
-  'Hey Nicholas', 'Hey Marcus', 'A lamp post', 'The lamp is on', 'Hey, pass the lamp', 'Hey there', 'Hey you',
-];
+// Near words (the phrase's own, in ./phrases.mjs) and everyday sentences: negatives. "Please read me the first chapter" (the test
+// clip) is not here, and nothing that sounds the same as the phrase ("Hey lamp us") is.
 const SENTENCES = [
   'In the beginning was the Word, and the Word was with God.', 'Turn left at the next light and keep going.',
   'What time does the meeting start tomorrow?', 'I left the keys on the kitchen table.',
@@ -241,8 +233,8 @@ function run(command, args, label) {
 
 /** VCTK VITS sayings of jobs [{ text, speaker, length, noise, noisew }], trimmed, at 16 kHz (resampled by ffmpeg). */
 async function vitsSay(opt, jobs, name) {
-  const base = join(opt.scratch, 'vits', name);
-  mkdirSync(join(opt.scratch, 'vits'), { recursive: true });
+  const base = join(opt.paths.vits, name);
+  mkdirSync(opt.paths.vits, { recursive: true });
   writeFileSync(base + '.jobs.json', JSON.stringify(jobs));
   await run(opt.python, ['-I', join(REPO, 'scripts/wake-probe/vits_say.py'), opt.vitsModel, base + '.jobs.json', base], `vits ${name}`);
   const { rate, gap, lengths } = JSON.parse(readFileSync(base + '.json', 'utf8'));
@@ -306,13 +298,18 @@ function writeWav(path, samples) {
 
 function options(argv) {
   const opt = { command: argv[0] ?? 'help' };
+  if (argv.includes('--help') || argv.includes('-h')) opt.command = 'help';
   for (let i = 1; i < argv.length; i++) {
     const key = argv[i].replace(/^--/, '');
     if (i + 1 < argv.length && !argv[i + 1].startsWith('--')) opt[key] = argv[++i];
     else opt[key] = true;
   }
   opt.root ??= process.env.WAKE_PROBE_ROOT ?? join(homedir(), '.cache', 'voice-kit-wake-spike');
-  opt.scratch = join(opt.root, 'route-d');
+  opt.phrase = phraseOf(opt.phrase === true ? '' : (opt.phrase ?? DEFAULT_PHRASE)); // throws (usage) for an unknown slug
+  opt.paths = scratchPaths(opt.phrase.slug, opt.root);
+  opt.scratch = opt.paths.own;
+  opt.modelPath = join(REPO, opt.phrase.model);
+  opt.fixturePath = join(REPO, opt.phrase.fixture);
   opt.librispeech = join(opt.root, 'dl', 'librispeech', 'LibriSpeech');
   opt.vitsModel = join(opt.root, 'dl', 'coqui', VITS_MODEL);
   opt.python = process.env.WAKE_PROBE_PYTHON ?? join(opt.root, 'venv', 'bin', 'python');
@@ -353,14 +350,14 @@ function vitsJob(random, text, speaker) {
 
 /** The held-out sayings of one set: VCTK speakers (`each` sayings apiece) and espeak-ng voices, interleaved so each 20 has both. */
 async function heldOutSayings(opt, name, vitsSpeakers, each, esSet, esCount, seed) {
-  const path = join(opt.scratch, 'sayings', name);
+  const path = join(opt.paths.sayings, name);
   if (existsSync(path + '.json')) return;
   const random = rng(seed);
   const speakerOf = vitsSpeakers.flatMap((s) => Array(each).fill(s));
-  const vits = await vitsSay(opt, speakerOf.map((s) => vitsJob(random, pick(random, PHRASES), s)), name);
+  const vits = await vitsSay(opt, speakerOf.map((s) => vitsJob(random, pick(random, opt.phrase.spellings), s)), name);
   const combos = shuffled(random, esCombos(esSet)).slice(0, esCount);
   const es = [];
-  for (const v of combos) es.push(await say(pick(random, PHRASES), v, pick(random, SPEEDS), pick(random, PITCHES)));
+  for (const v of combos) es.push(await say(pick(random, opt.phrase.spellings), v, pick(random, SPEEDS), pick(random, PITCHES)));
   const clips = [];
   const meta = [];
   const perSet = Math.round((20 * vits.length) / (vits.length + es.length));
@@ -381,12 +378,13 @@ async function heldOutSayings(opt, name, vitsSpeakers, each, esSet, esCount, see
 // ---- prepare ----
 
 async function prepareSayings(opt, sets) {
-  const dir = join(opt.scratch, 'sayings');
+  const dir = opt.paths.sayings;
   mkdirSync(dir, { recursive: true });
   const random = rng(11);
+  const CONFUSABLES = opt.phrase.near;
   if (!existsSync(join(dir, 'pos-espeak.json'))) {
     const clips = [];
-    for (const voice of ES_TRAIN_VOICES) for (const variant of ES_TRAIN_VARIANTS) for (const speed of SPEEDS) for (const pitch of PITCHES) clips.push(await say(pick(random, PHRASES), voice + variant, speed, pitch));
+    for (const voice of ES_TRAIN_VOICES) for (const variant of ES_TRAIN_VARIANTS) for (const speed of SPEEDS) for (const pitch of PITCHES) clips.push(await say(pick(random, opt.phrase.spellings), voice + variant, speed, pitch));
     saveClips(join(dir, 'pos-espeak'), clips);
     const neg = [];
     for (const text of [...CONFUSABLES, ...CONFUSABLES, ...SENTENCES]) {
@@ -397,7 +395,7 @@ async function prepareSayings(opt, sets) {
   }
   if (!existsSync(join(dir, 'pos-vits.json'))) {
     const jobs = [];
-    for (const s of sets.train) for (let k = 0; k < 30; k++) jobs.push(vitsJob(random, pick(random, PHRASES), s));
+    for (const s of sets.train) for (let k = 0; k < 30; k++) jobs.push(vitsJob(random, pick(random, opt.phrase.spellings), s));
     saveClips(join(dir, 'pos-vits'), await vitsSay(opt, jobs, 'pos-vits'));
     const neg = [];
     for (const text of CONFUSABLES) for (let k = 0; k < 20; k++) neg.push(vitsJob(random, text, pick(random, sets.train)));
@@ -407,11 +405,11 @@ async function prepareSayings(opt, sets) {
   }
   await heldOutSayings(opt, 'threshold', sets.threshold, 3, ES_THRESHOLD, 20, 41);
   await heldOutSayings(opt, 'measure', sets.measure, 2, ES_MEASURE, 18, 43);
-  if (!existsSync(FIXTURE_PATH)) {
-    const [clip] = await vitsSay(opt, [{ text: 'Hey Lampas', speaker: sets.fixture[0], length: 1, noise: 0.667, noisew: 0.8 }], 'fixture');
+  if (!existsSync(opt.fixturePath)) {
+    const [clip] = await vitsSay(opt, [{ text: opt.phrase.spellings[0], speaker: sets.fixture[0], length: 1, noise: 0.667, noisew: 0.8 }], 'fixture');
     mkdirSync(join(REPO, 'scripts/wake-probe/fixtures'), { recursive: true });
-    writeWav(FIXTURE_PATH, clip.map((v) => v * 0.5));
-    console.log(`prepare: the test's fixture, VCTK VITS speaker ${sets.fixture[0]}, written to scripts/wake-probe/fixtures/hey-lampas.wav`);
+    writeWav(opt.fixturePath, clip.map((v) => v * 0.5));
+    console.log(`prepare: the test's fixture, VCTK VITS speaker ${sets.fixture[0]}, written to ${opt.phrase.fixture}`);
   }
 }
 
@@ -435,10 +433,11 @@ function roughen(random, x, background) {
 
 /** The negative stream: train-clean-100 speech roughened in 20 s stretches, then road noise alone and near-quiet. */
 async function prepareStream(opt) {
-  const feat = join(opt.scratch, 'feat');
+  const feat = join(opt.paths.shared, 'feat'); // phrase-free: made once, shared by every phrase
   mkdirSync(feat, { recursive: true });
   const streamPath = join(feat, 'stream.f32');
-  const poolPath = join(opt.scratch, 'sayings', 'speech-pool');
+  const poolPath = opt.paths.speechPool;
+  mkdirSync(join(opt.paths.shared, 'sayings'), { recursive: true });
   if (existsSync(join(feat, 'stream.json'))) return JSON.parse(readFileSync(join(feat, 'stream.json'), 'utf8'));
   const t0 = Date.now();
   const random = rng(17);
@@ -539,11 +538,12 @@ export function trainingWindow(random, clip, pool, how) {
 }
 
 async function prepareWindows(opt, stream) {
-  const feat = join(opt.scratch, 'feat');
+  const feat = opt.paths.feat;
+  mkdirSync(feat, { recursive: true });
   if (existsSync(join(feat, 'meta.json'))) return;
   const t0 = Date.now();
-  const dir = join(opt.scratch, 'sayings');
-  const { clips: pool } = loadClips(join(dir, 'speech-pool'));
+  const dir = opt.paths.sayings;
+  const { clips: pool } = loadClips(opt.paths.speechPool);
   const random = rng(23);
   const positives = [...loadClips(join(dir, 'pos-espeak')).clips, ...loadClips(join(dir, 'pos-vits')).clips];
   const fits = positives.filter((c) => c.length - PAD < WINDOW_SAMPLES - RATE * 0.1);
@@ -581,7 +581,7 @@ async function prepare(opt) {
   for (const p of [join(opt.vitsModel, 'model_file.pth'), opt.python]) if (!existsSync(p)) throw new Error(`missing ${p}: see scripts/wake-probe/README.md`);
   const sets = vitsSets(opt);
   mkdirSync(opt.scratch, { recursive: true });
-  writeFileSync(join(opt.scratch, 'sets.json'), JSON.stringify(sets));
+  writeFileSync(opt.paths.sets, JSON.stringify(sets));
   console.log(`prepare: VCTK speakers: ${sets.train.length} train, ${sets.threshold.length} threshold, ${sets.measure.length} measure, 1 fixture`);
   await prepareSayings(opt, sets);
   const stream = await prepareStream(opt);
@@ -642,12 +642,12 @@ async function throughRandomCars(random, mics, preroll = 0) {
 
 /** The hands-free negative stream: the first 11 minutes of each train-clean-100 speaker after the first 6, in scenes of a car. */
 async function prepareHandsFreeStream(opt) {
-  const feat = join(opt.scratch, 'feat');
+  const feat = join(opt.paths.shared, 'feat'); // phrase-free: shared
   mkdirSync(feat, { recursive: true });
   if (existsSync(join(feat, 'hf-stream.json'))) return;
   const t0 = Date.now();
   const random = rng(71);
-  const { clips: pool } = loadClips(join(opt.scratch, 'sayings', 'speech-pool'));
+  const { clips: pool } = loadClips(opt.paths.speechPool);
   const fd = openSync(join(feat, 'hf-stream.f32'), 'w');
   let frames = 0;
   let seconds = 0;
@@ -682,12 +682,13 @@ async function prepareHandsFreeStream(opt) {
 
 /** Hands-free windows: positives (part 'pos': 4 windows of each saying) or negatives (part 'neg': heads, near words and two talkers). */
 async function prepareHandsFreeWindows(opt, part) {
-  const feat = join(opt.scratch, 'feat');
+  const feat = opt.paths.feat;
+  mkdirSync(feat, { recursive: true });
   const name = `hf-${part}`;
   if (existsSync(join(feat, `${name}.json`))) return;
   const t0 = Date.now();
-  const dir = join(opt.scratch, 'sayings');
-  const { clips: pool } = loadClips(join(dir, 'speech-pool'));
+  const dir = opt.paths.sayings;
+  const { clips: pool } = loadClips(opt.paths.speechPool);
   const random = rng(part === 'pos' ? 73 : 79);
   const positives = [...loadClips(join(dir, 'pos-espeak')).clips, ...loadClips(join(dir, 'pos-vits')).clips];
   const fits = positives.filter((c) => c.length - PAD < WINDOW_SAMPLES - RATE * 0.1);
@@ -897,7 +898,7 @@ function missesBySet(net, trials, rule) {
 // ---- train, calibrate, measure ----
 
 async function train(opt) {
-  await run(opt.python, ['-I', join(REPO, 'scripts/wake-probe/train.py'), opt.scratch, REPO, ...(opt.smoke ? ['--smoke'] : [])], 'train.py');
+  await run(opt.python, ['-I', join(REPO, 'scripts/wake-probe/train.py'), opt.scratch, REPO, '--shared', opt.paths.shared, ...(opt.smoke ? ['--smoke'] : [])], 'train.py');
 }
 
 /** Throws unless detector.mjs scores train.py's check windows as PyTorch did. */
@@ -916,7 +917,7 @@ async function calibrate(opt) {
   const trained = JSON.parse(readFileSync(join(opt.scratch, opt.smoke ? 'model-smoke.json' : 'model-trained.json'), 'utf8'));
   const model = {
     kind: 'voice-kit-wake-cnn',
-    phrase: 'Hey Lampas',
+    phrase: opt.phrase.name,
     frontEnd: { ...D.FRONT_END },
     window: trained.window,
     step: trained.step,
@@ -929,7 +930,7 @@ async function calibrate(opt) {
   const net = D.loadModel(model);
   checkParity(net, trained.check);
   if (opt.smoke) return true;
-  const { clips } = loadClips(join(opt.scratch, 'sayings', 'threshold'));
+  const { clips } = loadClips(join(opt.paths.sayings, 'threshold'));
   const background = await speechSample(opt, 'dev-clean', 60);
   const trials = await scoreAllTrials(net, clips, background, 53);
   const speech = await scoreSpeech(opt, net, 'dev-clean');
@@ -958,16 +959,16 @@ async function calibrate(opt) {
     setWithout: 'the measuring set: set on the threshold set only',
     how: `the lowest threshold (0.27 to 0.99995, even steps of log-odds), for 2 or 3 windows in a row, with at most ${CALIBRATION_TARGET} false wakes an hour on the threshold speech, plain and heard through a car's Bluetooth hands-free microphone (narrowband and wideband); of those, the one with the fewest threshold misses over all the conditions, plain and hands-free`,
     speech: `LibriSpeech dev-clean, ${speech.length} speakers, ${(hours * 60).toFixed(1)} min`,
-    sayings: `${clips.length} sayings: 3 each by VCTK VITS speakers ${JSON.parse(readFileSync(join(opt.scratch, 'sets.json'), 'utf8')).threshold.join(' ')}, and espeak-ng en-us-nyc and the m8, klatt5, Andy and Annie variants; none trained on`,
+    sayings: `${clips.length} sayings: 3 each by VCTK VITS speakers ${JSON.parse(readFileSync(opt.paths.sets, 'utf8')).threshold.join(' ')}, and espeak-ng en-us-nyc and the m8, klatt5, Andy and Annie variants; none trained on`,
     falseWakes: best.fw,
     falseWakesPerHour: Number((best.fw / hours).toFixed(2)),
     falseWakesThroughTheCar: { narrowband: best.fwCar.nb, wideband: best.fwCar.wb },
     missesBySetOf20: best.misses,
     candidates: candidates.map((c) => ({ ...c.rule, falseWakes: c.fw, misses: c.total })),
   };
-  writeFileSync(MODEL_PATH, JSON.stringify(model) + '\n');
+  writeFileSync(opt.modelPath, JSON.stringify(model) + '\n');
   console.log(`calibrate: rule ${JSON.stringify(best.rule)}: ${best.fw} false wakes in ${(hours * 60).toFixed(1)} min of threshold speech (${best.fwCar.nb} narrowband and ${best.fwCar.wb} wideband through a car); misses by set of 20: ${JSON.stringify(best.misses)}`);
-  console.log(`calibrate: the model is written to examples/wake-spike/public/models/hey-lampas.json (${statSync(MODEL_PATH).size} bytes)`);
+  console.log(`calibrate: the model is written to ${opt.phrase.model} (${statSync(opt.modelPath).size} bytes)`);
 }
 
 function median(xs) {
@@ -977,10 +978,10 @@ function median(xs) {
 
 /** Measures the committed model on the measuring set and prints the table, with the Governor's bar beside each. */
 async function measure(opt) {
-  const model = JSON.parse(readFileSync(MODEL_PATH, 'utf8'));
+  const model = JSON.parse(readFileSync(opt.modelPath, 'utf8'));
   const net = D.loadModel(model);
   const rule = net.rule;
-  const { clips } = loadClips(join(opt.scratch, 'sayings', 'measure'));
+  const { clips } = loadClips(join(opt.paths.sayings, 'measure'));
   const background = await speechSample(opt, 'test-clean', 60);
   const trials = await scoreAllTrials(net, clips, background, 59);
   const speech = await scoreSpeech(opt, net, 'test-clean');
@@ -1010,7 +1011,7 @@ async function measure(opt) {
   }
   row('Delay, median', `${Math.round(median(delays) * 1000)} ms from the phrase's end to the wake`, '-', null);
   row('Delay, worst', `${Math.round(Math.max(...delays) * 1000)} ms`, '-', null);
-  row('Model bytes', `${statSync(MODEL_PATH).size.toLocaleString('en-GB')} (hey-lampas.json, ${net.parameters.toLocaleString('en-GB')} weights as base64 float32)`, '-', null);
+  row('Model bytes', `${statSync(opt.modelPath).size.toLocaleString('en-GB')} (${basename(opt.phrase.model)}, ${net.parameters.toLocaleString('en-GB')} weights as base64 float32)`, '-', null);
   const met = rows.filter((r) => r[3] !== '-').every((r) => r[3] === 'met');
   console.log(`measure: rule ${JSON.stringify(rule)}, model trained at ${model.trained.commit.slice(0, 12)} on ${model.trained.date}, ${clips.length} held-out sayings in each condition`);
   if (opt.markdown) {
@@ -1023,10 +1024,22 @@ async function measure(opt) {
   return met;
 }
 
+const USAGE = `usage: node scripts/wake-probe/probe.mjs <command> [--phrase SLUG] [--root DIR]
+  commands: prepare, prepare-hf --part stream|pos|neg, train, calibrate, measure [--markdown]
+  --phrase SLUG  the phrase to make or measure; one of ${slugs().join(', ')} (${DEFAULT_PHRASE} when not given)
+  --root DIR     the scratch root (default ~/.cache/voice-kit-wake-spike; or set WAKE_PROBE_ROOT)
+The speech that does not depend on the phrase is made once and shared; the sayings and what is made from them are per phrase.
+scripts/wake-probe/README.md says how to make a second phrase.`;
+
 async function main(argv) {
   const opt = options(argv);
+  if (opt.command === 'help') {
+    console.log(USAGE);
+    return true;
+  }
   const commands = { prepare, 'prepare-hf': prepareHandsFree, train, calibrate, measure };
-  if (!commands[opt.command]) throw new Error(`unknown command ${opt.command}: use prepare, prepare-hf, train, calibrate or measure`);
+  if (!commands[opt.command]) throw new Error(`unknown command ${opt.command}: use prepare, prepare-hf, train, calibrate or measure (--help says more)`);
+  mkdirSync(opt.scratch, { recursive: true });
   const result = await commands[opt.command](opt);
   return result !== false;
 }
@@ -1035,7 +1048,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   main(process.argv.slice(2)).then(
     (ok) => process.exit(ok ? 0 : 1),
     (e) => {
-      console.error(e.stack ?? e.message);
+      console.error(e.usage ? e.message : (e.stack ?? e.message));
       process.exit(2);
     },
   );

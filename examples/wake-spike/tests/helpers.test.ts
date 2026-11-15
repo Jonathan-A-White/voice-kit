@@ -7,7 +7,9 @@ import { summarize } from '../src/results.js';
 import type { Results } from '../src/results.js';
 import { TRIES_KEY, describeTries, readTries, saveTries } from '../src/tries.js';
 // @ts-expect-error a plain .mjs script with no declaration file
-import { BAR, judgeTry, median, printTable, tableRows } from '../scripts/measure.mjs';
+import { BAR, judgeTry, measureArgs, median, printTable, tableRows } from '../scripts/measure.mjs';
+// @ts-expect-error a plain .mjs script with no declaration file
+import { triesArgs } from '../scripts/make-tries.mjs';
 
 describe('the 20 tries counts', () => {
   const store = () => {
@@ -112,5 +114,40 @@ describe('measure.mjs', () => {
     expect(rows.find((r) => r.measure === 'Battery')).toBeTruthy();
     const text = printTable(rows, true) as string;
     expect(text.split('\n')[1]).toBe('|---|---|---|---|');
+  });
+});
+
+describe('--phrase in measure.mjs and make-tries.mjs (mw-deiheir.1)', () => {
+  const here = (p: string) => fileURLToPath(new URL(p, import.meta.url));
+  const cache = '/cache';
+
+  it("gives Hey Lampas's model, tries folder and results file when there is no --phrase", () => {
+    const m = measureArgs(['--quick'], cache);
+    expect(m.phrase).toBe('hey-lampas');
+    expect(m.modelFile).toBe(here('../public/models/hey-lampas.json'));
+    expect(m.out).toBe(here('../results.json'));
+    expect(m.triesDir).toBe('/cache/tries');
+    expect(m.quick).toBe(true);
+    const t = triesArgs(['--force'], cache);
+    expect(t.phrase).toBe('hey-lampas');
+    expect(t.dir).toBe('/cache/tries');
+    expect(t.force).toBe(true);
+  });
+
+  it("gives Hey Postern's model, tries folder and results file for --phrase hey-postern", () => {
+    const m = measureArgs(['--phrase', 'hey-postern'], cache);
+    expect(m.phrase).toBe('hey-postern');
+    expect(m.modelFile).toBe(here('../public/models/hey-postern.json'));
+    expect(m.out).toBe(here('../results-hey-postern.json'));
+    expect(m.triesDir).toBe('/cache/tries-hey-postern');
+    expect(triesArgs(['--phrase', 'hey-postern'], cache).dir).toBe('/cache/tries-hey-postern');
+  });
+
+  it('lets --model and --out win, and refuses an unknown phrase naming the slugs', () => {
+    const m = measureArgs(['--phrase', 'hey-postern', '--model', 'a.json', '--out', 'b.json'], cache);
+    expect(m.modelFile).toBe('a.json');
+    expect(m.out).toBe('b.json');
+    expect(() => measureArgs(['--phrase', 'nothing'], cache)).toThrow(/hey-lampas, hey-postern/);
+    expect(() => triesArgs(['--phrase', 'nothing'], cache)).toThrow(/hey-lampas, hey-postern/);
   });
 });

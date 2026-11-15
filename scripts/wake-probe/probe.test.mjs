@@ -2,10 +2,13 @@
 // mw-rdpwdp1.1). Network-free and tool-free: no espeak-ng, no ffmpeg, no scratch folder. Run by the root `npm test`
 // (vitest's include names scripts/wake-probe/*.test.mjs), or alone: npx vitest run scripts/wake-probe
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { test } from 'vitest';
 import { brownNoise, carMic, throughCar } from './handsfree.mjs';
 import { rng } from './probe.mjs';
+import { DEFAULT_PHRASE, PHRASES, phraseOf, phraseSlugFrom, scratchPaths, slugs, triesFolder } from './phrases.mjs';
 import { createListener, FRONT_END, frameCount, listen, loadModel, logMel, poolFrames, scoreClip, wakes, windowEnd } from './detector.mjs';
 
 const DOC = new URL('../../docs/wake-word-engines.md', import.meta.url);
@@ -227,5 +230,79 @@ test("the committed model hears 'Hey Lampas' through a car's narrowband hands-fr
     const mic = carMic(voice, { road: road === undefined ? null : brownNoise(random, voice.length), roadDb: road, level });
     const [heard] = await throughCar(random, [mic], 'nb', { preroll: lead });
     assert.equal(listen(net, heard).length, 1, `heard ${listen(net, heard).length} times (road ${road})`);
+  }
+});
+
+// ---- the phrases (story mw-deiheir.1) ----
+
+const PROBE = fileURLToPath(new URL('./probe.mjs', import.meta.url));
+
+test("the phrase table has 'hey-lampas' and 'hey-postern', and Hey Lampas is the default", () => {
+  assert.deepEqual(slugs(), ['hey-lampas', 'hey-postern']);
+  assert.equal(DEFAULT_PHRASE, 'hey-lampas');
+  assert.equal(phraseOf().slug, 'hey-lampas');
+  assert.equal(phraseOf('hey-postern').slug, 'hey-postern');
+});
+
+test("'hey-lampas' holds what main held before the table: its model, fixture, spellings and near words", () => {
+  const lampas = PHRASES['hey-lampas'];
+  assert.equal(lampas.model, 'examples/wake-spike/public/models/hey-lampas.json');
+  assert.equal(lampas.fixture, 'scripts/wake-probe/fixtures/hey-lampas.wav');
+  assert.equal(lampas.results, 'examples/wake-spike/results.json');
+  assert.deepEqual(lampas.spellings, ['Hey Lampas', 'Hey, Lampas', 'Hey Lampas.', 'Hey Lampas!', 'hey lampas']);
+  assert.deepEqual(lampas.near, [
+    'Hey', 'Hey Lamp', 'Hey lamb', 'Hey campus', 'Hey Postern', 'Hey buddy', 'Hey Lucas', 'Hey Thomas', 'Hey lampshade',
+    'Hey glasses', 'Lampas', 'Hey Las Vegas', 'Hey Lambert', 'Hey Atlas', 'Hey alarm', 'Okay, Lampas', 'Hello',
+    'Play', 'Pause', 'Stop', 'Next chapter', 'Previous chapter', 'Back a verse', 'Open John three', 'Hey Linda',
+    'Hey llama', 'Hey Lana', 'Hey Pampas', 'Hey Tampa', 'Hey canvas', 'Hey lemon', 'Hey, let us pass', 'Hey Alexa',
+    'Hey Google', 'Hey Siri', 'Hey Lambo', 'Hey Lamar', 'Hey lamplight', 'Hey compass', 'Hey Douglas', 'Hey palace',
+    'Hey Nicholas', 'Hey Marcus', 'A lamp post', 'The lamp is on', 'Hey, pass the lamp', 'Hey there', 'Hey you',
+  ]);
+});
+
+test("'hey-postern' holds its five spellings and every near word the story names, and its own model, fixture and results", () => {
+  const postern = PHRASES['hey-postern'];
+  assert.deepEqual(postern.spellings, ['Hey Postern', 'Hey, Postern', 'Hey Postern.', 'Hey Postern!', 'hey postern']);
+  for (const word of ['Postern', 'pastor', 'Hey pastor', 'poster', 'Hey poster', 'posture', 'postman', 'post', 'Boston', 'Hey Boston', 'Preston', 'possum', 'Hey Austin', 'Hey Lampas', 'Hello', 'Okay, Postern']) {
+    assert.ok(postern.near.includes(word), `near words hold ${word}`);
+  }
+  for (const spelling of postern.spellings) assert.ok(!postern.near.includes(spelling), `${spelling} is the phrase, not a near word`);
+  assert.equal(postern.model, 'examples/wake-spike/public/models/hey-postern.json');
+  assert.equal(postern.fixture, 'scripts/wake-probe/fixtures/hey-postern.wav');
+  assert.equal(postern.results, 'examples/wake-spike/results-hey-postern.json');
+});
+
+test('the phrase-free speech features have the same paths for both phrases; the sayings and what is made from them differ', () => {
+  const a = scratchPaths('hey-lampas', '/r');
+  const b = scratchPaths('hey-postern', '/r');
+  for (const key of ['shared', 'sets', 'speechPool', 'streamFeatures', 'streamInfo', 'hfStreamFeatures', 'hfStreamInfo']) assert.equal(a[key], b[key], key);
+  for (const key of ['sayings', 'vits', 'feat', 'modelTrained']) assert.notEqual(a[key], b[key], key);
+  // Hey Lampas's files stay where they were made before the table
+  assert.equal(a.sayings, '/r/route-d/sayings');
+  assert.equal(a.feat, '/r/route-d/feat');
+  assert.equal(a.modelTrained, '/r/route-d/model-trained.json');
+  assert.equal(a.streamFeatures, '/r/route-d/feat/stream.f32');
+  assert.equal(b.sayings, '/r/route-d/phrases/hey-postern/sayings');
+  assert.equal(triesFolder('hey-lampas'), 'tries');
+  assert.equal(triesFolder('hey-postern'), 'tries-hey-postern');
+});
+
+test('--phrase is read from an argument list, and Hey Lampas is the default', () => {
+  assert.equal(phraseSlugFrom(['measure']), 'hey-lampas');
+  assert.equal(phraseSlugFrom(['measure', '--phrase', 'hey-postern']), 'hey-postern');
+  assert.equal(phraseSlugFrom(['--phrase=hey-postern', '--quick']), 'hey-postern');
+});
+
+test('an unknown phrase exits 2 and lists the slugs; --help names --phrase', () => {
+  const bad = spawnSync(process.execPath, [PROBE, 'measure', '--phrase', 'nothing'], { encoding: 'utf8' });
+  assert.equal(bad.status, 2);
+  assert.match(bad.stderr + bad.stdout, /hey-lampas/);
+  assert.match(bad.stderr + bad.stdout, /hey-postern/);
+  const help = spawnSync(process.execPath, [PROBE, '--help'], { encoding: 'utf8' });
+  assert.equal(help.status, 0);
+  assert.match(help.stdout, /--phrase/);
+  for (const command of ['prepare', 'prepare-hf', 'train', 'calibrate', 'measure']) {
+    const r = spawnSync(process.execPath, [PROBE, command, '--phrase', 'nothing'], { encoding: 'utf8' });
+    assert.equal(r.status, 2, command);
   }
 });

@@ -1,5 +1,5 @@
-// Makes the sets of 20 tries that scripts/measure.mjs counts misses on: 'Hey Lampas' said by espeak-ng in voices the
-// model never trained on, each set one condition:
+// Makes the sets of 20 tries that scripts/measure.mjs counts misses on: 'Hey Lampas' (or the phrase of --phrase) said by
+// espeak-ng in voices the model never trained on, each set one condition:
 //
 //   clean         the saying alone, in near-quiet
 //   bible10       under the recorded John (the cached Bible audio) at 10 dB speech-to-speech
@@ -14,16 +14,20 @@
 //
 // Run it after fetch-bible-audio.mjs (measure.mjs runs it for a set that is missing):
 //
-//   node examples/wake-spike/scripts/make-tries.mjs [--force]
+//   node examples/wake-spike/scripts/make-tries.mjs [--phrase SLUG] [--force]
+//
+// --phrase is a slug of scripts/wake-probe/phrases.mjs ('hey-lampas' when not given): the tries are of that phrase and go
+// to their own folder, so another phrase's tries never replace Hey Lampas's.
 //
 // The 20 sayings are the same in every set, so the sets differ only in what is behind them. Each try is 5 s with the
 // saying starting at 2 s; its manifest holds where the phrase starts and ends, in seconds from the try's first sample.
-// Output (outside the repo): ~/.cache/voice-kit-wake-spike/tries/<set>.wav and <set>.json.
+// Output (outside the repo): ~/.cache/voice-kit-wake-spike/tries/<set>.wav and <set>.json (tries-<slug>/ for another phrase).
 import { mkdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { HANDSFREE_CONDITIONS, brownNoise, carMic, throughCar } from '../../../scripts/wake-probe/handsfree.mjs';
 import { decode, rms, rng, say } from '../../../scripts/wake-probe/probe.mjs';
+import { DEFAULT_PHRASE, phraseOf, phraseSlugFrom, triesFolder } from '../../../scripts/wake-probe/phrases.mjs';
 import { DEFAULT_DIR, cachedFiles } from './fetch-bible-audio.mjs';
 
 export const RATE = 16000;
@@ -39,7 +43,11 @@ export const SETS = [
   ...HANDSFREE_CONDITIONS.map((c) => ({ key: c.key, name: c.name, handsfree: true, link: c.link, road: c.road, leak: c.leak })),
 ];
 export const LEAD_IN = 3; // seconds of lead-in a hands-free try is processed with, then cut off
-export const TRIES_DIR = join(DEFAULT_DIR, '..', 'tries');
+export const CACHE_ROOT = join(DEFAULT_DIR, '..');
+export const TRIES_DIR = join(CACHE_ROOT, triesFolder(DEFAULT_PHRASE));
+
+/** The tries folder of a phrase's slug under the cache root: Hey Lampas's is `tries`, another's `tries-<slug>`. */
+export const triesDirOf = (slug, cacheRoot = CACHE_ROOT) => join(cacheRoot, triesFolder(slug));
 
 // The voices the model did not train on, named in scripts/wake-probe/README.md ('The three sets', Measure row): the
 // measuring set's espeak-ng voice en-029 and the m4, f4 and klatt4 variants. The training voices with those variants,
@@ -51,7 +59,6 @@ export const VOICES = [
   ...TRAIN_VOICES.flatMap((voice) => HELD_OUT_VARIANTS.map((variant) => voice + variant)),
   ...[...new Set(['', ...TRAIN_VARIANTS, ...HELD_OUT_VARIANTS])].map((variant) => 'en-029' + variant),
 ];
-const PHRASES = ['Hey Lampas', 'Hey, Lampas', 'Hey Lampas.', 'Hey Lampas!', 'hey lampas'];
 const SPEEDS = [120, 145, 170, 195];
 const PITCHES = [25, 50, 75];
 
@@ -113,11 +120,11 @@ export function readSet(key, dir = TRIES_DIR) {
 }
 
 /** The 20 sayings: [{ clip, voice, phrase, speed, pitch }], each by a different voice, the same for every set. */
-async function sayings() {
+async function sayings(phrases) {
   const random = rng(77);
   const out = [];
   for (const voice of shuffled(random, VOICES).slice(0, TRIES_PER_SET)) {
-    const phrase = pick(random, PHRASES);
+    const phrase = pick(random, phrases);
     const speed = pick(random, SPEEDS);
     const pitch = pick(random, PITCHES);
     out.push({ clip: await say(phrase, voice, speed, pitch), voice, phrase, speed, pitch });
@@ -192,13 +199,13 @@ export async function handsfreeTries(heard, set, leaks, random) {
 }
 
 /** Makes every set that is not already there (or all, with force). Returns the keys of the sets it made. */
-export async function makeTries({ dir = TRIES_DIR, bibleDir = DEFAULT_DIR, force = false, say: log = console.log } = {}) {
+export async function makeTries({ phrase: slug = DEFAULT_PHRASE, dir = triesDirOf(slug), bibleDir = DEFAULT_DIR, force = false, say: log = console.log } = {}) {
   const todo = SETS.filter((set) => force || !existsSync(join(dir, `${set.key}.json`)));
   if (todo.length === 0) return [];
   const files = cachedFiles(bibleDir);
   if (todo.some((set) => set.bible !== undefined) && files.length === 0) throw new Error(`no Bible audio in ${bibleDir}: run node examples/wake-spike/scripts/fetch-bible-audio.mjs first`);
   mkdirSync(dir, { recursive: true });
-  const heard = await sayings();
+  const heard = await sayings(phraseOf(slug).spellings);
   log(`tries: ${heard.length} sayings by ${new Set(heard.map((h) => h.voice)).size} espeak-ng voices the model never trained on`);
   const segments = todo.some((set) => set.bible !== undefined) ? await bibleSegments(files, rng(5)) : [];
   const leaks = todo.some((set) => set.leak !== undefined) ? await bibleSegments(files, rng(6), LEAD_IN + TRY_SECONDS + 1) : [];
@@ -227,12 +234,20 @@ export async function makeTries({ dir = TRIES_DIR, bibleDir = DEFAULT_DIR, force
   return todo.map((set) => set.key);
 }
 
+/** What the command line says: the phrase (--phrase SLUG, Hey Lampas when none), its tries folder under `cacheRoot` and --force. */
+export function triesArgs(argv, cacheRoot = CACHE_ROOT) {
+  const phrase = phraseOf(phraseSlugFrom(argv)).slug;
+  return { phrase, dir: triesDirOf(phrase, cacheRoot), force: argv.includes('--force') };
+}
+
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  makeTries({ force: process.argv.includes('--force') }).then(
-    () => process.exit(0),
-    (err) => {
-      console.error(`tries: ${err.message}`);
-      process.exit(1);
-    },
-  );
+  Promise.resolve()
+    .then(() => makeTries(triesArgs(process.argv.slice(2))))
+    .then(
+      () => process.exit(0),
+      (err) => {
+        console.error(`tries: ${err.message}`);
+        process.exit(err.usage ? 2 : 1);
+      },
+    );
 }

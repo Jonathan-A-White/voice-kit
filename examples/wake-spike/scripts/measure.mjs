@@ -1,6 +1,9 @@
 // Measures the wake detector headless and writes examples/wake-spike/results.json:
 //
 //   npm run measure --workspace wake-spike        (from the repo root; run it as `nice -n 10 npm run ...`)
+//   node examples/wake-spike/scripts/measure.mjs --phrase SLUG
+//       measures another phrase (a slug of scripts/wake-probe/phrases.mjs; 'hey-lampas' when not given): that phrase's
+//       model and tries, and the numbers go to results-<slug>.json (results.json for 'hey-lampas').
 //   node examples/wake-spike/scripts/measure.mjs --model FILE --out FILE --quick
 //       measures another model file (the committed one's older self, say), writes the numbers to --out and leaves
 //       results.json alone; --quick skips compute (Node and Chromium), which does not depend on the training.
@@ -22,7 +25,7 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { gzipSync } from 'node:zlib';
 import ts from 'typescript';
@@ -30,7 +33,8 @@ import { chromium } from 'playwright-core';
 import { HANDSFREE_CONDITIONS, carMic, throughCar } from '../../../scripts/wake-probe/handsfree.mjs';
 import { decode, rms, rng } from '../../../scripts/wake-probe/probe.mjs';
 import { DEFAULT_DIR, cachedFiles } from './fetch-bible-audio.mjs';
-import { SETS, brownNoise, makeTries, readSet } from './make-tries.mjs';
+import { DEFAULT_PHRASE, phraseOf, phraseSlugFrom } from '../../../scripts/wake-probe/phrases.mjs';
+import { CACHE_ROOT, SETS, brownNoise, makeTries, readSet, triesDirOf } from './make-tries.mjs';
 
 const HERE = fileURLToPath(new URL('..', import.meta.url));
 const REPO = fileURLToPath(new URL('../../..', import.meta.url));
@@ -117,11 +121,11 @@ async function soakHandsfree(D, net, files, link) {
 }
 
 /** (b) and (c) Each set of 20 tries, a fresh detector for each try. */
-async function trySets(D, net) {
-  const missing = SETS.filter((set) => !existsSync(join(DEFAULT_DIR, '..', 'tries', `${set.key}.json`)));
-  if (missing.length) await makeTries();
+async function trySets(D, net, phrase, triesDir) {
+  const missing = SETS.filter((set) => !existsSync(join(triesDir, `${set.key}.json`)));
+  if (missing.length) await makeTries({ phrase, dir: triesDir });
   return SETS.map((set) => {
-    const { tries, name } = readSet(set.key);
+    const { tries, name } = readSet(set.key, triesDir);
     const delays = [];
     let misses = 0;
     for (const t of tries) {
@@ -133,10 +137,10 @@ async function trySets(D, net) {
   });
 }
 
-/** (d) Every model file's bytes and gzip bytes (level 9). The licence list beside it is documentation, not a model. */
-function modelBytes() {
+/** (d) The phrase's model file's bytes and gzip bytes (level 9). The licence list beside it is documentation, not a model. */
+function modelBytes(only) {
   const files = readdirSync(MODELS)
-    .filter((name) => name !== 'licences.json')
+    .filter((name) => name !== 'licences.json' && name === only)
     .sort()
     .map((name) => {
       const body = readFileSync(join(MODELS, name));
@@ -252,7 +256,7 @@ export function printTable(rows, markdown) {
   return [header, ...cells].map((c) => c.map((cell, i) => cell.padEnd(widths[i])).join('  ')).join('\n');
 }
 
-export async function measure({ markdown = false, modelFile = join(MODELS, 'hey-lampas.json'), out = RESULTS, quick = false } = {}) {
+export async function measure({ phrase: slug = DEFAULT_PHRASE, markdown = false, modelFile = join(REPO, phraseOf(slug).model), out = join(REPO, phraseOf(slug).results), triesDir = triesDirOf(slug), quick = false } = {}) {
   const started = Date.now();
   const files = cachedFiles();
   if (files.length === 0) throw new Error(`no Bible audio in ${DEFAULT_DIR}: run node examples/wake-spike/scripts/fetch-bible-audio.mjs first`);
@@ -264,7 +268,7 @@ export async function measure({ markdown = false, modelFile = join(MODELS, 'hey-
 
     const bible = await soak(D, net, files);
     console.log(`measure: soak: ${fixed(bible.minutes, 1)} min of Bible audio scored in ${fixed(bible.wallSeconds, 0)} s, ${bible.wakes.length} wakes`);
-    const sets = await trySets(D, net);
+    const sets = await trySets(D, net, slug, triesDir);
     console.log(`measure: tries: ${sets.map((s) => `${s.key} ${s.misses} missed`).join(', ')}`);
     const delays = sets.flatMap((s) => s.delaysMs);
 
@@ -296,7 +300,7 @@ export async function measure({ markdown = false, modelFile = join(MODELS, 'hey-
       commit: git('rev-parse', 'HEAD'),
       uncommittedChanges: dirty,
       note: 'Written by scripts/measure.mjs, headless on the laptop. The bar is the Governor\'s (question 6, mw-6ww.165). Battery is not measured headless.',
-      model: { trained: modelJson.trained.date, trainedCommit: modelJson.trained.commit, rule: net.rule, parameters: net.parameters, ...modelBytes() },
+      model: { trained: modelJson.trained.date, trainedCommit: modelJson.trained.commit, rule: net.rule, parameters: net.parameters, ...modelBytes(basename(phraseOf(slug).model)) },
       bar: BAR,
       bible: {
         minutes: bible.minutes,
@@ -346,16 +350,31 @@ export async function measure({ markdown = false, modelFile = join(MODELS, 'hey-
   }
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
+/** What the command line says: the phrase, its model, its results file and its tries folder (under `cacheRoot`); --model and --out win. */
+export function measureArgs(argv, cacheRoot = CACHE_ROOT) {
   const flag = (name) => {
-    const at = process.argv.indexOf(name);
-    return at >= 0 ? process.argv[at + 1] : undefined;
+    const at = argv.indexOf(name);
+    return at >= 0 ? argv[at + 1] : undefined;
   };
-  measure({ markdown: process.argv.includes('--markdown'), quick: process.argv.includes('--quick'), modelFile: flag('--model'), out: flag('--out') }).then(
-    () => process.exit(0),
-    (err) => {
-      console.error(`measure: ${err.stack ?? err.message}`);
-      process.exit(2);
-    },
-  );
+  const phrase = phraseOf(phraseSlugFrom(argv));
+  return {
+    phrase: phrase.slug,
+    markdown: argv.includes('--markdown'),
+    quick: argv.includes('--quick'),
+    modelFile: flag('--model') ?? join(REPO, phrase.model),
+    out: flag('--out') ?? join(REPO, phrase.results),
+    triesDir: triesDirOf(phrase.slug, cacheRoot),
+  };
+}
+
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  Promise.resolve()
+    .then(() => measure(measureArgs(process.argv.slice(2))))
+    .then(
+      () => process.exit(0),
+      (err) => {
+        console.error(`measure: ${err.usage ? err.message : (err.stack ?? err.message)}`);
+        process.exit(2);
+      },
+    );
 }

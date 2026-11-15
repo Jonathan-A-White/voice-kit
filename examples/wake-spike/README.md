@@ -79,6 +79,11 @@ nice -n 10 npm run measure --workspace wake-spike            # about 5 min; writ
 - `fetch-bible-audio.mjs` is polite: one request at a time, 2 s between files, the User-Agent `voice-kit-wake-spike/1`, a
   file already cached is never fetched again, a network failure is retried twice with a growing wait, and any 4xx or 5xx
   stops it. It downloads the same openbible.com files the page plays.
+- Another phrase (`scripts/wake-probe/phrases.mjs` lists them): `--phrase <slug>` on `make-tries.mjs` and `measure.mjs`
+  (`npm run measure --workspace wake-spike -- --phrase hey-postern`). The tries are of that phrase and go to
+  `~/.cache/voice-kit-wake-spike/tries-<slug>/`, the model is `public/models/<slug>.json`, and the numbers go to
+  `results-<slug>.json` beside `results.json`. Hey Lampas (no `--phrase`) is `results.json` and `tries/`, as before. An
+  unknown slug exits 2 and lists them. `--model FILE --out FILE` still win.
 - `make-tries.mjs` (run by `measure` for any set missing) makes four sets of 20 tries of "Hey Lampas" in 20 espeak-ng voices
   the model never trained on (the unseen voice and variant pairs named in `scripts/wake-probe/README.md`): clean; under
   Bible audio at 10 dB and at 0 dB speech-to-speech; under brown noise, a road proxy, at 5 dB. The 20 sayings are the same
