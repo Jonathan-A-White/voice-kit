@@ -784,7 +784,7 @@ describe('subscribe and state()', () => {
 
 describe('the package', () => {
   const src = fileURLToPath(new URL('../src/', import.meta.url));
-  it('imports voice-kit/wake, only types from voice-kit/composer/listen (React's types stay out of its .d.ts), and no React', () => {
+  it('imports voice-kit/wake, only types from voice-kit/composer/listen (no React types in its .d.ts), and no React', () => {
     for (const file of readdirSync(src).filter((f) => f.endsWith('.ts'))) {
       const text = readFileSync(src + file, 'utf8');
       for (const m of text.matchAll(/^\s*(import|export)\s+(type\s+)?[^'"]*from\s+['"]([^'"]+)['"]/gm)) {
