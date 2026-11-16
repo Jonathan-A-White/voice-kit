@@ -14,6 +14,7 @@ export default defineConfig({
       'voice-kit/handsfree': fileURLToPath(new URL('./packages/handsfree/src/index.ts', import.meta.url)),
       'voice-kit/talks': fileURLToPath(new URL('./packages/talks/src/index.ts', import.meta.url)),
       'voice-kit/forms': fileURLToPath(new URL('./packages/forms/src/index.ts', import.meta.url)),
+      'voice-kit/composer/listen': fileURLToPath(new URL('./packages/composer/src/listen.ts', import.meta.url)),
       'voice-kit/composer': fileURLToPath(new URL('./packages/composer/src/index.ts', import.meta.url)),
     },
   },

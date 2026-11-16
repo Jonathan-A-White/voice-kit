@@ -11,6 +11,7 @@
       "voice-kit/wake": ["../../packages/wake/src/index.ts"],
       "voice-kit/handsfree": ["../../packages/handsfree/src/index.ts"],
       "voice-kit/composer": ["../../packages/composer/src/listen.ts"],
+      "voice-kit/composer/listen": ["../../packages/composer/src/listen.ts"],
       "voice-kit/testing/handsfree": ["../../packages/testing/src/handsfree.ts"],
       "voice-kit/testing/mic": ["../../packages/testing/src/mic.ts"]
     }

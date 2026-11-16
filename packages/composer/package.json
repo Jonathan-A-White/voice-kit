@@ -11,6 +11,10 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     },
+    "./listen": {
+      "types": "./dist/listen.d.ts",
+      "default": "./dist/listen.js"
+    },
     "./styles.css": "./dist/styles.css"
   },
   "files": [

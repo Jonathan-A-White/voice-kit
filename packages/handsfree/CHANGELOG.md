@@ -4,6 +4,8 @@ Newest first. Breaking changes come first in a release, each with its migration 
 
 ## 0.2.0 (2026-11-14, not yet tagged)
 
+- Fixed (mw-rl10piw.15): the `.d.ts` files took composer's listen types from `voice-kit/composer`, whose declarations import React's types, so an app
+  that used only handsfree, had no `@types/react` and did not set `skipLibCheck` got type errors. They now come from `voice-kit/composer/listen`.
 - Fixed (mw-rl10piw.16): an exchange that closed for want of words said only `'no-speech'` when the recogniser had been ending with a transient
   error ('no-speech', 'network', 'aborted') that `listen` swallowed by starting it again. `onClose({ reason, kind })` now carries the `kind`
   of the last error the recogniser met, for `no-speech`, `follow-up-ended`, `no-open` and `listen-error` closes.

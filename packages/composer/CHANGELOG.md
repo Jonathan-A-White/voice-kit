@@ -4,6 +4,8 @@ Newest first. Breaking changes come first in a release, each with its migration 
 
 ## 0.8.1 (2026-10-23, not yet tagged)
 
+- New (mw-rl10piw.15): the entry `voice-kit/composer/listen` (the listen file and its types: `startListening`, `ListenOptions`, `ListenError`, `MicInput`, ...)
+  with no React in its declarations, for a package or app that needs only listening. `voice-kit/composer` still exports all of it.
 - New (mw-rl10piw.16): `ListenOptions.onTransient(error)` is called when `startListening` goes on through a transient recogniser error
   ('no-speech', 'network', 'aborted') by starting it again, so a caller whose own wait runs out can say what the recogniser kept meeting.
   Results and `onError` are as before.

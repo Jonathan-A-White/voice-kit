@@ -20,6 +20,10 @@
       "types": "./packages/composer/dist/index.d.ts",
       "default": "./packages/composer/dist/index.js"
     },
+    "./composer/listen": {
+      "types": "./packages/composer/dist/listen.d.ts",
+      "default": "./packages/composer/dist/listen.js"
+    },
     "./composer/styles.css": "./packages/composer/dist/styles.css",
     "./speech": {
       "types": "./packages/speech/dist/index.d.ts",
