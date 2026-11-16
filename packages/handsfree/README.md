@@ -120,12 +120,14 @@ try on the phone can say, so it is one option away.
 | `onOpen()` | At the wake, before any microphone opens for the command. May return a promise; the command waits for it. | Pause whatever is sounding (the Bible), so the recogniser does not hear it. |
 | `onCommand(words, { followUp })` | The settled words of a command; `followUp` is true for words heard in a follow-up window. | Carry it out and say what it will; resolve `{ followUp: true }` to keep listening with no wake word. A throw or a rejection closes the exchange (`command-failed`). |
 | `onInterrupt()` | A wake while `onCommand` is pending. | Stop the answer being spoken and return nothing (or `true`); return `false` to refuse, and the pending command goes on. Not given: every interrupt is taken. |
-| `onClose({ reason })` | Once, when an exchange whose `onOpen` was called is over, whatever ended it. | Resume what `onOpen` paused, unless the command took the sound over. |
+| `onClose({ reason, kind? })` | Once, when an exchange whose `onOpen` was called is over, whatever ended it. | Resume what `onOpen` paused, unless the command took the sound over. |
 | `onState(state)` | Each new state. `subscribe(listener)` does the same and returns how to stop. | Show the mic mark. |
 
 `onOpen` and `onClose` pair exactly once in every path, and `onOpen` always comes before the recogniser starts. The close
 `reason` is one of `'done'` (a command done, no follow-up), `'no-speech'`, `'follow-up-ended'`, `'listen-error'`, `'no-open'` (the
-recogniser did not open in time), `'command-failed'`, `'wake-error'`, `'stopped'` or `'hidden'`.
+recogniser did not open in time), `'command-failed'`, `'wake-error'`, `'stopped'` or `'hidden'`. A close for want of words (`'no-speech'`,
+`'follow-up-ended'`, `'no-open'`, `'listen-error'`) also carries `kind`, the kind of the last error the recogniser met in that exchange
+(`'no-speech'`, `'network'`, ...), even one `listen` went on through by starting it again; it is absent when the recogniser met none.
 
 ## Options
 

@@ -138,6 +138,12 @@ export interface ListenOptions {
   /** On-device recognition failed (language pack or service missing) and the same hold restarted in cloud mode. */
   onFallback?: () => void;
   onError?: (error: ListenError) => void;
+  /**
+   * The recogniser ended a stretch with a transient error ('no-speech', 'network', 'aborted') and the hold went on by starting
+   * it again: told as it happens, so a caller whose own wait runs out can say what the recogniser kept meeting. The hold's own
+   * result and onError are as before.
+   */
+  onTransient?: (error: ListenError) => void;
   /** Opens the input to listen on, or resolves nothing to use the phone's default microphone. Listening starts once it settles. */
   openInput?: () => Promise<MicInput | undefined>;
   /** Which input the hold ended up on: the chosen input's label, or nothing for the default microphone (also after a fallback). */
@@ -576,6 +582,7 @@ export function startListening(options: ListenOptions = {}): ListenStart {
       if (!live() || outcome || rest) return;
       if (!stopping && TRANSIENT_ERRORS.has(event.error)) {
         transient = listenError(event.error, app);
+        options.onTransient?.(transient);
         // The speech service failed on a stretch of what he said; the hold goes on, and the release says some may be missing.
         if (event.error === 'network') missed = 'Some of the words could not be made out (the speech service failed: network).';
         return;

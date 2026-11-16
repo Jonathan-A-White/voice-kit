@@ -55,6 +55,8 @@ interface Harness {
   log: string[];
   commands: [string, { followUp: boolean }][];
   closes: CloseReason[];
+  /** The kind each onClose carried (undefined: none). */
+  closeKinds: (string | undefined)[];
   states: HandsFreeState[];
   chime: { open: ReturnType<typeof vi.fn>; close: ReturnType<typeof vi.fn> };
   /** Recogniser starts (fake time of each 'start' event, i.e. the microphone open). */
@@ -91,6 +93,7 @@ function setup(options: Omit<HandsFreeOptions, 'mic'> & { mic?: 'handover' | 'sh
   const log: string[] = [];
   const commands: [string, { followUp: boolean }][] = [];
   const closes: CloseReason[] = [];
+  const closeKinds: (string | undefined)[] = [];
   const states: HandsFreeState[] = [];
   const opens: number[] = [];
   const live = new Set<FakeRecognition>();
@@ -153,8 +156,9 @@ function setup(options: Omit<HandsFreeOptions, 'mic'> & { mic?: 'handover' | 'sh
     onOpen: () => void log.push('onOpen'),
     onCommand,
     onInterrupt,
-    onClose: ({ reason }) => {
+    onClose: ({ reason, kind }) => {
       closes.push(reason);
+      closeKinds.push(kind);
       log.push(`onClose:${reason}`);
     },
     onState: (state) => {
@@ -170,6 +174,7 @@ function setup(options: Omit<HandsFreeOptions, 'mic'> & { mic?: 'handover' | 'sh
     log,
     commands,
     closes,
+    closeKinds,
     states,
     chime,
     opens,
@@ -328,6 +333,27 @@ describe('no speech and a long command (criterion 3)', () => {
     expect(h.wake.listening).toBe(true);
     expect(h.running()).toBe(0);
     expect(h.commands).toEqual([]);
+  });
+
+  it('a recogniser that ends no-speech sooner than the session waits: the close says its kind (mw-rl10piw.16)', async () => {
+    mic.options.silent = Infinity;
+    mic.options.noSpeechMs = 2000; // below the session's 6000: composer starts it again each time, unheard
+    const h = setup();
+    await started(h);
+    await woken(h);
+    await advance(6000);
+    expect(h.closes).toEqual(['no-speech']);
+    expect(h.closeKinds).toEqual(['no-speech']);
+  });
+
+  it('a close with no recogniser error carries no kind', async () => {
+    mic.options.silent = Infinity;
+    const h = setup();
+    await started(h);
+    await woken(h);
+    await advance(6000);
+    expect(h.closes).toEqual(['no-speech']);
+    expect(h.closeKinds).toEqual([undefined]);
   });
 
   it('a command still gaining words at 60000 ms is taken as ended there', async () => {

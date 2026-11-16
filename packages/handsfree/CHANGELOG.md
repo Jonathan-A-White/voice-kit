@@ -4,6 +4,9 @@ Newest first. Breaking changes come first in a release, each with its migration 
 
 ## 0.2.0 (2026-11-14, not yet tagged)
 
+- Fixed (mw-rl10piw.16): an exchange that closed for want of words said only `'no-speech'` when the recogniser had been ending with a transient
+  error ('no-speech', 'network', 'aborted') that `listen` swallowed by starting it again. `onClose({ reason, kind })` now carries the `kind`
+  of the last error the recogniser met, for `no-speech`, `follow-up-ended`, `no-open` and `listen-error` closes.
 - New (mw-rl10piw.3): the spoken-command router in `voice-kit/handsfree`: `normaliseSpoken(words)` (lower case, punctuation off, a leading
   and a trailing 'please' off, number words and ordinals as digits), `defineSpoken(rules)` and `route(words, rules)`, which give
   `{ name, rest, words }` for the first rule that fits, or nothing. The app maps the name to its own command; no registry is imported.

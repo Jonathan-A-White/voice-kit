@@ -4,6 +4,9 @@ Newest first. Breaking changes come first in a release, each with its migration 
 
 ## 0.8.1 (2026-10-23, not yet tagged)
 
+- New (mw-rl10piw.16): `ListenOptions.onTransient(error)` is called when `startListening` goes on through a transient recogniser error
+  ('no-speech', 'network', 'aborted') by starting it again, so a caller whose own wait runs out can say what the recogniser kept meeting.
+  Results and `onError` are as before.
 - Fixed (mw-k4sekr.2): the three lengths of time the composer takes are measured on `performance.now` (through a small `monotonicNow` in
   `src/clock.ts`; `Date.now` only where there is no `performance`), not on the wall clock, which steps when the host's clock is corrected:
   `VoiceRecorder`'s `durationMs` no longer comes out negative; `useTalk`'s (and `TalkBar`'s, the Composer's) talk 'tap' no longer reads a

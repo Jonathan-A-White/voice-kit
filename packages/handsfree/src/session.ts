@@ -20,7 +20,7 @@
 //
 // Every async step checks it still belongs to the live run and exchange (a stop, a hide or a new command makes it stale), so a
 // late answer from the wake, the recogniser or onCommand can never reopen what was closed.
-import type { ListenError, ListenOptions, ListenSession, ListenStart, MicInput } from 'voice-kit/composer';
+import type { ListenError, ListenErrorKind, ListenOptions, ListenSession, ListenStart, MicInput } from 'voice-kit/composer';
 
 /** Why the session could not run: the wake's own kinds. */
 export type HandsFreeFailureKind = 'not-supported' | 'permission-denied' | 'no-microphone' | 'other';
@@ -102,7 +102,7 @@ export interface HandsFreeHooks {
   /** A wake while onCommand is pending: stop what the command is doing. Return false to refuse: no new command opens and the pending one goes on. */
   onInterrupt?(): boolean | void;
   /** Once, when an exchange whose onOpen was called is over: resume what onOpen silenced, unless the command took the sound over. */
-  onClose?(info: { reason: CloseReason }): void;
+  onClose?(info: { reason: CloseReason; kind?: ListenErrorKind }): void;
   /** Each new state. */
   onState?(state: HandsFreeState): void;
 }
@@ -131,7 +131,7 @@ export interface HandsFreeOptions {
   /** How the command's microphone is opened: 'handover' (the default) or 'share'. See the README. */
   mic?: MicWay;
   /** Passed on to listen (lang, strictLang, appName, ...). */
-  listenOptions?: Omit<ListenOptions, 'onInterim' | 'onFinal' | 'onStart' | 'onError' | 'onEnd' | 'openInput' | 'onInput' | 'onFallback'>;
+  listenOptions?: Omit<ListenOptions, 'onInterim' | 'onFinal' | 'onStart' | 'onError' | 'onTransient' | 'onEnd' | 'openInput' | 'onInput' | 'onFallback'>;
 }
 
 export interface HandsFree {
@@ -152,6 +152,9 @@ export const DEFAULT_OPEN_TIMEOUT_MS = 3000;
 
 /** The kinds of recogniser error that mean it cannot listen at all here: the session fails rather than closing and waiting again. */
 const FATAL_LISTEN: ReadonlySet<string> = new Set(['permission-denied', 'not-supported', 'no-microphone']);
+
+/** The closes that mean no command came: the only ones that name a recogniser error's kind. */
+const EMPTY_CLOSES: ReadonlySet<CloseReason> = new Set(['no-speech', 'follow-up-ended', 'no-open', 'listen-error']);
 
 const defaultClock: HandsFreeClock = {
   setTimeout: (fn, ms) => globalThis.setTimeout(fn, ms),
@@ -180,6 +183,8 @@ interface Exchange {
   listening?: Listening;
   /** onCommand is pending: a wake now is an interrupt. */
   working: boolean;
+  /** The last error the recogniser met and went on through (no-speech, network, aborted) in this exchange's listening. */
+  transient?: ListenError;
   /** The wake could not be opened again while the app worked ('handover'): the session fails when the exchange closes. */
   wakeFailure?: WakeRefused;
 }
@@ -317,7 +322,9 @@ export function createHandsFree(ports: HandsFreePorts, options: HandsFreeOptions
     if (ex.opened) {
       ex.opened = false;
       try {
-        ports.onClose?.({ reason });
+        // a close for want of words says what the recogniser kept meeting (mw-rl10piw.16)
+        const kind = EMPTY_CLOSES.has(reason) ? ex.transient?.kind : undefined;
+        ports.onClose?.(kind ? { reason, kind } : { reason });
       } catch {
         // the hook's failure is the app's
       }
@@ -403,6 +410,7 @@ export function createHandsFree(ports: HandsFreePorts, options: HandsFreeOptions
     }
     if (stale()) return;
 
+    ex.transient = undefined;
     const listening: Listening = { followUp, pauseMs: readPause(), open: false, words: '', done: false, timers: new Set() };
     ex.listening = listening;
     const live = () => !stale() && ex.listening === listening && !listening.done;
@@ -440,8 +448,12 @@ export function createHandsFree(ports: HandsFreePorts, options: HandsFreeOptions
         if (live()) void take();
       });
     };
+    const onTransient = (error: ListenError) => {
+      if (live()) ex.transient = error;
+    };
     const onError = (error: ListenError) => {
       if (!live()) return;
+      ex.transient = error;
       if (listening.words) {
         void take();
         return;
@@ -489,7 +501,7 @@ export function createHandsFree(ports: HandsFreePorts, options: HandsFreeOptions
     }
     let started: ListenStart;
     try {
-      started = ports.listen({ ...options.listenOptions, onStart, onInterim, onError, onEnd, ...(openInput ? { openInput } : {}) });
+      started = ports.listen({ ...options.listenOptions, onStart, onInterim, onError, onTransient, onEnd, ...(openInput ? { openInput } : {}) });
     } catch (err) {
       started = { ok: false, error: { kind: 'other', message: err instanceof Error ? err.message : String(err) } };
     }
