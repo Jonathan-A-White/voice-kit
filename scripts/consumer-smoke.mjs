@@ -8,7 +8,8 @@
 //     'voice-kit/talks/dexie' keeps it in IndexedDB (fake-indexeddb) and 'voice-kit/talks/react' renders TalkList with the app's React;
 //   - 'voice-kit/talks/grind' gives the grind's instructions part and answer fragment in plain node, and the tutor client carries out its examples;
 //   - 'voice-kit/testing/talks' drives that loop with a scripted grind and a recording store;
-//   - 'voice-kit/wake' hears the saying once in plain node, on the packed model;
+//   - 'voice-kit/wake' hears the saying once in plain node, on the packed model, which also imports as the READMEs write it
+//     (`import model from 'voice-kit/wake/models/hey-lampas.json' with { type: 'json' }`);
 //   - 'voice-kit/handsfree' runs one whole exchange (a fake wake, the fake recogniser, a command, a follow-up, the close) in the
 //     vitest the app installs, with 'voice-kit/testing/handsfree' and 'voice-kit/testing/mic'; its import graph reaches only voice-kit/wake;
 //     it routes a spoken phrase to a command name in plain node, and 'voice-kit/handsfree/react' renders HandsFreeMark with the app's React
@@ -342,10 +343,14 @@ it('the init scripts are the same fakes, from the built files', async () => {
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { createDetector, loadModel, startWake } from 'voice-kit/wake';
+// the import the README shows (packages/wake/README.md, README.md), as written there
+import imported from 'voice-kit/wake/models/hey-lampas.json' with { type: 'json' };
 
 const require = createRequire(import.meta.url);
 const model = JSON.parse(readFileSync(require.resolve('voice-kit/wake/models/hey-lampas.json'), 'utf-8'));
 const licences = JSON.parse(readFileSync(require.resolve('voice-kit/wake/models/licences.json'), 'utf-8'));
+if (imported.phrase !== 'Hey Lampas' || JSON.stringify(imported) !== JSON.stringify(model)) throw new Error('the model imported with type json is not the packed file: ' + imported.phrase);
+console.log("voice-kit/wake/models/hey-lampas.json imports with { type: 'json' }: " + imported.phrase);
 if (licences.model !== 'hey-lampas.json' || !licences.entries.length) throw new Error('licences.json: ' + JSON.stringify(licences).slice(0, 200));
 const buf = readFileSync(process.argv[2]);
 let at = 12;

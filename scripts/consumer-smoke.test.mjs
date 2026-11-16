@@ -26,6 +26,7 @@ describe.skipIf(process.env.VOICE_KIT_SKIP_SMOKE === '1')('a consumer install of
     expect(output).toContain('voice-kit/testing/talks drives a talk');
     expect(output).toContain('voice-kit/testing/speech and voice-kit/testing/mic run in vitest');
     expect(output).toContain('voice-kit/wake hears the saying once');
+    expect(output).toContain("voice-kit/wake/models/hey-lampas.json imports with { type: 'json' }: Hey Lampas");
     expect(output).toContain('voice-kit/handsfree runs an exchange in vitest');
     expect(output).toContain('voice-kit/handsfree routes a phrase and renders the mark');
     expect(output).toContain("voice-kit/handsfree's types stand without @types/react");

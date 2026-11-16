@@ -45,7 +45,8 @@ if (!wake.ok) {
 }
 ```
 
-`startWake(options)` opens the default microphone itself (`getUserMedia({ audio: true })`, the browser's own settings: echo
+The `import ... with { type: 'json' }` line is run in plain Node by the repo's consumer smoke (`npm run smoke`); under a bundler, give
+it the JSON and import-attribute support its own docs name. `startWake(options)` opens the default microphone itself (`getUserMedia({ audio: true })`, the browser's own settings: echo
 cancellation and noise suppression as the browser defaults them) unless you give it a `stream`; then it leaves the stream's
 tracks to you. The model is `options.model` (the parsed JSON) or `options.modelUrl` (fetched). It resolves with
 `{ ok: true, stop, track, stream, inputRate, model }` or `{ ok: false, kind, message }`; it does not throw for a failure a user
