@@ -3,7 +3,9 @@
 // (vitest's include names scripts/wake-probe/*.test.mjs), or alone: npx vitest run scripts/wake-probe
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test } from 'vitest';
 import { brownNoise, carMic, throughCar } from './handsfree.mjs';
@@ -304,5 +306,53 @@ test('an unknown phrase exits 2 and lists the slugs; --help names --phrase', () 
   for (const command of ['prepare', 'prepare-hf', 'train', 'calibrate', 'measure']) {
     const r = spawnSync(process.execPath, [PROBE, command, '--phrase', 'nothing'], { encoding: 'utf8' });
     assert.equal(r.status, 2, command);
+  }
+});
+
+// ---- decodeFiles, two at once (story mw-deiheir.7) ----
+
+test('two decodeFiles calls at once, in one scratch folder, each get their own files', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'decode-files-'));
+  const previous = process.env.FFMPEG;
+  try {
+    // An ffmpeg stand-in: it reads the concat list a moment after it starts (as the real one reads it once it has
+    // loaded), then writes the bytes of each file the list names to stdout, as raw 16-bit samples.
+    const stub = join(dir, 'ffmpeg-stub.mjs');
+    writeFileSync(
+      stub,
+      [
+        '#!/usr/bin/env node',
+        "import { readFileSync } from 'node:fs';",
+        "const list = process.argv[process.argv.indexOf('-i') + 1];",
+        'await new Promise((r) => setTimeout(r, 150));',
+        "const files = readFileSync(list, 'utf8').split('\\n').filter(Boolean).map((l) => l.slice(6, -1));",
+        'for (const f of files) process.stdout.write(readFileSync(f));',
+        '',
+      ].join('\n'),
+    );
+    chmodSync(stub, 0o755);
+    const sample = (value) => {
+      const buf = Buffer.alloc(4);
+      buf.writeInt16LE(value, 0);
+      buf.writeInt16LE(value, 2);
+      return buf;
+    };
+    const files = { a: join(dir, 'a.raw'), b: join(dir, 'b.raw'), c: join(dir, 'c.raw') };
+    writeFileSync(files.a, sample(1000));
+    writeFileSync(files.b, sample(2000));
+    writeFileSync(files.c, sample(3000));
+
+    process.env.FFMPEG = stub;
+    const { decodeFiles } = await import('./probe.mjs?decode-files-stub');
+    const scratch = join(dir, 'scratch');
+    mkdirSync(scratch);
+    const [first, second] = await Promise.all([decodeFiles([files.a, files.b], scratch), decodeFiles([files.c], scratch)]);
+    assert.deepEqual(Array.from(first), [1000, 1000, 2000, 2000].map((v) => v / 32768));
+    assert.deepEqual(Array.from(second), [3000, 3000].map((v) => v / 32768));
+    assert.deepEqual(readdirSync(scratch), [], 'no concat list is left in the scratch folder');
+  } finally {
+    if (previous === undefined) delete process.env.FFMPEG;
+    else process.env.FFMPEG = previous;
+    rmSync(dir, { recursive: true, force: true });
   }
 });

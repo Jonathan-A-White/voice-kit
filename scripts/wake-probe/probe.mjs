@@ -15,7 +15,8 @@
 //    The speech that does not depend on the phrase is made once and shared; the sayings, near words and what is made from
 //    them are the phrase's own. --root DIR, the scratch root, default ~/.cache/voice-kit-wake-spike)
 import { spawn } from 'node:child_process';
-import { closeSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, statSync, writeFileSync, writeSync } from 'node:fs';
+import { randomBytes } from 'node:crypto';
+import { closeSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync, writeSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -200,12 +201,22 @@ function int16ToFloat(buf) {
   return out;
 }
 
-/** Audio files decoded, one after another, to 16 kHz mono floats (one ffmpeg, through its concat list). */
+let concatCount = 0;
+
+/**
+ * Audio files decoded, one after another, to 16 kHz mono floats (one ffmpeg, through its concat list). The list is this
+ * call's own file in the scratch folder, so calls at once (prepare-hf's parts, two probe processes of one phrase) do not
+ * overwrite each other's; it is removed when ffmpeg is done.
+ */
 export async function decodeFiles(files, scratch) {
-  const list = join(scratch, 'concat.txt');
+  const list = join(scratch, `concat-${process.pid}-${++concatCount}-${randomBytes(4).toString('hex')}.txt`);
   writeFileSync(list, files.map((f) => `file '${f.replace(/'/g, "'\\''")}'`).join('\n') + '\n');
-  const ff = spawn(FFMPEG, ['-v', 'error', '-f', 'concat', '-safe', '0', '-i', list, ...TO_16K]);
-  return int16ToFloat(await collect(ff, `ffmpeg (${files.length} files)`));
+  try {
+    const ff = spawn(FFMPEG, ['-v', 'error', '-f', 'concat', '-safe', '0', '-i', list, ...TO_16K]);
+    return int16ToFloat(await collect(ff, `ffmpeg (${files.length} files)`));
+  } finally {
+    rmSync(list, { force: true });
+  }
 }
 
 /** Any audio file decoded to 16 kHz mono floats. */
