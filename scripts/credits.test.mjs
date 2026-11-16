@@ -8,6 +8,8 @@ import {
   parseCredits,
   problemsWithAssets,
   problemsWithCredits,
+  problemsWithFetched,
+  fetchedHosts,
   runtimeDependencies,
   shippedAssets,
 } from './credits.mjs';
@@ -201,5 +203,47 @@ describe('fonts and data files', () => {
     const readme = readFileSync(new URL('../README.md', import.meta.url), 'utf8');
     const credits = parseCredits(creditsSection(readme));
     expect(problemsWithAssets(shippedAssets(), credits)).toEqual([]);
+  });
+});
+
+describe('sources fetched at run time', () => {
+  const credits = [
+    { name: 'Bible audio', kind: 'data', text: '- [Bible audio](https://openbible.com/audio): fetched from `https://openbible.com/audio/msb/MSB_43_Jhn_`. Kind: data.' },
+  ];
+
+  const tree = (files) => {
+    const root = mkdtempSync(join(tmpdir(), 'credits-fetched-'));
+    for (const [file, text] of Object.entries(files)) {
+      mkdirSync(join(root, file, '..'), { recursive: true });
+      writeFileSync(join(root, file), text);
+    }
+    return root;
+  };
+
+  it('finds the host of every https:// URL in an example\'s scripts and src, and skips node_modules and reserved test hosts', () => {
+    const root = tree({
+      'examples/a/src/main.ts': "const u = 'https://openbible.com/audio/x.mp3'; const v = `https://${host}/y`;",
+      'examples/a/scripts/get.mjs': 'fetch("https://data.example.org/set.csv?x=1")',
+      'examples/a/scripts/measure.mjs': "await page.goto('https://measure.test/');",
+      'examples/a/node_modules/dep/index.js': "'https://elsewhere.org/'",
+      'packages/b/src/x.ts': "'https://not-an-example.org/'",
+    });
+    expect(fetchedHosts(root)).toEqual(['data.example.org', 'openbible.com']);
+  });
+
+  it('passes a host that a credit quotes', () => {
+    expect(problemsWithFetched(['openbible.com'], credits)).toEqual([]);
+  });
+
+  it('fails a host that no credit quotes', () => {
+    expect(problemsWithFetched(['openbible.com', 'data.example.org'], credits)).toEqual([
+      'an example fetches from data.example.org at run time, and no credit quotes that host (add a credit whose text names it)',
+    ]);
+  });
+
+  it('holds for this repo: every host an example fetches from is credited', () => {
+    const readme = readFileSync(new URL('../README.md', import.meta.url), 'utf8');
+    expect(fetchedHosts()).toContain('openbible.com');
+    expect(problemsWithFetched(fetchedHosts(), parseCredits(creditsSection(readme)))).toEqual([]);
   });
 });

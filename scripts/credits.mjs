@@ -2,7 +2,8 @@
 // attributed; each credit has its name as link text (never a raw URL), a licence link and a "Kind: x."; every
 // runtime dependency in a package.json is credited; a "Kind: package." credit names a package that is still
 // a dependency, by npm name in any letter case (a removed library loses its credit in the same commit); and every bundled font or data file
-// is named by a font or data credit. Run through npm test (scripts/credits.test.mjs).
+// is named by a font or data credit; and every host an example's scripts or src fetch from over https:// is quoted by a credit.
+// Run through npm test (scripts/credits.test.mjs).
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 
@@ -77,6 +78,45 @@ export function problemsWithAssets(files, credits) {
     }
   }
   return problems;
+}
+
+// Sources fetched at run time. An example's scripts and src may name an https:// URL it fetches (a page's audio, a
+// data set); nothing is bundled, so no file shows it, and the host must be quoted by a credit instead. Hosts under the
+// reserved TLDs .test, .invalid, .example and .localhost (RFC 2606/6761) are never real, so a test's fake origin needs none.
+const SCANNED = /\.(mjs|cjs|js|jsx|ts|tsx|html|css)$/i;
+const RESERVED_HOST = /(^|\.)(test|invalid|example|localhost)$/i;
+
+/** Hosts of every https:// URL in examples/*\/scripts and examples/*\/src (not node_modules or dist), sorted, without repeats. */
+export function fetchedHosts(root = ROOT) {
+  const base = root instanceof URL ? root.pathname : root.replace(/\/?$/, '/');
+  const hosts = new Set();
+  const walk = (relative) => {
+    if (!existsSync(base + relative)) return;
+    for (const entry of readdirSync(base + relative, { withFileTypes: true })) {
+      const path = relative + entry.name;
+      if (entry.isDirectory()) {
+        if (!SKIPPED_DIRS.has(entry.name)) walk(path + '/');
+      } else if (SCANNED.test(entry.name)) {
+        for (const match of readFileSync(base + path, 'utf8').matchAll(/https:\/\/([a-z0-9](?:[a-z0-9.-]*[a-z0-9])?)/gi)) {
+          if (!RESERVED_HOST.test(match[1])) hosts.add(match[1].toLowerCase());
+        }
+      }
+    }
+  };
+  if (existsSync(base + 'examples/')) {
+    for (const dir of readdirSync(base + 'examples/', { withFileTypes: true })) {
+      if (!dir.isDirectory()) continue;
+      for (const sub of ['scripts', 'src']) walk(`examples/${dir.name}/${sub}/`);
+    }
+  }
+  return [...hosts].sort();
+}
+
+/** What is wrong with the credits of fetched sources: each host must appear in the text of some credit. */
+export function problemsWithFetched(hosts, credits) {
+  return hosts
+    .filter((host) => !credits.some((c) => c.text.toLowerCase().includes(host)))
+    .map((host) => `an example fetches from ${host} at run time, and no credit quotes that host (add a credit whose text names it)`);
 }
 
 /** The text under "## Credits", up to the next "## " heading; null when there is none. */
