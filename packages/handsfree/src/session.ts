@@ -20,7 +20,7 @@
 //
 // Every async step checks it still belongs to the live run and exchange (a stop, a hide or a new command makes it stale), so a
 // late answer from the wake, the recogniser or onCommand can never reopen what was closed.
-import type { ListenError, ListenErrorKind, ListenOptions, ListenSession, ListenStart, MicInput } from 'voice-kit/composer';
+import type { ListenError, ListenErrorKind, ListenOptions, ListenSession, ListenStart, MicInput } from 'voice-kit/composer/listen';
 
 /** Why the session could not run: the wake's own kinds. */
 export type HandsFreeFailureKind = 'not-supported' | 'permission-denied' | 'no-microphone' | 'other';

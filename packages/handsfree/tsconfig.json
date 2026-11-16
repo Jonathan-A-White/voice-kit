@@ -9,6 +9,7 @@
     "paths": {
       "voice-kit/handsfree": ["src/index.ts"],
       "voice-kit/wake": ["../wake/src/index.ts"],
+      "voice-kit/composer/listen": ["../composer/src/listen.ts"],
       "voice-kit/composer": ["../composer/src/index.ts"],
       "voice-kit/testing/mic": ["../testing/src/mic.ts"],
       "voice-kit/testing/handsfree": ["../testing/src/handsfree.ts"]

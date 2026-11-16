@@ -12,7 +12,8 @@
 //   - 'voice-kit/handsfree' runs one whole exchange (a fake wake, the fake recogniser, a command, a follow-up, the close) in the
 //     vitest the app installs, with 'voice-kit/testing/handsfree' and 'voice-kit/testing/mic'; its import graph reaches only voice-kit/wake;
 //     it routes a spoken phrase to a command name in plain node, and 'voice-kit/handsfree/react' renders HandsFreeMark with the app's React
-//     (its styles.css is packed; the react entry reaches no other voice-kit library);
+//     (its styles.css is packed; the react entry reaches no other voice-kit library); its .d.ts files type-check with skipLibCheck false and no
+//     @types/react (they take composer's listen types from 'voice-kit/composer/listen', not from the entry that carries React's);
 //   - 'voice-kit/testing/speech' and 'voice-kit/testing/mic' run in the vitest the app installs (fake timers), by import
 //     and by init script.
 // The "fresh clone" is the working tree as it stands (tracked and untracked files, minus what git ignores),
@@ -54,7 +55,7 @@ try {
 
   // The exports map names the entry points (and package.json), nothing else: no deep imports.
   const entries = Object.keys(JSON.parse(readFileSync(join(installed, 'package.json'), 'utf-8')).exports).sort();
-  const expected = ['./composer', './composer/styles.css', './forms', './handsfree', './handsfree/react', './handsfree/styles.css', './package.json', './speech', './speech/react', './speech/styles.css', './talks', './talks/dexie', './talks/grind', './talks/react', './talks/styles.css', './testing/handsfree', './testing/mic', './testing/speech', './testing/talks', './wake', './wake/models/*'];
+  const expected = ['./composer', './composer/listen', './composer/styles.css', './forms', './handsfree', './handsfree/react', './handsfree/styles.css', './package.json', './speech', './speech/react', './speech/styles.css', './talks', './talks/dexie', './talks/grind', './talks/react', './talks/styles.css', './testing/handsfree', './testing/mic', './testing/speech', './testing/talks', './wake', './wake/models/*'];
   if (JSON.stringify(entries) !== JSON.stringify(expected)) throw new Error('exports: ' + entries.join(', '));
   console.log('the exports map names the entry points');
 
@@ -478,6 +479,39 @@ console.log('voice-kit/handsfree routes a phrase and renders the mark');
 `,
   );
   console.log(run('node', ['handsfree-router.mjs'], app).trim());
+
+  // 7c. The types of 'voice-kit/handsfree' stand without React's (mw-rl10piw.15): an app that uses only handsfree, has no @types/react
+  // and does not set skipLibCheck must still type-check. The app has react (which carries no types of its own) but no @types/react;
+  // a file importing only 'voice-kit/handsfree' (and the wake it names) is checked with skipLibCheck false.
+  if (existsSync(join(app, 'node_modules', '@types', 'react'))) throw new Error('@types/react is installed in the smoke app');
+  run('npm', ['install', '--no-audit', '--no-fund', 'typescript@5'], app, { timeout: 480_000 });
+  if (existsSync(join(app, 'node_modules', '@types', 'react'))) throw new Error('installing typescript brought @types/react');
+  writeFileSync(
+    join(app, 'handsfree-types.ts'),
+    `
+import { createHandsFree, type HandsFreeOptions, type HandsFreePorts, type ListenPort } from 'voice-kit/handsfree';
+
+declare const ports: HandsFreePorts;
+declare const options: HandsFreeOptions;
+const hf = createHandsFree(ports, options);
+const listen: ListenPort = ports.listen;
+void hf.start();
+export { listen };
+`,
+  );
+  writeFileSync(
+    join(app, 'tsconfig.json'),
+    JSON.stringify({
+      compilerOptions: { noEmit: true, strict: true, skipLibCheck: false, module: 'esnext', moduleResolution: 'bundler', target: 'es2022', lib: ['es2022', 'dom'], types: [] },
+      files: ['handsfree-types.ts'],
+    }),
+  );
+  try {
+    run('npx', ['tsc', '-p', 'tsconfig.json'], app, { timeout: 240_000 });
+  } catch (err) {
+    throw new Error("a file importing only 'voice-kit/handsfree' does not type-check without @types/react:\n" + String(err?.stdout ?? '') + String(err?.stderr ?? ''));
+  }
+  console.log("voice-kit/handsfree's types stand without @types/react");
 
   console.log('consumer smoke test passed');
 } catch (err) {

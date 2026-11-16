@@ -12,6 +12,7 @@
     "baseUrl": ".",
     "paths": {
       "voice-kit/wake": ["../wake/src/index.ts"],
+      "voice-kit/composer/listen": ["../composer/src/listen.ts"],
       "voice-kit/composer": ["../composer/src/index.ts"]
     }
   },
