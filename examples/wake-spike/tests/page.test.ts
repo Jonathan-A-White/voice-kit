@@ -71,6 +71,40 @@ beforeAll(async () => {
 }, 120_000);
 afterAll(() => rmSync(out, { recursive: true, force: true }));
 
+/**
+ * Keeps every text a [data-testid] element of the page is given, in `window.__texts[testid]`, so a test can ask whether
+ * the page ever showed a line, not only whether it shows it at the moment it looks. The page replaces the "Heard Hey
+ * Lampas" line with "Listening for" as soon as the wake restarts, and the hands-free entry line with the next entry's, and
+ * how long a line stays depends on how fast the recogniser fails on the host: where Chromium's speech recogniser ends at
+ * once (cloud2: error 'no-microphone', 12 ms) a line is on screen for about 40 ms, which a poll for it misses.
+ */
+async function keepTexts(context: BrowserContext): Promise<void> {
+  await context.addInitScript(() => {
+    const w = window as unknown as { __texts: Record<string, string[]> };
+    w.__texts = {};
+    const note = (node: Node | null, text: string | null) => {
+      const id = (node instanceof Element ? node : node?.parentElement)?.closest('[data-testid]')?.getAttribute('data-testid');
+      if (id && text) (w.__texts[id] ??= []).push(text);
+    };
+    new MutationObserver((records) => {
+      for (const record of records) {
+        if (record.type === 'characterData') note(record.target, record.target.textContent);
+        else record.addedNodes.forEach((added) => note(record.target, added.textContent));
+      }
+    }).observe(document, { childList: true, characterData: true, subtree: true });
+  });
+}
+
+/** Waits until the element with this test id has been given a text matching `pattern` (at any time since the page opened); returns that text. */
+async function textSeen(page: Page, testId: string, pattern: RegExp, timeout = 30_000): Promise<string> {
+  const handle = await page.waitForFunction(
+    ({ id, source, flags }) => (window as unknown as { __texts: Record<string, string[]> }).__texts[id]?.find((text) => new RegExp(source, flags).test(text)),
+    { id: testId, source: pattern.source, flags: pattern.flags },
+    { timeout },
+  );
+  return (await handle.jsonValue()) as string;
+}
+
 /** Launches Chromium with these flags; undefined (with a note) when it will not launch, unless VOICE_KIT_REQUIRE_CHROMIUM=1. */
 async function launch(args: string[]): Promise<Browser | undefined> {
   try {
@@ -293,6 +327,7 @@ describe('the wake spike page with the saying as the microphone', () => {
       if (!existsSync(file)) return route.fulfill({ status: 404, body: 'not found' });
       return route.fulfill({ contentType: TYPES[extname(file)] ?? 'application/octet-stream', body: readFileSync(file) });
     });
+    await keepTexts(context);
     page = await context.newPage();
     await page.goto(`${ORIGIN}/`);
     await page.getByRole('button', { name: 'Listen', exact: true }).waitFor();
@@ -304,8 +339,8 @@ describe('the wake spike page with the saying as the microphone', () => {
     if (!browser) return ctx.skip();
     await openPage();
     await page.getByRole('button', { name: 'Listen', exact: true }).click();
-    await page.getByTestId('heard').filter({ hasText: 'Heard Hey Lampas' }).waitFor({ timeout: 5000 });
-    expect(await page.getByTestId('heard').textContent()).toMatch(/Heard Hey Lampas at \d\d:\d\d:\d\d \(\d+\.\d s of listening, score [01]\.\d+\)/);
+    // the line is looked for among the texts the page gave it, since the restarted wake replaces it within milliseconds where the recogniser fails at once
+    expect(await textSeen(page, 'heard', /^Heard Hey Lampas/, 5000)).toMatch(/^Heard Hey Lampas at \d\d:\d\d:\d\d \(\d+\.\d s of listening, score [01]\.\d+\)$/);
     expect(Number(await page.getByTestId('tries-wakes').textContent())).toBeGreaterThanOrEqual(1);
 
     // the page shows what the model cost: its bytes fetched and the compute per second of audio
@@ -361,6 +396,7 @@ describe.each(['handover', 'share'] as const)('the Hands-free check on the wake 
       if (!existsSync(file)) return route.fulfill({ status: 404, body: 'not found' });
       return route.fulfill({ contentType: TYPES[extname(file)] ?? 'application/octet-stream', body: readFileSync(file) });
     });
+    await keepTexts(context);
     page = await context.newPage();
     await page.goto(`${ORIGIN}/`);
     await page.getByLabel(way, { exact: true }).check();
@@ -378,7 +414,7 @@ describe.each(['handover', 'share'] as const)('the Hands-free check on the wake 
 
     // no stuck state: the wake is heard again (the saying loops) and the page is still listening
     await page.waitForFunction(() => (JSON.parse(localStorage.getItem('wake-spike-log') ?? '[]') as { event: string; detail?: { wakeAgain?: string } }[]).some((entry) => entry.event === 'hands-free-check' && entry.detail?.wakeAgain === 'yes'), undefined, { timeout: 40_000 });
-    await page.getByTestId('hf-last').filter({ hasText: 'wake heard again: yes' }).waitFor();
+    await textSeen(page, 'hf-last', /wake heard again: yes/);
     expect(await page.getByRole('button', { name: 'Stop listening' }).isEnabled()).toBe(true);
     await page.getByTestId('hf-state').filter({ hasText: /Waiting|Listening|Starting/ }).waitFor();
 
@@ -438,6 +474,7 @@ describe('Record my tries on the wake spike page (mw-rdpwdp1.11)', () => {
         nav.share = undefined;
       }
     }, sharing);
+    await keepTexts(context);
     page = await context.newPage();
     await page.goto(`${ORIGIN}/`);
     await page.getByRole('button', { name: 'Listen', exact: true }).waitFor();
@@ -465,7 +502,7 @@ describe('Record my tries on the wake spike page (mw-rdpwdp1.11)', () => {
     expect(await page.getByRole('button', { name: 'Send recording' }).isDisabled()).toBe(true);
     // listening without the toggle keeps nothing
     await page.getByRole('button', { name: 'Listen', exact: true }).click();
-    await page.getByTestId('heard').filter({ hasText: 'Heard Hey Lampas' }).waitFor({ timeout: 10_000 });
+    await textSeen(page, 'heard', /^Heard Hey Lampas/, 10_000);
     await page.getByRole('button', { name: 'Stop listening' }).click();
     expect(await page.getByRole('button', { name: 'Send recording' }).isDisabled()).toBe(true);
     await context.close();
