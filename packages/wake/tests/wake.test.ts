@@ -83,7 +83,7 @@ describe('the embedded worker source', () => {
 });
 
 /** Stubs of the browser's audio parts, counted. */
-function install(options: { worklet?: boolean; refuse?: string } = {}) {
+function install(options: { worklet?: boolean; refuse?: string; resume?: 'never'; ready?: 'never' } = {}) {
   const counts = { workers: 0, workersTerminated: 0, contexts: 0, contextsClosed: 0, tracksStopped: 0, getUserMedia: 0 };
   const g = globalThis as Record<string, unknown>;
   const saved = new Map<string, PropertyDescriptor | undefined>();
@@ -100,7 +100,7 @@ function install(options: { worklet?: boolean; refuse?: string } = {}) {
       counts.workers++;
     }
     postMessage(message: { type: string }) {
-      if (message.type === 'init') queueMicrotask(() => this.onmessage?.({ data: { type: 'ready', parameters: 1 } }));
+      if (message.type === 'init' && options.ready !== 'never') queueMicrotask(() => this.onmessage?.({ data: { type: 'ready', parameters: 1 } }));
     }
     terminate() {
       counts.workersTerminated++;
@@ -120,7 +120,9 @@ function install(options: { worklet?: boolean; refuse?: string } = {}) {
     createMediaStreamSource() {
       return { connect: (to: unknown) => to };
     }
-    async resume() {}
+    resume() {
+      return options.resume === 'never' ? new Promise<void>(() => undefined) : Promise.resolve();
+    }
     async close() {
       counts.contextsClosed++;
     }
@@ -205,6 +207,20 @@ describe('startWake', () => {
     const result = await wake.startWake({ modelUrl: 'https://app.test/none.json', onWake: () => undefined, fetch: async () => ({ ok: false, status: 404 }) as Response });
     expect(result).toMatchObject({ ok: false, kind: 'other' });
     expect(stubs.counts.getUserMedia).toBe(0);
+  });
+
+  it("resolves a failure, and ends the worker, the audio context and the track, when the audio context's resume() never settles (a page with no touch)", async () => {
+    stubs = install({ resume: 'never' });
+    const result = await wake.startWake({ model, onWake: () => undefined, timeoutMs: 50 });
+    expect(result).toMatchObject({ ok: false, kind: 'other' });
+    expect(stubs.counts).toMatchObject({ workers: 1, workersTerminated: 1, contexts: 1, contextsClosed: 1, tracksStopped: 1 });
+  });
+
+  it('resolves a failure when the worker never says it has loaded the model', async () => {
+    stubs = install({ ready: 'never' });
+    const result = await wake.startWake({ model, onWake: () => undefined, timeoutMs: 50 });
+    expect(result).toMatchObject({ ok: false, kind: 'other' });
+    expect(stubs.counts).toMatchObject({ workersTerminated: 1, contextsClosed: 1, tracksStopped: 1 });
   });
 
   it('opens the default microphone, starts one worker, and stop() ends the track, the worker and the audio context', async () => {

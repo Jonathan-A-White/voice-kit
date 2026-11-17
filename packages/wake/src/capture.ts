@@ -24,10 +24,28 @@ export interface Capture {
   stop(): void;
 }
 
+/** How long startCapture waits for the audio context to run and for the worker to load the model, each, before it gives up. */
+const DEFAULT_START_TIMEOUT_MS = 10_000;
+
+/** `promise`, or a rejection with `message` when it has not settled in `ms`; the timer is cleared either way. */
+function within<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(message)), ms);
+    promise.then(
+      (value) => (clearTimeout(timer), resolve(value)),
+      (err) => (clearTimeout(timer), reject(err)),
+    );
+  });
+}
+
 const blobUrl = (text: string): string => URL.createObjectURL(new Blob([text], { type: 'text/javascript' }));
 
-/** Starts feeding `stream` to the detector. Resolves when the worker has loaded the model. Throws when a part is missing. */
-export async function startCapture(stream: MediaStream, model: WakeModel, handlers: CaptureHandlers): Promise<Capture> {
+/**
+ * Starts feeding `stream` to the detector. Resolves when the worker has loaded the model. Throws when a part is missing, or
+ * when the audio context does not start running or the worker does not load the model within `timeoutMs` each (a page that
+ * has had no touch never settles AudioContext.resume()).
+ */
+export async function startCapture(stream: MediaStream, model: WakeModel, handlers: CaptureHandlers, timeoutMs: number = DEFAULT_START_TIMEOUT_MS): Promise<Capture> {
   const context = new AudioContext();
   const workerUrl = blobUrl(workerSource);
   let worker: Worker;
@@ -77,8 +95,8 @@ export async function startCapture(stream: MediaStream, model: WakeModel, handle
     silent.gain.value = 0;
     context.createMediaStreamSource(stream).connect(tap);
     tap.connect(silent).connect(context.destination);
-    await context.resume();
-    await ready;
+    await within(context.resume(), timeoutMs, 'The audio did not start: the page may need a touch or a click first.');
+    await within(ready, timeoutMs, 'The detector did not load the model in time.');
   } catch (err) {
     stop();
     throw err;

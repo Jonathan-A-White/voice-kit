@@ -21,6 +21,8 @@ export interface WakeOptions {
   onInput?(samples: Float32Array, inputRate: number): void;
   /** A failure after the start, from the worker. */
   onError?(message: string): void;
+  /** How long to wait, for each, for the audio context to start running and for the detector to load the model, before startWake resolves a failure; 10 000 by default. */
+  timeoutMs?: number;
   /** The fetch to load modelUrl with (a test's, say); defaults to the global one. */
   fetch?: typeof fetch;
 }
@@ -116,7 +118,7 @@ export async function startWake(options: WakeOptions): Promise<StartWakeResult> 
       onStats: options.onStats ?? (() => undefined),
       onError: options.onError ?? (() => undefined),
       onInput: options.onInput,
-    });
+    }, options.timeoutMs);
     let stopped = false;
     const stop = () => {
       if (stopped) return;

@@ -94,6 +94,10 @@ The worklet and the worker are started from `blob:` URLs, so a site with a Conte
 workers (`worker-src blob:`, and for the worklet module `script-src blob:`, or `default-src` with `blob:`). Without it the
 browser refuses to start them and `startWake` resolves `{ ok: false, kind: 'other' }`.
 
+A page that has had no touch or click may leave the audio context suspended for good. `startWake` waits `timeoutMs` (10 000 ms by
+default) for the audio context to run, and again for the detector to load the model, then resolves `{ ok: false, kind: 'other' }`
+rather than hang; start it after a tap.
+
 ## Develop
 
 `npm run build --workspace packages/wake` (the root `npm run build` does it too). `scripts/embed.mjs` writes

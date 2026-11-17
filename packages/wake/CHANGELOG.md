@@ -2,6 +2,12 @@
 
 Newest first. Breaking changes come first in a release, each with its migration in one sentence.
 
+## Unreleased
+
+- Fixed (mw-rl10piw.14): `startWake` no longer hangs on a page that has had no touch, where `AudioContext.resume()` never settles.
+  It waits `timeoutMs` (new option, 10 000 ms by default) for the audio context to run and again for the detector to load the
+  model, then ends what it started and resolves `{ ok: false, kind: 'other' }`. `startCapture` takes the same limit as its fourth argument.
+
 ## 0.1.0 (2026-11-14)
 
 - New (mw-rl10piw.1): the wake word 'Hey Lampas' as a package, `voice-kit/wake`. `startWake(options)` opens the default microphone
