@@ -169,8 +169,11 @@ async function fetchModel(): Promise<{ value: WakeModel; bytes: number }> {
   return model;
 }
 
+let wakeHeardThisListen = false; // the "Heard Hey Lampas" line is showing for this listen (reset by Listen)
+
 function onWake(wake: Wake): void {
   const clock = new Date().toTimeString().slice(0, 8);
+  wakeHeardThisListen = true;
   heard.textContent = `Heard Hey Lampas at ${clock} (${wake.time.toFixed(1)} s of listening, score ${wake.score.toFixed(3)})`;
   tries = { ...tries, wakes: tries.wakes + 1 };
   showTries();
@@ -336,7 +339,8 @@ const pageWake: WakePort = {
       if (opened === input) {
         capture = started;
         log.add('detector-started', { inputRate: started.inputRate, bytes: loaded.bytes });
-        heard.textContent = 'Listening for "Hey Lampas".';
+        // A restarted wake (after an exchange) must not wipe the "Heard" line of this listen: it stays until Stop or the next Listen.
+        if (!wakeHeardThisListen) heard.textContent = 'Listening for "Hey Lampas".';
       } else started.stop();
     } catch (err) {
       log.add('detector-failed', { error: message(err) });
@@ -382,6 +386,7 @@ listenButton.addEventListener('click', () => {
   const choice = select.selectedOptions[0]?.textContent ?? 'Default';
   log.add('listen', { input: choice, deviceId: select.value || null });
   recordingNow = recordToggle.checked;
+  wakeHeardThisListen = false;
   if (recordingNow) {
     recorder = undefined;
     shownSecond = -1;

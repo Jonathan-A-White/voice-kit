@@ -357,6 +357,19 @@ describe('the wake spike page with the saying as the microphone', () => {
 
   const log = async () => JSON.parse((await page.evaluate(() => localStorage.getItem('wake-spike-log'))) ?? '[]') as { event: string; detail?: Record<string, unknown> }[];
 
+  it('keeps "Heard Hey Lampas" on the page after the wake restarts (mw-81n0bco)', async (ctx) => {
+    if (!browser) return ctx.skip();
+    await openPage();
+    await page.getByRole('button', { name: 'Listen', exact: true }).click();
+    await textSeen(page, 'heard', /^Heard Hey Lampas/);
+    // the wake restarts at once where the recogniser fails at once (cloud2); the line must still be there a second later,
+    // not replaced by "Listening for", which the Governor would see for about 40 ms
+    await page.waitForTimeout(1000);
+    expect(await page.getByTestId('heard').textContent()).toMatch(/^Heard Hey Lampas/);
+    await page.getByRole('button', { name: 'Stop listening' }).click();
+    await context.close();
+  }, 180_000);
+
   it('shows "Heard Hey Lampas" after Listen, counts the wake, and logs it', async (ctx) => {
     if (!browser) return ctx.skip();
     await openPage();
