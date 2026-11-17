@@ -95,8 +95,29 @@ async function keepTexts(context: BrowserContext): Promise<void> {
   });
 }
 
+/**
+ * How long a test waits for something the page does on its own (a wake heard, a line shown, a count reaching a number).
+ * Chromium's speech recogniser, the wake worker and the audio all slow down on a host at load 16 of 16 cores, and a wait of
+ * 5 or 10 s then fails one test at a time (mw-rl10piw.23); so every such wait has this long, and a wait that passes does not
+ * wait for it.
+ */
+const PATIENCE = 45_000;
+
+/**
+ * Opens a page in this context. VOICE_KIT_CPU_THROTTLE=<n> (n of 2 or more) makes Chromium run the page n times slower,
+ * which is what a loaded host does to it, so the waits below can be tried on a calm host:
+ * VOICE_KIT_CPU_THROTTLE=40 npx vitest run examples/wake-spike/tests/page.test.ts
+ */
+async function newPage(context: BrowserContext): Promise<Page> {
+  const page = await context.newPage();
+  page.setDefaultTimeout(PATIENCE);
+  const rate = Number(process.env.VOICE_KIT_CPU_THROTTLE);
+  if (rate >= 2) await (await context.newCDPSession(page)).send('Emulation.setCPUThrottlingRate', { rate });
+  return page;
+}
+
 /** Waits until the element with this test id has been given a text matching `pattern` (at any time since the page opened); returns that text. */
-async function textSeen(page: Page, testId: string, pattern: RegExp, timeout = 30_000): Promise<string> {
+async function textSeen(page: Page, testId: string, pattern: RegExp, timeout = PATIENCE): Promise<string> {
   const handle = await page.waitForFunction(
     ({ id, source, flags }) => (window as unknown as { __texts: Record<string, string[]> }).__texts[id]?.find((text) => new RegExp(source, flags).test(text)),
     { id: testId, source: pattern.source, flags: pattern.flags },
@@ -131,7 +152,7 @@ describe('the wake spike page', () => {
   });
 
   async function openPage(): Promise<void> {
-    page = await context.newPage();
+    page = await newPage(context);
     await page.goto(`${ORIGIN}/`);
     await page.getByRole('button', { name: 'Listen', exact: true }).waitFor();
   }
@@ -211,7 +232,8 @@ describe('the wake spike page', () => {
       await enabled('stop');
       await page.getByTestId('track-label').filter({ hasText: /fake/i }).waitFor();
       expect(await page.getByTestId('track-settings').textContent()).toContain('sampleRate');
-      expect(await loudest(3000)).toBeGreaterThan(0.05);
+      // a 3 s look at the meter, again until it has shown a level: a slow host samples it too seldom to catch the fake input's beep in one look
+      await expect.poll(() => loudest(3000), { timeout: PATIENCE }).toBeGreaterThan(0.05);
 
       await page.getByRole('button', { name: 'Stop listening' }).click();
       await enabled('listen');
@@ -328,19 +350,19 @@ describe('the wake spike page with the saying as the microphone', () => {
       return route.fulfill({ contentType: TYPES[extname(file)] ?? 'application/octet-stream', body: readFileSync(file) });
     });
     await keepTexts(context);
-    page = await context.newPage();
+    page = await newPage(context);
     await page.goto(`${ORIGIN}/`);
     await page.getByRole('button', { name: 'Listen', exact: true }).waitFor();
   }
 
   const log = async () => JSON.parse((await page.evaluate(() => localStorage.getItem('wake-spike-log'))) ?? '[]') as { event: string; detail?: Record<string, unknown> }[];
 
-  it('shows "Heard Hey Lampas" within 5 s of Listen, counts the wake, and logs it', async (ctx) => {
+  it('shows "Heard Hey Lampas" after Listen, counts the wake, and logs it', async (ctx) => {
     if (!browser) return ctx.skip();
     await openPage();
     await page.getByRole('button', { name: 'Listen', exact: true }).click();
     // the line is looked for among the texts the page gave it, since the restarted wake replaces it within milliseconds where the recogniser fails at once
-    expect(await textSeen(page, 'heard', /^Heard Hey Lampas/, 5000)).toMatch(/^Heard Hey Lampas at \d\d:\d\d:\d\d \(\d+\.\d s of listening, score [01]\.\d+\)$/);
+    expect(await textSeen(page, 'heard', /^Heard Hey Lampas/)).toMatch(/^Heard Hey Lampas at \d\d:\d\d:\d\d \(\d+\.\d s of listening, score [01]\.\d+\)$/);
     expect(Number(await page.getByTestId('tries-wakes').textContent())).toBeGreaterThanOrEqual(1);
 
     // the page shows what the model cost: its bytes fetched and the compute per second of audio
@@ -353,14 +375,14 @@ describe('the wake spike page with the saying as the microphone', () => {
     expect(await page.getByTestId('headless').textContent()).toMatch(/Measured \d{4}-\d\d-\d\d[\s\S]*False wakes an hour/);
 
     // the next saying (the file loops) is another wake; Stop listening ends the count
-    await page.waitForFunction(() => Number(document.querySelector('[data-testid="tries-wakes"]')?.textContent) >= 2, undefined, { timeout: 15_000 });
+    await page.waitForFunction(() => Number(document.querySelector('[data-testid="tries-wakes"]')?.textContent) >= 2, undefined, { timeout: PATIENCE });
     await page.getByRole('button', { name: 'Stop listening' }).click();
     const wakes = (await log()).filter((entry) => entry.event === 'wake');
     expect(wakes.length).toBeGreaterThanOrEqual(2);
     expect(wakes[0].detail).toMatchObject({ score: expect.any(Number), at: expect.any(Number) });
     expect(strays).toEqual([]);
     await context.close();
-  }, 60_000);
+  }, 180_000);
 });
 
 describe.each(['handover', 'share'] as const)('the Hands-free check on the wake spike page, way %s (mw-rl10piw.4)', (way) => {
@@ -397,13 +419,13 @@ describe.each(['handover', 'share'] as const)('the Hands-free check on the wake 
       return route.fulfill({ contentType: TYPES[extname(file)] ?? 'application/octet-stream', body: readFileSync(file) });
     });
     await keepTexts(context);
-    page = await context.newPage();
+    page = await newPage(context);
     await page.goto(`${ORIGIN}/`);
     await page.getByLabel(way, { exact: true }).check();
     await page.getByRole('button', { name: 'Listen', exact: true }).click();
 
     // the first wake runs the session; headless Chromium has no speech service, so the recogniser ends in an error and the entry says which
-    await page.waitForFunction(() => (JSON.parse(localStorage.getItem('wake-spike-log') ?? '[]') as { event: string }[]).some((entry) => entry.event === 'hands-free-check'), undefined, { timeout: 30_000 });
+    await page.waitForFunction(() => (JSON.parse(localStorage.getItem('wake-spike-log') ?? '[]') as { event: string }[]).some((entry) => entry.event === 'hands-free-check'), undefined, { timeout: PATIENCE });
     const first = (await log()).find((entry) => entry.event === 'hands-free-check');
     expect(first?.detail).toMatchObject({ way, trackEnded: false, wakeAgain: expect.stringMatching(/^(not yet|yes)$/) });
     // No speech service answers here: composer treats a recogniser that hears nothing as a pause (a transient error it restarts
@@ -413,7 +435,7 @@ describe.each(['handover', 'share'] as const)('the Hands-free check on the wake 
     expect(outcome.words !== null || outcome.error !== null || outcome.closed.length > 0).toBe(true);
 
     // no stuck state: the wake is heard again (the saying loops) and the page is still listening
-    await page.waitForFunction(() => (JSON.parse(localStorage.getItem('wake-spike-log') ?? '[]') as { event: string; detail?: { wakeAgain?: string } }[]).some((entry) => entry.event === 'hands-free-check' && entry.detail?.wakeAgain === 'yes'), undefined, { timeout: 40_000 });
+    await page.waitForFunction(() => (JSON.parse(localStorage.getItem('wake-spike-log') ?? '[]') as { event: string; detail?: { wakeAgain?: string } }[]).some((entry) => entry.event === 'hands-free-check' && entry.detail?.wakeAgain === 'yes'), undefined, { timeout: PATIENCE });
     await textSeen(page, 'hf-last', /wake heard again: yes/);
     expect(await page.getByRole('button', { name: 'Stop listening' }).isEnabled()).toBe(true);
     await page.getByTestId('hf-state').filter({ hasText: /Waiting|Listening|Starting/ }).waitFor();
@@ -421,11 +443,11 @@ describe.each(['handover', 'share'] as const)('the Hands-free check on the wake 
     // Stop listening leaves no microphone open
     await page.getByRole('button', { name: 'Stop listening' }).click();
     await page.getByRole('button', { name: 'Listen', exact: true }).waitFor();
-    await page.waitForTimeout(500);
+    await page.getByTestId('hf-state').filter({ hasText: /^Off/ }).waitFor();
     expect(await page.getByTestId('hf-state').textContent()).toMatch(/^Off/);
     expect(strays).toEqual([]);
     await context.close();
-  }, 120_000);
+  }, 180_000);
 });
 
 describe('Record my tries on the wake spike page (mw-rdpwdp1.11)', () => {
@@ -475,7 +497,7 @@ describe('Record my tries on the wake spike page (mw-rdpwdp1.11)', () => {
       }
     }, sharing);
     await keepTexts(context);
-    page = await context.newPage();
+    page = await newPage(context);
     await page.goto(`${ORIGIN}/`);
     await page.getByRole('button', { name: 'Listen', exact: true }).waitFor();
   }
@@ -486,7 +508,7 @@ describe('Record my tries on the wake spike page (mw-rdpwdp1.11)', () => {
   async function recordTries(wakes: number): Promise<void> {
     await page.getByLabel('Record my tries').check();
     await page.getByRole('button', { name: 'Listen', exact: true }).click();
-    await page.waitForFunction((n) => Number(document.querySelector('[data-testid="tries-wakes"]')?.textContent) >= n, wakes, { timeout: 30_000 });
+    await page.waitForFunction((n) => Number(document.querySelector('[data-testid="tries-wakes"]')?.textContent) >= n, wakes, { timeout: PATIENCE });
     await page.getByRole('button', { name: 'Stop listening' }).click();
   }
 
@@ -548,7 +570,7 @@ describe('Record my tries on the wake spike page (mw-rdpwdp1.11)', () => {
     expect((await events()).includes('recording-sent')).toBe(true);
     expect(strays).toEqual([]);
     await context.close();
-  }, 90_000);
+  }, 180_000);
 
   it('Mark a miss keeps a miss time in the try log', async (ctx) => {
     if (!browser) return ctx.skip();
@@ -556,7 +578,7 @@ describe('Record my tries on the wake spike page (mw-rdpwdp1.11)', () => {
     await page.getByLabel('Record my tries').check();
     expect(await page.getByRole('button', { name: 'Mark a miss' }).isDisabled()).toBe(true);
     await page.getByRole('button', { name: 'Listen', exact: true }).click();
-    await page.getByTestId('heard').filter({ hasText: 'Listening for' }).waitFor({ timeout: 10_000 });
+    await page.getByTestId('heard').filter({ hasText: 'Listening for' }).waitFor({ timeout: PATIENCE });
     await page.getByRole('button', { name: 'Mark a miss' }).click();
     await page.getByRole('button', { name: 'Stop listening' }).click();
     await page.getByRole('button', { name: 'Send recording' }).click();
@@ -566,23 +588,25 @@ describe('Record my tries on the wake spike page (mw-rdpwdp1.11)', () => {
     expect(tryLog.misses).toBe(1);
     expect(tryLog.tries.find((each) => each.kind === 'miss')?.at).toBeGreaterThan(0);
     await context.close();
-  }, 60_000);
+  }, 180_000);
 
   it('downloads the WAV and the try log when the browser cannot share files, and says so', async (ctx) => {
     if (!browser) return ctx.skip();
     await openPage(false);
     await recordTries(1);
     const downloads: string[] = [];
+    const wavAndJson = () => downloads.some((name) => name.endsWith('.wav')) && downloads.some((name) => name.endsWith('.json'));
     page.on('download', (download) => downloads.push(download.suggestedFilename()));
     await page.getByRole('button', { name: 'Send recording' }).click();
     await page.getByTestId('record-status').filter({ hasText: /download/i }).waitFor();
-    await page.waitForTimeout(500);
+    // both files arrive as downloads of their own, a little after the status line says so
+    await expect.poll(wavAndJson, { timeout: PATIENCE }).toBe(true);
     expect(downloads.some((name) => name.endsWith('.wav'))).toBe(true);
     expect(downloads.some((name) => name.endsWith('.json'))).toBe(true);
     expect(await shared()).toBe(0);
     expect(strays).toEqual([]);
     await context.close();
-  }, 90_000);
+  }, 180_000);
 
   const events = async () => (JSON.parse((await page.evaluate(() => localStorage.getItem('wake-spike-log'))) ?? '[]') as { event: string }[]).map((entry) => entry.event);
 });
