@@ -1,6 +1,7 @@
 // The Playwright smoke: both fakes installed by init script in Chromium, a page that speaks and listens, and a test
 // that sees an utterance end and an interim result. It needs a Chromium that playwright-core can launch; without one the
-// tests are skipped with a note, unless VOICE_KIT_REQUIRE_CHROMIUM=1 says to fail instead.
+// tests are skipped with a note, unless VOICE_KIT_REQUIRE_CHROMIUM=1 says to fail instead. VOICE_KIT_CPU_THROTTLE=<n> (n of 2 or more)
+// makes Chromium run the page n times slower, which is what a loaded host does to it, so the waits can be tried on a calm host.
 import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
@@ -34,6 +35,8 @@ describe('the fakes in Chromium, installed by init script', () => {
 
   async function openPage(initScripts: string[]) {
     page = await (browser as Browser).newPage();
+    const rate = Number(process.env.VOICE_KIT_CPU_THROTTLE);
+    if (rate >= 2) await (await page.context().newCDPSession(page)).send('Emulation.setCPUThrottlingRate', { rate });
     for (const script of initScripts) await page.addInitScript(script);
     await page.route(PAGE, (route) => route.fulfill({ contentType: 'text/html', body: '<!doctype html><title>app</title>' }));
     await page.goto(PAGE);
