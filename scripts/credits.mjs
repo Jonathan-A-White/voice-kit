@@ -13,12 +13,14 @@ const ROOT = new URL('../', import.meta.url);
 
 /**
  * Names of every dependency (of the given kinds) in the root package.json, packages/*\/package.json and
- * examples/*\/package.json. A folder with no package.json (an example whose manifest is not on main yet) is skipped.
+ * examples/*\/package.json. A folder with no package.json (an example whose manifest is not on main yet) is skipped,
+ * and so is a packages/ or examples/ that does not exist.
  */
 function dependencyNames(fields, where = ROOT) {
   const root = where instanceof URL ? where : pathToFileURL(where.replace(/\/?$/, '/'));
   const manifests = [new URL('package.json', root)];
   for (const group of ['packages', 'examples']) {
+    if (!existsSync(new URL(`${group}/`, root))) continue;
     for (const dir of readdirSync(new URL(`${group}/`, root), { withFileTypes: true })) {
       const manifest = new URL(`${group}/${dir.name}/package.json`, root);
       if (dir.isDirectory() && existsSync(manifest)) manifests.push(manifest);

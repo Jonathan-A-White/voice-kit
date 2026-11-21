@@ -132,6 +132,19 @@ describe('README Credits', () => {
     expect(runtimeDependencies(root)).toEqual(['alpha', 'beta']);
     expect(allDependencies(root)).toEqual(['alpha', 'beta', 'vitest']);
   });
+
+  it('reads a tree that has no packages/ or no examples/ folder at all', () => {
+    const root = mkdtempSync(join(tmpdir(), 'credits-nogroup-'));
+    writeFileSync(join(root, 'package.json'), JSON.stringify({ dependencies: { alpha: '1' } }));
+    mkdirSync(join(root, 'packages/a'), { recursive: true });
+    writeFileSync(join(root, 'packages/a/package.json'), JSON.stringify({ dependencies: { beta: '1' } }));
+    expect(runtimeDependencies(root)).toEqual(['alpha', 'beta']);
+    const bare = mkdtempSync(join(tmpdir(), 'credits-bare-'));
+    writeFileSync(join(bare, 'package.json'), JSON.stringify({ devDependencies: { vitest: '1' } }));
+    expect(allDependencies(bare)).toEqual(['vitest']);
+    expect(shippedAssets(bare)).toEqual([]);
+    expect(fetchedHosts(bare)).toEqual([]);
+  });
 });
 
 describe('fonts and data files', () => {
