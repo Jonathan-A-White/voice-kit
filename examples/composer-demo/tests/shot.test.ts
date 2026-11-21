@@ -3,7 +3,9 @@
 // words (mw-jtzpw0.9). The page is built by Vite into a scratch folder and served to Chromium by route. The shot is
 // written to COMPOSER_SHOT_DIR when that is set (examples/composer-demo/shots is where the committed one comes from).
 // It needs a Chromium that playwright-core can launch; without one the tests are skipped with a note, unless
-// VOICE_KIT_REQUIRE_CHROMIUM=1 says to fail instead.
+// VOICE_KIT_REQUIRE_CHROMIUM=1 says to fail instead. VOICE_KIT_CPU_THROTTLE=<n> (n of 2 or more) makes Chromium run the page n times
+// slower, which is what a loaded host does to it, so the waits can be tried on a calm host:
+// VOICE_KIT_CPU_THROTTLE=40 npx vitest run examples/composer-demo/tests/shot.test.ts
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync, mkdirSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { extname, join } from 'node:path';
@@ -43,6 +45,8 @@ describe('the composer demo page at 390 x 844', () => {
 
   async function openDemo() {
     page = await (browser as Browser).newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+    const rate = Number(process.env.VOICE_KIT_CPU_THROTTLE);
+    if (rate >= 2) await (await page.context().newCDPSession(page)).send('Emulation.setCPUThrottlingRate', { rate });
     await page.route(`${ORIGIN}/**`, (route) => {
       const path = new URL(route.request().url()).pathname;
       const file = join(out, 'site', path === '/' ? 'index.html' : path);
@@ -120,4 +124,23 @@ describe('the composer demo page at 390 x 844', () => {
     expect(await page.getByRole('img', { name: 'photo.png' }).count()).toBe(0);
     await page.close();
   }, 60_000);
+
+  it('runs the page n times slower when VOICE_KIT_CPU_THROTTLE=n is set', async (ctx) => {
+    const rate = Number(process.env.VOICE_KIT_CPU_THROTTLE);
+    if (!browser || !(rate >= 2)) return ctx.skip();
+    // the same busy loop in a page nobody slowed and in the page openDemo gives: the slowed one takes several times longer
+    const spin = () => {
+      const start = performance.now();
+      let sum = 0;
+      for (let i = 0; i < 2e7; i++) sum += i % 7;
+      return performance.now() - start + sum * 0;
+    };
+    const plain = await (browser as Browser).newPage();
+    const calm = Math.min(await plain.evaluate(spin), await plain.evaluate(spin), await plain.evaluate(spin));
+    await plain.close();
+    await openDemo();
+    const slowed = await page.evaluate(spin);
+    expect(slowed).toBeGreaterThan(calm * (rate / 4));
+    await page.close();
+  }, 120_000);
 });

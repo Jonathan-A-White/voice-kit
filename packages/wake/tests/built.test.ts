@@ -2,6 +2,8 @@
 // imports dist/index.js, a fake microphone fed the fixture saying, startWake with dist/models/hey-lampas.json. It needs a
 // Chromium that playwright-core can launch; without one the tests are skipped with a note, unless VOICE_KIT_REQUIRE_CHROMIUM=1
 // says to fail instead. Every request is answered by route on a made-up origin; anything else is refused and counted.
+// VOICE_KIT_CPU_THROTTLE=<n> (n of 2 or more) makes Chromium run the page n times slower, which is what a loaded host does to it,
+// so the waits can be tried on a calm host: VOICE_KIT_CPU_THROTTLE=40 npx vitest run packages/wake/tests/built.test.ts
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
@@ -100,6 +102,8 @@ describe('the built @voice-kit/wake, as plain modules in Chromium', () => {
       return route.fulfill({ contentType: TYPES[extname(file)] ?? 'application/octet-stream', body: readFileSync(file) });
     });
     page = await context.newPage();
+    const rate = Number(process.env.VOICE_KIT_CPU_THROTTLE);
+    if (rate >= 2) await (await context.newCDPSession(page)).send('Emulation.setCPUThrottlingRate', { rate });
     await page.goto(`${ORIGIN}/`);
     await page.waitForFunction(() => (window as unknown as { __ready?: boolean }).__ready === true);
   }
@@ -132,4 +136,23 @@ describe('the built @voice-kit/wake, as plain modules in Chromium', () => {
     expect(page.workers()).toHaveLength(0);
     await context?.close();
   }, 60_000);
+
+  it('runs the page n times slower when VOICE_KIT_CPU_THROTTLE=n is set', async (ctx) => {
+    const rate = Number(process.env.VOICE_KIT_CPU_THROTTLE);
+    if (!browser || !(rate >= 2)) return ctx.skip();
+    // the same busy loop in a page nobody slowed and in the page openPage gives: the slowed one takes several times longer
+    const spin = () => {
+      const start = performance.now();
+      let sum = 0;
+      for (let i = 0; i < 2e7; i++) sum += i % 7;
+      return performance.now() - start + sum * 0;
+    };
+    const plain = await (browser as Browser).newPage();
+    const calm = Math.min(await plain.evaluate(spin), await plain.evaluate(spin), await plain.evaluate(spin));
+    await plain.close();
+    await openPage();
+    const slowed = await page.evaluate(spin);
+    expect(slowed).toBeGreaterThan(calm * (rate / 4));
+    await context?.close();
+  }, 120_000);
 });
