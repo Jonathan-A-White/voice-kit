@@ -1,6 +1,8 @@
 // @voice-kit/wake (mw-rl10piw.1): the wake word as a package. Network-free and browser-free: the detector runs in Node on the
 // committed model, and startWake runs against counted stubs of the browser's audio parts.
-import { readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
 import * as wake from 'voice-kit/wake';
@@ -79,6 +81,42 @@ describe('the embedded worker source', () => {
     expect(workerSource).toBe(workerText());
     expect(workerSource).toContain('createDetector');
     expect(workerSource).not.toMatch(/^import /m);
+  });
+});
+
+describe('copying the models into dist (scripts/embed.mjs --models)', () => {
+  it('fails with a plain message naming the folder when examples/wake-spike/public/models is missing, and writes nothing', async () => {
+    const { copyModels } = (await import(/* @vite-ignore */ new URL('../scripts/embed.mjs', import.meta.url).href)) as {
+      copyModels(from?: string, to?: string): string[];
+    };
+    const base = mkdtempSync(join(tmpdir(), 'wake-models-'));
+    try {
+      const missing = join(base, 'examples', 'wake-spike', 'public', 'models');
+      const to = join(base, 'dist', 'models');
+      expect(() => copyModels(missing, to)).toThrow(missing);
+      expect(() => copyModels(missing, to)).toThrow(/models folder|not found|missing/i);
+      expect(existsSync(to)).toBe(false);
+    } finally {
+      rmSync(base, { recursive: true, force: true });
+    }
+  });
+
+  it('copies every .json of the folder when it is there', async () => {
+    const { copyModels } = (await import(/* @vite-ignore */ new URL('../scripts/embed.mjs', import.meta.url).href)) as {
+      copyModels(from?: string, to?: string): string[];
+    };
+    const base = mkdtempSync(join(tmpdir(), 'wake-models-'));
+    try {
+      const from = join(base, 'models');
+      mkdirSync(from);
+      writeFileSync(join(from, 'a.json'), '{}');
+      writeFileSync(join(from, 'note.txt'), 'x');
+      const to = join(base, 'dist', 'models');
+      expect(copyModels(from, to)).toEqual(['a.json']);
+      expect(readdirSync(to)).toEqual(['a.json']);
+    } finally {
+      rmSync(base, { recursive: true, force: true });
+    }
   });
 });
 
